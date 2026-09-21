@@ -110,6 +110,12 @@ requirements:
     tests: [src/lib/context.test.ts]
     phase: 11
     status: PASS-FRONTEND
+  REQ-CONVERSATION-CONTINUITY:
+    statement: The built-in Juniper assistant preserves conversational continuity across follow-up turns and does not systematically restart responses with repeated greetings or canned openings
+    implementation: [src/lib/defaults.ts, src/lib/context.ts, src/lib/storage.ts]
+    tests: [src/lib/context.test.ts, src/lib/storage.test.ts]
+    phase: 11
+    status: PASS-FRONTEND-TESTS-AND-REAL-MODEL-REPLAY
   REQ-MEMORY:
     statement: Curated memory is included only when assistant memory policy is enabled
     implementation: [src/lib/context.ts]
