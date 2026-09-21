@@ -37,6 +37,16 @@ migration and rejection of malformed values. `src/lib/appearance.test.ts`
 sweeps curated and generated accents through light, dark, and high contrast
 and asserts WCAG ratios for every text, focus, and fill token.
 
+Conversation-continuity tests in `src/lib/context.test.ts` verify that the
+current user message remains separate from retained user/assistant history,
+that prior repetitive assistant wording is preserved as history rather than
+imitated by the context builder, that the context distinguishes a first turn
+from an ongoing exchange, and that the default prompt and personality bands
+provide directness and warmth without defining warmth as greeting or emoji
+repetition. `src/lib/storage.test.ts` verifies exact stock-prompt migration
+for the built-in assistant, preservation of customized prompts and unrelated
+fields, isolation of custom assistants, and save/reload stability.
+
 Nine negative controls for this work reintroduce a defect (global avatars, a
 hard-coded composer name, unvalidated settings, an inert density token,
 unconfirmed deletion, uncorrected accent text, cross-assistant model routing,
@@ -90,6 +100,12 @@ started without Ollama.
 
 `tests/fixtures/qwen3-8b-qualification.yaml` is a historical fixture retained
 for reference. It is not evidence of a real-model result.
+
+The current conversation-continuity qualification is recorded separately in
+[../qualification/qwen3-8b-conversation-continuity-2026-09-21.md](../qualification/qwen3-8b-conversation-continuity-2026-09-21.md).
+It records the exact source/model/settings boundary and preserves residual
+stochastic observations; deterministic tests do not claim to prove arbitrary
+model wording.
 
 ## Platform validation
 
