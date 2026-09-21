@@ -1,5 +1,10 @@
 import type { AppData, AttachmentRecord } from '../types'
-import { initialAppData, JUNIPER_ACCENT } from './defaults'
+import {
+  DEFAULT_SYSTEM_PROMPT,
+  initialAppData,
+  isHistoricalStockJuniperSystemPrompt,
+  JUNIPER_ACCENT,
+} from './defaults'
 import { normalizeSettings } from './settings'
 
 const STORAGE_KEY = 'juniper.app-data.v1'
@@ -44,6 +49,16 @@ export function withoutPrivateChats(data: AppData): AppData {
 export function saveAppData(data: AppData): void {
   if (typeof localStorage === 'undefined') return
   localStorage.setItem(STORAGE_KEY, JSON.stringify(withoutPrivateChats(data)))
+}
+
+function migrateBuiltinAssistantPrompt(assistant: AppData['assistants'][number]): string {
+  if (
+    assistant.id === 'assistant-juniper' &&
+    isHistoricalStockJuniperSystemPrompt(assistant.systemPrompt)
+  ) {
+    return DEFAULT_SYSTEM_PROMPT
+  }
+  return assistant.systemPrompt
 }
 
 export function normalizeAppData(value: unknown): AppData {
@@ -117,6 +132,7 @@ export function normalizeAppData(value: unknown): AppData {
       (assistant) => ({
         ...assistant,
         schemaVersion: 2,
+        systemPrompt: migrateBuiltinAssistantPrompt(assistant),
         ...(assistant.id === 'assistant-juniper' && assistant.avatar === 'J'
           ? { avatar: defaults.assistants[0]!.avatar }
           : {}),

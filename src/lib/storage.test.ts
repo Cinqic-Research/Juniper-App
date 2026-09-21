@@ -1,9 +1,63 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { initialAppData } from './defaults'
-import { inferTransportLocation, loadAppData, saveAppData, withoutPrivateChats } from './storage'
+import {
+  DEFAULT_SYSTEM_PROMPT,
+  HISTORICAL_STOCK_JUNIPER_SYSTEM_PROMPTS,
+  initialAppData,
+} from './defaults'
+import { rc32StoredState } from '../test/fixtures'
+import {
+  inferTransportLocation,
+  loadAppData,
+  normalizeAppData,
+  saveAppData,
+  withoutPrivateChats,
+} from './storage'
 
 describe('browser-preview storage', () => {
   beforeEach(() => localStorage.clear())
+
+  it('migrates exact historical built-in prompts and preserves customized assistants', () => {
+    const stored = rc32StoredState()
+    const rc32Assistant = stored.assistants[0]!
+    const currentMainStockAssistant = {
+      ...rc32Assistant,
+      systemPrompt: HISTORICAL_STOCK_JUNIPER_SYSTEM_PROMPTS[1],
+      updatedAt: '2026-09-18T09:00:00.000Z',
+    }
+    const customizedBuiltin = {
+      ...rc32Assistant,
+      systemPrompt: `${HISTORICAL_STOCK_JUNIPER_SYSTEM_PROMPTS[1]}\nKeep answers concise.`,
+      welcomeMessage: 'Use my own opening.',
+    }
+    const customAssistantWithStockText = {
+      ...stored.assistants[1]!,
+      systemPrompt: HISTORICAL_STOCK_JUNIPER_SYSTEM_PROMPTS[0],
+    }
+
+    const normalized = normalizeAppData({
+      ...stored,
+      assistants: [
+        rc32Assistant,
+        currentMainStockAssistant,
+        customizedBuiltin,
+        customAssistantWithStockText,
+      ],
+    })
+
+    expect(normalized.assistants[0]!.systemPrompt).toBe(DEFAULT_SYSTEM_PROMPT)
+    expect(normalized.assistants[1]!.systemPrompt).toBe(DEFAULT_SYSTEM_PROMPT)
+    expect(normalized.assistants[1]!.updatedAt).toBe(currentMainStockAssistant.updatedAt)
+    expect(normalized.assistants[2]!.systemPrompt).toBe(customizedBuiltin.systemPrompt)
+    expect(normalized.assistants[2]!.welcomeMessage).toBe(customizedBuiltin.welcomeMessage)
+    expect(normalized.assistants[3]!.systemPrompt).toBe(customAssistantWithStockText.systemPrompt)
+    expect(normalized.assistants[0]!.modelProfileId).toBe(rc32Assistant.modelProfileId)
+    expect(normalized.assistants[0]!.suggestedPrompts).toEqual(rc32Assistant.suggestedPrompts)
+
+    saveAppData(normalized)
+    expect(loadAppData().assistants.map((assistant) => assistant.systemPrompt)).toEqual(
+      normalized.assistants.map((assistant) => assistant.systemPrompt),
+    )
+  })
   it('does not persist private chats', () => {
     const data = initialAppData()
     data.conversations = [
