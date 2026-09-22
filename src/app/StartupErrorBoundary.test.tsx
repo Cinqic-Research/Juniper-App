@@ -40,7 +40,7 @@ it('replaces a crashed interface with a visible error and a local native report'
     'ReferenceError: modelProfileFromDiscovery is not defined',
   )
   expect(reports).toHaveLength(1)
-  expect(String(reports[0])).toMatch(/^ReferenceError: modelProfileFromDiscovery is not defined/)
+  expect(reports[0]).toBe('interface ReferenceError')
   act(() => root.unmount())
   container.remove()
 })

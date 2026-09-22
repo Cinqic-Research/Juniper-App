@@ -238,7 +238,7 @@ jobs:
       - name: Install launch-smoke prerequisites
         run: >-
           sudo apt-get update && sudo apt-get install -y
-          xvfb x11-utils x11-apps desktop-file-utils fuse3 file python3
+          xvfb x11-utils x11-apps desktop-file-utils fuse3 file python3 python3-xlib
           libegl1 libgl1 libgles2 libgbm1 libegl-mesa0 libgl1-mesa-dri libfontconfig1
           libharfbuzz0b libfribidi0 libx11-xcb1
       - name: Install, launch, and uninstall Linux bundles
@@ -254,10 +254,10 @@ jobs:
           if-no-files-found: error
 
   # Mirrors the release workflow's Windows job so the MSI build, install,
-  # readiness launch, and uninstall are proven before a tag is pushed rather
+  # graphical PE and rendered-window launch, and uninstall are proven before a tag is pushed rather
   # than only after it, when a failure costs an immutable release candidate.
   windows-msi:
-    name: Windows MSI build, install, launch, and uninstall smoke
+    name: Windows MSI graphical install, render, and uninstall smoke
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -280,6 +280,9 @@ jobs:
         run: if (-not (Test-Path -LiteralPath 'src-tauri/runtime/llama-server.exe' -PathType Leaf)) { throw 'llama-server.exe was not built.' }
       # Native unit tests are excluded on Windows only; see release.yml.
       - run: pnpm validate:no-native-tests
+      - name: Re-test Windows native unit test loader (diagnostic)
+        continue-on-error: true
+        run: cargo test --locked --manifest-path src-tauri/Cargo.toml
       - name: Build MSI from locked source
         run: pnpm tauri build --bundles msi -- --locked
       - name: Collect exactly one MSI
@@ -290,7 +293,7 @@ jobs:
           if ($msis.Count -ne 1) { throw "Expected one MSI, found $($msis.Count)." }
           New-Item -ItemType Directory -Force windows-artifacts | Out-Null
           Copy-Item $msis[0].FullName "windows-artifacts/Juniper-$version-windows-x86_64.msi"
-      - name: Inspect, install, launch, and uninstall MSI
+      - name: Inspect GUI subsystem, install, render, and uninstall MSI
         shell: pwsh
         run: |
           $version = (Get-Content package.json | ConvertFrom-Json).version

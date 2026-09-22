@@ -50,7 +50,7 @@ These are deliberate exclusions in this release, not oversights:
 - **No MCP client.** Settings › Advanced lists it as unavailable.
 - **No arbitrary themes.** Appearance is limited to validated settings; Juniper never loads user CSS, scripts, or remote fonts.
 - **Android provider secrets use Android Keystore.** Juniper refuses to fall back to plaintext or SQLite storage; the instrumentation test exercises encrypt, decrypt, and deletion on an Android target.
-- **Android native local inference is Beta.** The candidate packages an in-process llama.cpp bridge for the managed, SHA-256-verified GGUF path on `arm64-v8a` (with `x86_64` reserved for emulator tests). A physical ARM64 run is still needed to promote that runtime beyond Beta, but it is not a global desktop release gate.
+- **Android native local inference is Beta.** The candidate packages an in-process llama.cpp bridge for the managed, SHA-256-verified GGUF path on `arm64-v8a` (with `x86_64` reserved for emulator tests). The owner reports successful local model loading and inference on a physical Android phone. Build identity, device details, and the full lifecycle test record were not captured, so Beta promotion remains pending.
 - **No iOS or macOS build.**
 - **No telemetry, analytics, crash reporting, or account.**
 
@@ -112,10 +112,10 @@ Suites whose capability gate the model does not meet are reported NOT-APPLICABLE
 
 - The Windows MSI may be unsigned, so Windows SmartScreen can show an unrecognized-publisher warning.
 - `0.3.0-rc.33` is a prerelease candidate and is not promoted to final `0.3.0`. Its publication record, including a publication step that failed after creating the release and how the three missing assets were completed from the same workflow run, is in [docs/release/rc33-publication.md](docs/release/rc33-publication.md).
-- Android native local inference is Beta: use a supported ARM64 phone for real offline inference; x86_64 emulator evidence is diagnostic when hardware acceleration is unavailable. The missing physical run limits maturity, not core desktop release gating.
+- Android native local inference is Beta: use a supported ARM64 phone for real offline inference; x86_64 emulator evidence is diagnostic when hardware acceleration is unavailable. The owner-reported physical run establishes basic feasibility, while missing build and lifecycle metadata limits maturity.
 - Linux launch is tested on Ubuntu 22.04 and 24.04 under X11 (Xvfb) for the normal AppImage, the extract-and-run fallback, and the installed DEB. Native Wayland sessions are not verified; the AppImage forces GTK's X11 backend. If Juniper does not start, run it from a terminal and see [docs/release/linux-troubleshooting.md](docs/release/linux-troubleshooting.md).
 - `0.3.0-rc.33` reorganises navigation; [docs/product/interface.md](docs/product/interface.md) maps every rc.32 screen to its new place. Stored rc.32 settings migrate automatically.
-- The interface layout was reviewed on Linux (X11) and an Android x86_64 emulator; Windows is covered by the release install-and-launch smoke rather than a manual visual review, and no physical Android phone review is part of this candidate.
+- The rc.33 interface layout was reviewed on Linux (X11) and an Android x86_64 emulator. A later owner-reported physical Android local-inference run lacks version and device metadata. The published rc.33 Windows smoke did not inspect rendered pixels; the owner subsequently reported an unusable black window. Current Windows qualification is tracked separately from that historical release evidence.
 - `0.3.0-rc.31` shipped the default Tauri Android launcher icon and showed a blank Linux window when an enabled Ollama provider had installed models; both are fixed in `0.3.0-rc.32`.
 - Android loopback addresses refer to the phone itself. Reaching a computer on your network needs an explicit LAN endpoint.
 - Browser-preview attachments are development-only; the real attachment path is the desktop native picker.

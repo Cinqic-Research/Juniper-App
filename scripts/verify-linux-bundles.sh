@@ -164,6 +164,13 @@ if mode_enabled appimage-extract; then
   mkdir -p "$work/extract-tmp"
   launch_mode appimage-extract "$work/extract-tmp/appimage_extracted_[^/]+/$runtime_relative" \
     env "TMPDIR=$work/extract-tmp" APPIMAGE_EXTRACT_AND_RUN=1 "$appimage_abs"
+
+  step 'Exercise native chat attachment dialog and cancellation'
+  picker_home=$(xdg_home picker)
+  python3 "$repo_root/scripts/linux-picker-probe.py" "$evidence/picker" -- \
+    env "XDG_DATA_HOME=$picker_home/data" "XDG_CONFIG_HOME=$picker_home/config" \
+    "XDG_CACHE_HOME=$picker_home/cache" "TMPDIR=$work/extract-tmp" \
+    APPIMAGE_EXTRACT_AND_RUN=1 "$appimage_abs"
 fi
 
 if mode_enabled deb; then

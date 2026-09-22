@@ -291,19 +291,12 @@ export async function reportFrontendReady(): Promise<void> {
   await invoke('frontend_ready')
 }
 
-/**
- * Sends a bounded, single-error summary to the native host's local stderr so a
- * crashed interface is diagnosable. Nothing leaves the device.
- */
+/** Sends a content-free error class to local stderr; messages may contain user data. */
 export async function reportFrontendFatal(error: unknown): Promise<void> {
   if (!runningInTauri) return
-  const summary =
-    error instanceof Error
-      ? [`${error.name}: ${error.message}`, ...(error.stack ?? '').split('\n').slice(1, 6)]
-          .map((line) => line.trim())
-          .join(' | ')
-      : String(error)
-  await invoke('frontend_fatal', { report: summary.slice(0, 800) })
+  const name = error instanceof Error ? error.name : 'UnknownError'
+  const safeName = /^[A-Za-z][A-Za-z0-9]{0,63}$/.test(name) ? name : 'UnknownError'
+  await invoke('frontend_fatal', { report: `interface ${safeName}` })
 }
 
 export async function saveNativeAppData(data: AppData): Promise<void> {

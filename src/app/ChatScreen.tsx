@@ -397,6 +397,7 @@ export function ChatScreen({
   const [inspectorOpen, setInspectorOpen] = useState(false)
   const [announcement, setAnnouncement] = useState('')
   const controller = useRef<AbortController | null>(null)
+  const attachmentPickerBusy = useRef(false)
   const requestId = useRef<string | null>(null)
   const composer = useRef<HTMLTextAreaElement>(null)
   const scroller = useRef<HTMLDivElement>(null)
@@ -689,6 +690,8 @@ export function ChatScreen({
   }
 
   async function attachFromHost() {
+    if (attachmentPickerBusy.current) return
+    attachmentPickerBusy.current = true
     try {
       const attachment = await pickAttachment()
       if (!attachment) return
@@ -708,6 +711,8 @@ export function ChatScreen({
         error instanceof Error ? error.message : 'Could not attach that file.',
         'Could not attach the file',
       )
+    } finally {
+      attachmentPickerBusy.current = false
     }
   }
 
