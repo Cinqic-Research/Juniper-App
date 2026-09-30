@@ -74,7 +74,7 @@ exit 0
 EOF
   chmod +x "$dir/bin/gh"
 
-  (cd "$dir" && PATH="$dir/bin:$PATH" GITHUB_REPOSITORY=Cinqic/Juniper-App TAG=v1.0 \
+  (cd "$dir" && PATH="$dir/bin:$PATH" GITHUB_REPOSITORY=Cinqic-Research/Juniper-App TAG=v1.0 \
     bash "$work/guard.sh") > "$dir/out.txt" 2>&1
   local code=$?
   if [[ $code -eq $expected ]]; then

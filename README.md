@@ -6,7 +6,7 @@ Juniper is a local-first AI desktop and Android app for people who want a though
 
 ## Download
 
-The current prerelease is [Juniper 0.3.0-rc.33](https://github.com/Cinqic/Juniper-App/releases/tag/v0.3.0-rc.33). Installers are published on the [GitHub releases page](https://github.com/Cinqic/Juniper-App/releases) only after an authorized release workflow completes. You do not need Git, a build toolchain, or a GitHub account to use a published desktop artifact.
+The current prerelease is [Juniper 0.3.0-rc.33](https://github.com/Cinqic-Research/Juniper-App/releases/tag/v0.3.0-rc.33). Installers are published on the [GitHub releases page](https://github.com/Cinqic-Research/Juniper-App/releases) only after an authorized release workflow completes. You do not need Git, a build toolchain, or a GitHub account to use a published desktop artifact.
 
 | Platform          | File                                        | Notes                                                 |
 | ----------------- | ------------------------------------------- | ----------------------------------------------------- |
@@ -21,7 +21,7 @@ Verify a download against `SHA256SUMS.txt` from the same release:
 sha256sum --check --ignore-missing SHA256SUMS.txt
 ```
 
-`SIGNING-android.txt` records the APK signing certificate and `SIGNING-windows.txt` records the MSI Authenticode status. Every executable artifact also carries a [GitHub artifact attestation](https://github.com/Cinqic/Juniper-App/attestations) linking it to the workflow run and commit that produced it.
+`SIGNING-android.txt` records the APK signing certificate and `SIGNING-windows.txt` records the MSI Authenticode status. Every executable artifact also carries a [GitHub artifact attestation](https://github.com/Cinqic-Research/Juniper-App/attestations) linking it to the workflow run and commit that produced it.
 
 Juniper’s desktop bundle owns its loopback `llama-server` process, so ordinary local use does not require Ollama, a daemon, or an account. On first run, open **Models**, review the device-aware recommendations, and download a verified model. Model weights are separate user-owned files and are never bundled in the installer.
 
@@ -29,7 +29,7 @@ Juniper’s desktop bundle owns its loopback `llama-server` process, so ordinary
 
 - A chat-first interface: Chats, Models, and Settings are the only primary destinations. Conversation actions live in an overflow menu, the model is a compact picker that shows where each model runs, and reasoning, tool activity, and usage are one tap away instead of always on screen. See [docs/product/interface.md](docs/product/interface.md).
 - A chat workspace with onboarding, streaming, markdown, export, private chats, and phone layouts with a history drawer and Android back-gesture support.
-- Validated appearance settings: System, Light, or Dark; standard or high contrast; curated, neutral, or custom accent colours with computed WCAG-safe text shades; bundled Inter, Atkinson Hyperlegible Next, and OpenDyslexic fonts; interface size, chat text size, line spacing, density, conversation width, sidebar behaviour, message style, timestamps, and motion.
+- Validated appearance settings: System, Light, or Dark; standard or high contrast; curated, neutral, or custom accent colors with computed WCAG-safe text shades; bundled Inter, Atkinson Hyperlegible Next, and OpenDyslexic fonts; interface size, chat text size, line spacing, density, conversation width, sidebar behavior, message style, timestamps, and motion.
 - Assistant profiles with personality controls, model selection, tool policy, memory policy, import, and export.
 - A first-class Juniper local provider with device detection, model recommendations, verified resumable downloads, atomic installation, pause/resume, and removal.
 - A generic runtime registry with explicit maturity and qualification state for llama.cpp, LiteRT-LM, ExecuTorch, MLC LLM, and ONNX Runtime GenAI. Optional runtimes are not presented as installed without a compatible artifact.
@@ -61,7 +61,7 @@ These are deliberate exclusions in this release, not oversights:
 - Desktop provider credentials are stored in the OS keychain; Android provider credentials use Android Keystore. Both are referenced only by an opaque identifier. Secrets are never written to the SQLite state and are stripped from exports.
 - Device Link is a protocol/policy preview only in this candidate. No listener, usable pairing flow, discovery, peer connection, remote-control path, or Juniper Network provider is enabled.
 - Private chats are held in memory only; they are excluded from persistence and from user exports.
-- Attachments are opened through a scoped native picker with symlink rejection, an extension allowlist, and a 1 MiB cap enforced at both grant time and read time. Attachment content is labelled untrusted to the model.
+- Attachments are opened through a scoped native picker with symlink rejection, an extension allowlist, and a 1 MiB cap enforced at both grant time and read time. Attachment content is labeled untrusted to the model.
 
 See [PRIVACY.md](PRIVACY.md), [SECURITY.md](SECURITY.md), and [docs/privacy/network-policy.md](docs/privacy/network-policy.md).
 

@@ -78,7 +78,7 @@ pub fn exit_after_run_error(error: &dyn Display) -> ! {
     emit(&format!("fatal: {error}"));
     #[cfg(target_os = "linux")]
     emit(
-        "Linux troubleshooting: https://github.com/Cinqic/Juniper-App/blob/main/docs/release/linux-troubleshooting.md",
+        "Linux troubleshooting: https://github.com/Cinqic-Research/Juniper-App/blob/main/docs/release/linux-troubleshooting.md",
     );
     std::process::exit(1);
 }

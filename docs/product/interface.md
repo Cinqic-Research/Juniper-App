@@ -108,11 +108,11 @@ immediately, persist, and have a reset button.
 | Interface size               | 85 %–130 %                                                                       | 100 %         |
 | Animations                   | System, Reduce, Allow                                                            | System        |
 
-Accent colours are contrast-safe. Buttons use the accent with black or white
+Accent colors are contrast-safe. Buttons use the accent with black or white
 text, whichever is readable. Links, icons, and focus rings use a deeper or
 lighter shade of the accent that reaches at least 4.5:1 against every surface
-(7:1 in high contrast), so a very light custom colour such as `#FFFF00` still
-produces readable text. An invalid custom colour is rejected and the previous
+(7:1 in high contrast), so a very light custom color such as `#FFFF00` still
+produces readable text. An invalid custom color is rejected and the previous
 accent is kept.
 
 Every font ships inside Juniper; nothing is downloaded.
@@ -125,7 +125,7 @@ Every font ships inside Juniper; nothing is downloaded.
 - The composer, reply actions, and switches carry names that include the
   current assistant or item.
 - Status such as execution location, private chats, and fit is always written
-  out, never shown by colour alone.
+  out, never shown by color alone.
 - Touch targets are at least 44 px on touch devices at every density.
 - Text is at least 12 px at 100 % interface size.
 
