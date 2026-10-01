@@ -164,7 +164,7 @@ export function AppearanceSettings({ data, update }: { data: AppData; update: Up
   function applyCustom(value: string) {
     const parsed = parseHexColor(value)
     if (!parsed) {
-      setCustomError('Enter a colour as #RRGGBB, for example #3B82F6.')
+      setCustomError('Enter a color as #RRGGBB, for example #3B82F6.')
       return
     }
     setCustomError(null)
@@ -1143,7 +1143,7 @@ export function AboutSettings({ data }: { data: AppData }) {
           </div>
           <div>
             <dt>Source</dt>
-            <dd className="mono">github.com/Cinqic/Juniper-App</dd>
+            <dd className="mono">github.com/Cinqic-Research/Juniper-App</dd>
           </div>
         </dl>
       </Section>

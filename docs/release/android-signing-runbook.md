@@ -35,7 +35,7 @@ like a root credential.
 ## 1. Generate the release keystore
 
 Pick a strong, unique password. You will be prompted for it twice, plus your
-name/organisation details.
+name/organization details.
 
 ```bash
 keytool -genkeypair -v \

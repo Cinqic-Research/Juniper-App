@@ -490,7 +490,7 @@ jobs:
             echo '- Device Link is a non-networked policy preview. Pairing, discovery, peer connections, remote control, and Juniper Network transport are disabled.'
             echo '- Ollama, OpenAI-compatible, and llama.cpp-compatible providers remain optional. MCP client calls, iOS, and macOS are not included.'
             echo
-            echo 'Source: https://github.com/Cinqic/Juniper-App'
+            echo 'Source: https://github.com/Cinqic-Research/Juniper-App'
             echo 'License: Apache-2.0'
           } > RELEASE_NOTES.md
       - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2

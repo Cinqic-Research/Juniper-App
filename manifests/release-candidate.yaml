@@ -7,7 +7,7 @@ release:
   url: derived-at-release
   prerelease: true
   overwrite_existing_release: forbidden
-canonical_repository: https://github.com/Cinqic/Juniper-App
+canonical_repository: https://github.com/Cinqic-Research/Juniper-App
 canonical_branch: main
 project_license: Apache-2.0
 third_party_licenses: preserved-in-THIRD_PARTY_NOTICES.md
