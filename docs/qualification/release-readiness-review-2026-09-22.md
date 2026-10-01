@@ -39,7 +39,30 @@ historical rc.33 publication record or assert a new release.
 
 ## Current qualification state
 
-This record remains **NOT APPROVED** while the repaired Windows MSI has not
-completed native visible-window checks, and Linux's other package modes and
-GGUF dialog have not completed their qualification.
-No new tag or release is authorized by this record.
+**Source qualification: PASS for the paths tested** on commit
+`71cb91d670d965e58f3b2e6c5cfe0f58bde0a837`, exact-head [GitHub validation run
+36827596885](https://github.com/Cinqic-Research/Juniper-App/actions/runs/36827596885).
+
+- On Ubuntu 22.04 and 24.04 under X11/Xvfb, the standard AppImage, the
+  `APPIMAGE_EXTRACT_AND_RUN=1` AppImage, and the installed DEB passed fresh and
+  persisted Ollama-profile launch smokes. DEB removal was also recorded.
+- Ubuntu 24.04 graphical evidence shows the attachment chooser opening,
+  cancelling, and selecting a valid text fixture that appears as a chip; the
+  GGUF chooser opening, cancelling, and selecting a fixture; and Settings
+  navigation with rendered-pixel change checks. Import was not invoked.
+- The Windows MSI installed and uninstalled. Its executable is PE
+  `WindowsGUI` (subsystem 2); a bundled console executable is rejected as a
+  negative control. On the 1024x768 runner, fresh and persisted Ollama-profile
+  launches each reported frontend readiness and rendered a visible, responsive
+  1000x700 window within monitor bounds for the 15-second settle period.
+- Android clean debug compilation and credential-vault/lifecycle emulator
+  smoke passed. Physical-device inference remains supported only by the earlier
+  owner report with missing build/device metadata; Android inference remains
+  Beta. Wayland remains **NOT VERIFIED**.
+- The Windows Rust test binary still aborts before its test harness starts with
+  `STATUS_ENTRYPOINT_NOT_FOUND` (`0xc0000139`). Windows native unit tests remain
+  excluded and non-gating; the Windows build still runs `validate:no-native-tests`
+  and clippy, while native tests run in the Linux validation job.
+
+The overall release state remains **NOT APPROVED**. The published version is
+still `0.3.0-rc.33`; this record authorizes no new tag or release.
