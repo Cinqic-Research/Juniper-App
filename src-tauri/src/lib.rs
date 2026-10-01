@@ -1,5 +1,3 @@
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-
 #[cfg(target_os = "android")]
 mod android_runtime;
 mod catalog;

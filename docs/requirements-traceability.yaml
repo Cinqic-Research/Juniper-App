@@ -110,6 +110,12 @@ requirements:
     tests: [src/lib/context.test.ts]
     phase: 11
     status: PASS-FRONTEND
+  REQ-CONVERSATION-CONTINUITY:
+    statement: The built-in Juniper assistant preserves conversational continuity across follow-up turns and does not systematically restart responses with repeated greetings or canned openings
+    implementation: [src/lib/defaults.ts, src/lib/context.ts, src/lib/storage.ts]
+    tests: [src/lib/context.test.ts, src/lib/storage.test.ts]
+    phase: 11
+    status: PASS-FRONTEND-TESTS-AND-REAL-MODEL-REPLAY
   REQ-MEMORY:
     statement: Curated memory is included only when assistant memory policy is enabled
     implementation: [src/lib/context.ts]
@@ -158,6 +164,18 @@ requirements:
     tests: [src-tauri/src/commands.rs, src-tauri/src/storage.rs]
     phase: 11
     status: IMPLEMENTED-NATIVE-TESTED
+  REQ-ATTACHMENT-PICKER:
+    statement: Packaged Linux chat attachment picker opens without freezing the event loop and recovers after cancellation
+    implementation: [src-tauri/src/commands.rs, src/app/ChatScreen.tsx]
+    tests: [scripts/linux-picker-probe.py, scripts/compare-window-captures.mjs]
+    phase: 14
+    status: PASS-LOCAL-PACKAGED-X11-PENDING-CI
+  REQ-WINDOWS-GRAPHICAL-STARTUP:
+    statement: Installed Windows application has a GUI PE subsystem and a visible responsive rendered window on fresh and stored Ollama state
+    implementation: [src-tauri/src/main.rs, scripts/verify-windows-msi.ps1]
+    tests: [scripts/verify-windows-msi.ps1]
+    phase: 14
+    status: NOT-VERIFIED-WINDOWS-PACKAGE
   REQ-PRIVACY-ROUTE:
     statement: Settings › Privacy & data reports the active assistant, model, provider, persistence, memory, network-tool status, and execution location truthfully
     implementation: [src/app/App.tsx, src/app/SettingsSections.tsx, src/app/model-labels.ts]
@@ -171,7 +189,7 @@ requirements:
     phase: 11
     status: PASS-BY-INSPECTION
   REQ-MOBILE:
-    statement: Shared responsive UI and explicit endpoint privacy labels with Android llama.cpp local inference classified Beta pending physical ARM64 evidence
+    statement: Shared responsive UI and explicit endpoint privacy labels with Android llama.cpp local inference classified Beta pending attributable physical ARM64 lifecycle evidence
     implementation: [src-tauri/capabilities/mobile.json, docs/adr/0009-mobile-runtime-strategy.md]
     tests: []
     phase: 11

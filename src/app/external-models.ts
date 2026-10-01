@@ -35,6 +35,7 @@ export function useExternalModels(data: AppData, update: Update) {
   const [ggufModelName, setGgufModelName] = useState('local-gguf')
   const [ggufStatus, setGgufStatus] = useState<string | null>(null)
   const ggufController = useRef<AbortController | null>(null)
+  const ggufPickerBusy = useRef(false)
   const [importing, setImporting] = useState(false)
   const [runningModelIds, setRunningModelIds] = useState<Record<string, string[]>>({})
   const [hostMemory, setHostMemory] = useState<string | null>(null)
@@ -182,6 +183,8 @@ export function useExternalModels(data: AppData, update: Update) {
   }
 
   async function chooseGguf() {
+    if (ggufPickerBusy.current) return
+    ggufPickerBusy.current = true
     try {
       const selection = await pickGguf()
       if (selection) {
@@ -192,6 +195,8 @@ export function useExternalModels(data: AppData, update: Update) {
       void dialogs.notify(
         error instanceof Error ? error.message : 'Could not select that GGUF file.',
       )
+    } finally {
+      ggufPickerBusy.current = false
     }
   }
 

@@ -34,12 +34,12 @@ export function compilePersonality(personality: Assistant['personality']): strin
   const labels = Object.entries(personality).map(([key, value]) => `${key}: ${band(value)}`)
   const guidance = [
     personality.warmth >= 67
-      ? 'Use a noticeably warm and supportive conversational tone.'
+      ? 'Communicate warmth through attentive, natural wording; do not turn it into repeated greetings, habitual reassurance, pet names, or obligatory emoji.'
       : personality.warmth <= 33
-        ? 'Keep warmth restrained and professional.'
+        ? 'Keep emotional expressiveness restrained and professional without becoming cold.'
         : 'Use a friendly, measured tone.',
     personality.directness >= 67
-      ? 'Prefer direct answers and clear recommendations.'
+      ? 'Answer the latest question promptly and give a useful first pass, including concrete options for broad advice, before any optional follow-up; skip unnecessary throat-clearing and redundant restatement of the conversation opening.'
       : personality.directness <= 33
         ? 'Use exploratory language and offer options before recommending.'
         : 'Balance clarity with appropriate nuance.',
@@ -114,10 +114,14 @@ export function buildContext(
       return []
     return [{ role: message.role, content }]
   })
+  const hasConversationHistory = candidates.length > 0
   const systemSections = [
     assistant.systemPrompt,
     compilePersonality(assistant.personality),
     `Response preference: ${assistant.responseLength}.`,
+    hasConversationHistory
+      ? 'Conversation state: this is an ongoing exchange. Start with the latest answer or a relevant acknowledgment; do not add a greeting or re-introduction unless the user explicitly greets you.'
+      : 'Conversation state: this is the beginning of the exchange. A brief greeting is optional when it is natural, but answer the user directly when the request is clear.',
     'Runtime guidance: use tools only through the structured host boundary. The host controls permissions and authors every real tool result.',
   ]
   if (enabledMemories.length) {

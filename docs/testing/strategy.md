@@ -37,6 +37,16 @@ migration and rejection of malformed values. `src/lib/appearance.test.ts`
 sweeps curated and generated accents through light, dark, and high contrast
 and asserts WCAG ratios for every text, focus, and fill token.
 
+Conversation-continuity tests in `src/lib/context.test.ts` verify that the
+current user message remains separate from retained user/assistant history,
+that prior repetitive assistant wording is preserved as history rather than
+imitated by the context builder, that the context distinguishes a first turn
+from an ongoing exchange, and that the default prompt and personality bands
+provide directness and warmth without defining warmth as greeting or emoji
+repetition. `src/lib/storage.test.ts` verifies exact stock-prompt migration
+for the built-in assistant, preservation of customized prompts and unrelated
+fields, isolation of custom assistants, and save/reload stability.
+
 Nine negative controls for this work reintroduce a defect (global avatars, a
 hard-coded composer name, unvalidated settings, an inert density token,
 unconfirmed deletion, uncorrected accent text, cross-assistant model routing,
@@ -91,6 +101,12 @@ started without Ollama.
 `tests/fixtures/qwen3-8b-qualification.yaml` is a historical fixture retained
 for reference. It is not evidence of a real-model result.
 
+The current conversation-continuity qualification is recorded separately in
+[../qualification/qwen3-8b-conversation-continuity-2026-09-21.md](../qualification/qwen3-8b-conversation-continuity-2026-09-21.md).
+It records the exact source/model/settings boundary and preserves residual
+stochastic observations; deterministic tests do not claim to prove arbitrary
+model wording.
+
 ## Platform validation
 
 Linux bundles are built once on Ubuntu 22.04 and smoked on Ubuntu 22.04 and
@@ -127,9 +143,14 @@ Juniper twice: from a fresh profile and with stored state that enables an
 Ollama provider backed by a loopback stand-in. Each launch must report
 `[juniper-startup] frontend ready`, stay alive through a settle period, and
 produce no fatal startup or frontend report; the second must persist the
-discovered model. Before `0.3.0-rc.32` this smoke passed on ten seconds of
-process survival. It does not capture window pixels, so a blank-but-ready
-Windows surface is not detected. A signed Android APK is built and put through an
+discovered model. The current script also checks that the installed Juniper PE
+uses the Windows GUI subsystem, that a visible responsive window has a substantial
+client area, and that screenshots taken before and after the settle period show
+a nonuniform rendered surface. It saves the screenshots with smoke evidence.
+This automated pixel check rejects obvious black or white surfaces; it cannot
+establish that every control is usable or explain a device-specific WebView2
+failure. Before `0.3.0-rc.32` the smoke passed on ten seconds of process
+survival; the published rc.33 smoke still lacked a pixel check. A signed Android APK is built and put through an
 emulator credential-vault instrumentation run plus install, launch, rotation,
 relaunch, and uninstall smoke. The credential test proves plaintext absence,
 Android Keystore key ownership, per-reference AAD binding, deletion, and failed
@@ -137,8 +158,10 @@ post-deletion retrieval. The package audit also requires the two supported
 native ABIs, rejects server-runtime libraries, and checks 16 KiB `PT_LOAD`
 alignment for every shared object.
 Release artifacts include the unstripped native symbol archive. The emulator
-cannot prove real offline token generation, so a physical ARM64 run remains a
-separate llama.cpp Beta-promotion follow-up. The validation and release
+cannot prove real offline token generation. The owner has since reported a
+successful physical-phone local inference run, but its build/device metadata and
+full lifecycle sequence were not recorded; these remain a separate llama.cpp
+Beta-promotion follow-up. The validation and release
 workflows do not make that physical run a global desktop release gate.
 
 Native unit tests are excluded from the Windows release job only: the Tauri mock

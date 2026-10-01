@@ -10,7 +10,10 @@ use std::{
     io::{Read, Write},
     path::PathBuf,
     process::Stdio,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
 };
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_dialog::DialogExt;
@@ -22,10 +25,27 @@ pub struct AppState {
     pub cancellations: Mutex<HashMap<String, Cancellation>>,
     pub attachments: Mutex<HashMap<String, PathBuf>>,
     pub gguf_files: Mutex<HashMap<String, PathBuf>>,
+    pub picker_in_progress: AtomicBool,
     pub permission_waiters: Mutex<HashMap<String, oneshot::Sender<String>>>,
     pub runtime_logs: Mutex<VecDeque<RuntimeLogEntry>>,
     #[cfg(not(target_os = "android"))]
     pub local_runtimes: crate::local_runtime::RuntimeProcesses,
+}
+
+struct PickerGuard<'a>(&'a AtomicBool);
+
+impl<'a> PickerGuard<'a> {
+    fn acquire(flag: &'a AtomicBool) -> Option<Self> {
+        flag.compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .ok()
+            .map(|_| Self(flag))
+    }
+}
+
+impl Drop for PickerGuard<'_> {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::Release);
+    }
 }
 
 pub const MAX_RUNTIME_LOGS: usize = 200;
@@ -53,6 +73,9 @@ fn is_reparse_point(_metadata: &std::fs::Metadata) -> bool {
     false
 }
 
+#[cfg(windows)]
+const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+
 fn open_regular_file(path: &std::path::Path, unavailable: &str) -> Result<File, String> {
     let path_metadata = std::fs::symlink_metadata(path).map_err(|_| unavailable.to_owned())?;
     if path_metadata.file_type().is_symlink()
@@ -70,12 +93,14 @@ fn open_regular_file(path: &std::path::Path, unavailable: &str) -> Result<File, 
         use std::os::unix::fs::OpenOptionsExt;
         options.custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW);
     }
-    let file = options.open(path).map_err(|_| unavailable.to_owned())?;
-    if !file
-        .metadata()
-        .map_err(|_| unavailable.to_owned())?
-        .is_file()
+    #[cfg(windows)]
     {
+        use std::os::windows::fs::OpenOptionsExt;
+        options.custom_flags(FILE_FLAG_OPEN_REPARSE_POINT);
+    }
+    let file = options.open(path).map_err(|_| unavailable.to_owned())?;
+    let opened_metadata = file.metadata().map_err(|_| unavailable.to_owned())?;
+    if !opened_metadata.is_file() || is_reparse_point(&opened_metadata) {
         return Err("Only regular files are accepted.".into());
     }
     Ok(file)
@@ -839,15 +864,23 @@ fn is_supported_attachment_path(path: &std::path::Path) -> bool {
 }
 
 #[tauri::command]
-pub fn pick_attachment(
+pub async fn pick_attachment(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<Option<Attachment>, String> {
-    let selected = app
-        .dialog()
+    let Some(_guard) = PickerGuard::acquire(&state.picker_in_progress) else {
+        return Ok(None);
+    };
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    app.dialog()
         .file()
         .add_filter("Text files", SUPPORTED_ATTACHMENT_EXTENSIONS)
-        .blocking_pick_file();
+        .pick_file(move |selected| {
+            let _ = tx.send(selected);
+        });
+    let selected = rx
+        .await
+        .map_err(|_| "The attachment picker closed unexpectedly.")?;
     let Some(file) = selected else {
         return Ok(None);
     };
@@ -900,15 +933,23 @@ fn register_gguf(state: &AppState, path: PathBuf) -> Result<GgufSelection, Strin
 }
 
 #[tauri::command]
-pub fn pick_gguf(
+pub async fn pick_gguf(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<Option<GgufSelection>, String> {
-    let selected = app
-        .dialog()
+    let Some(_guard) = PickerGuard::acquire(&state.picker_in_progress) else {
+        return Ok(None);
+    };
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    app.dialog()
         .file()
         .add_filter("GGUF models", &["gguf"])
-        .blocking_pick_file();
+        .pick_file(move |selected| {
+            let _ = tx.send(selected);
+        });
+    let selected = rx
+        .await
+        .map_err(|_| "The GGUF picker closed unexpectedly.")?;
     let Some(file) = selected else {
         return Ok(None);
     };
@@ -1028,6 +1069,15 @@ pub fn secure_delete_credential(app: AppHandle, reference: String) -> Result<(),
 mod tests {
     use super::*;
 
+    #[test]
+    fn native_picker_guard_allows_only_one_dialog_until_it_closes() {
+        let flag = AtomicBool::new(false);
+        let first = PickerGuard::acquire(&flag).expect("first picker may open");
+        assert!(PickerGuard::acquire(&flag).is_none());
+        drop(first);
+        assert!(PickerGuard::acquire(&flag).is_some());
+    }
+
     fn temporary_path(extension: &str) -> PathBuf {
         let suffix = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -1051,6 +1101,18 @@ mod tests {
         std::fs::write(&path, vec![b'x'; 1024 * 1024 + 1]).expect("replacement should write");
         assert!(read_attachment_grant(&state, &attachment.id).is_err());
         std::fs::remove_file(path).expect("temporary attachment should be removable");
+    }
+
+    #[test]
+    fn attachment_read_revalidates_deleted_and_non_utf8_files() {
+        let path = temporary_path("txt");
+        let state = AppState::default();
+        std::fs::write(&path, b"initially valid").expect("fixture should write");
+        let grant = register_attachment_path(&state, path.clone()).expect("grant should work");
+        std::fs::write(&path, [0xff, 0xfe]).expect("replacement should write");
+        assert!(read_attachment_grant(&state, &grant.id).is_err());
+        std::fs::remove_file(&path).expect("fixture should be removable");
+        assert!(read_attachment_grant(&state, &grant.id).is_err());
     }
 
     #[test]
@@ -1085,8 +1147,34 @@ mod tests {
         symlink(&target, &link).expect("fixture symlink should be created");
         let state = AppState::default();
         assert!(register_attachment_path(&state, link.clone()).is_err());
+        let grant = register_attachment_path(&state, target.clone()).expect("target should grant");
+        std::fs::remove_file(&target).expect("target should be removable");
+        symlink(&link, &target).expect("replacement symlink should be created");
+        assert!(read_attachment_grant(&state, &grant.id).is_err());
+        std::fs::remove_file(&target).expect("replacement symlink should be removable");
         std::fs::remove_file(link).expect("fixture symlink should be removable");
-        std::fs::remove_file(target).expect("fixture target should be removable");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn attachment_grant_rejects_windows_file_symlinks_and_replacements() {
+        use std::os::windows::fs::symlink_file;
+
+        let target = temporary_path("txt");
+        let link = target.with_file_name(format!(
+            "{}-link.txt",
+            target.file_stem().unwrap_or_default().to_string_lossy()
+        ));
+        std::fs::write(&target, "linked content").expect("fixture should write");
+        symlink_file(&target, &link).expect("Windows file symlink should be created");
+        let state = AppState::default();
+        assert!(register_attachment_path(&state, link.clone()).is_err());
+        let grant = register_attachment_path(&state, target.clone()).expect("target should grant");
+        std::fs::remove_file(&target).expect("target should be removable");
+        symlink_file(&link, &target).expect("replacement reparse point should be created");
+        assert!(read_attachment_grant(&state, &grant.id).is_err());
+        std::fs::remove_file(&target).expect("replacement symlink should be removable");
+        std::fs::remove_file(&link).expect("fixture symlink should be removable");
     }
 
     #[test]

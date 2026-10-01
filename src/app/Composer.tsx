@@ -10,8 +10,37 @@ export interface StagedAttachment {
   contentType?: string
 }
 
-export const BROWSER_ATTACHMENT_ACCEPT =
-  '.txt,.md,.json,.csv,.toml,.yaml,.yml,.rs,.ts,.tsx,.js,.jsx,.py,.css,.html,text/plain,application/json,text/markdown'
+export const BROWSER_ATTACHMENT_EXTENSIONS = [
+  'txt',
+  'md',
+  'json',
+  'csv',
+  'toml',
+  'yaml',
+  'yml',
+  'rs',
+  'ts',
+  'tsx',
+  'js',
+  'jsx',
+  'py',
+  'css',
+  'html',
+] as const
+
+export const BROWSER_ATTACHMENT_ACCEPT = [
+  ...BROWSER_ATTACHMENT_EXTENSIONS.map((extension) => `.${extension}`),
+  'text/plain',
+  'application/json',
+  'text/markdown',
+].join(',')
+
+export function isSupportedBrowserAttachmentName(name: string): boolean {
+  const extensionStart = name.lastIndexOf('.')
+  if (extensionStart <= 0) return false
+  const extension = name.slice(extensionStart + 1).toLowerCase()
+  return BROWSER_ATTACHMENT_EXTENSIONS.some((supported) => supported === extension)
+}
 
 const MAX_ROWS_HEIGHT = 224
 

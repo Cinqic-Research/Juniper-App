@@ -145,7 +145,15 @@ function AssistantBuilder({
       if (file.size > MAX_ASSISTANT_IMPORT_BYTES) {
         throw new Error('This assistant file is too large. The maximum size is 128 KiB.')
       }
-      setAssistant(parseAssistant(await file.text()))
+      const imported = parseAssistant(await file.text())
+      // `assistant-juniper` is reserved for the built-in profile. Importing a
+      // Juniper backup into a custom editor applies its settings to that custom
+      // profile without taking over Juniper's stored identity or creation time.
+      setAssistant(
+        imported.id === 'assistant-juniper' && initial.id !== 'assistant-juniper'
+          ? { ...imported, id: initial.id, createdAt: initial.createdAt }
+          : imported,
+      )
     } catch (error) {
       void dialogs.notify(
         error instanceof Error ? error.message : 'Could not import assistant.',

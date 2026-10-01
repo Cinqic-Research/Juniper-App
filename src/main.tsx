@@ -10,12 +10,19 @@ import '@fontsource/opendyslexic/700.css'
 import './styles/tokens.css'
 import './styles/app.css'
 
-installFlexGapFallback()
-
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <StartupErrorBoundary>
-      <App />
-    </StartupErrorBoundary>
-  </StrictMode>,
-)
+try {
+  installFlexGapFallback()
+  const root = document.getElementById('root')
+  if (!root) throw new Error('Root element missing')
+  createRoot(root).render(
+    <StrictMode>
+      <StartupErrorBoundary>
+        <App />
+      </StartupErrorBoundary>
+    </StrictMode>,
+  )
+} catch {
+  const report = (window as Window & { __juniperBootstrapFailed?: (kind: string) => void })
+    .__juniperBootstrapFailed
+  report?.('mount error')
+}

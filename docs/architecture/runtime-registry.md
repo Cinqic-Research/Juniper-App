@@ -29,5 +29,7 @@ missing. Unknown capabilities remain unknown and never imply accelerator,
 streaming, tool, or structured-output support.
 
 The Android llama.cpp bridge is intentionally Beta. Emulator and cross-build
-results qualify packaging and lifecycle behavior, while a physical ARM64 run
-is a promotion follow-up. It is not a global desktop release gate.
+results qualify packaging and lifecycle behavior. The owner later reported a
+successful physical-phone local inference run, but did not capture its build,
+device, model, or lifecycle details. A documented physical ARM64 qualification
+sequence remains a promotion follow-up. It is not a global desktop release gate.

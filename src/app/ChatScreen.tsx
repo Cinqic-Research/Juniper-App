@@ -8,6 +8,7 @@ import {
   readAttachment,
   resolvePermission,
   runningInTauri,
+  runningOnAndroid,
   streamChat,
 } from '../lib/runtime'
 import type {
@@ -24,7 +25,7 @@ import type {
   PermissionRequest,
 } from '../types'
 import { AssistantAvatar } from './branding'
-import { Composer, type StagedAttachment } from './Composer'
+import { Composer, isSupportedBrowserAttachmentName, type StagedAttachment } from './Composer'
 import { Icon } from './icons'
 import { MessageBubble, textPart } from './MessageBubble'
 import { assistantFor, defaultAssistantFor, isChatSelectable, resolveRoute } from './model-labels'
@@ -397,6 +398,7 @@ export function ChatScreen({
   const [inspectorOpen, setInspectorOpen] = useState(false)
   const [announcement, setAnnouncement] = useState('')
   const controller = useRef<AbortController | null>(null)
+  const attachmentPickerBusy = useRef(false)
   const requestId = useRef<string | null>(null)
   const composer = useRef<HTMLTextAreaElement>(null)
   const scroller = useRef<HTMLDivElement>(null)
@@ -689,6 +691,8 @@ export function ChatScreen({
   }
 
   async function attachFromHost() {
+    if (attachmentPickerBusy.current) return
+    attachmentPickerBusy.current = true
     try {
       const attachment = await pickAttachment()
       if (!attachment) return
@@ -708,10 +712,19 @@ export function ChatScreen({
         error instanceof Error ? error.message : 'Could not attach that file.',
         'Could not attach the file',
       )
+    } finally {
+      attachmentPickerBusy.current = false
     }
   }
 
   function attachBrowserFile(file: File) {
+    if (!isSupportedBrowserAttachmentName(file.name)) {
+      void dialogs.notify(
+        `${file.name} is not a supported text file. Choose a file with a supported text extension.`,
+        'Unsupported attachment',
+      )
+      return
+    }
     if (file.size > MAX_ATTACHMENT_BYTES) {
       void dialogs.notify(
         `${file.name} is larger than 1 MB. Juniper attaches text files up to 1 MB.`,
@@ -719,17 +732,41 @@ export function ChatScreen({
       )
       return
     }
-    void file.text().then((content) =>
-      setAttachments((current) => [
-        ...current,
-        {
-          id: uid('attachment'),
-          name: file.name,
-          content,
-          sizeBytes: file.size,
-          contentType: file.type || 'text/plain',
-        },
-      ]),
+    void file.arrayBuffer().then(
+      (bytes) => {
+        if (bytes.byteLength > MAX_ATTACHMENT_BYTES) {
+          void dialogs.notify(
+            `${file.name} is larger than 1 MB. Juniper attaches text files up to 1 MB.`,
+            'File too large',
+          )
+          return
+        }
+        let content: string
+        try {
+          content = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+        } catch {
+          void dialogs.notify(
+            `${file.name} is not valid UTF-8 text. Choose a UTF-8 encoded text file.`,
+            'Invalid text encoding',
+          )
+          return
+        }
+        setAttachments((current) => [
+          ...current,
+          {
+            id: uid('attachment'),
+            name: file.name,
+            content,
+            sizeBytes: bytes.byteLength,
+            contentType: 'text/plain',
+          },
+        ])
+      },
+      () =>
+        void dialogs.notify(
+          `Juniper could not read ${file.name}. Choose the file again or use another copy.`,
+          'Could not attach the file',
+        ),
     )
   }
 
@@ -1044,6 +1081,7 @@ export function ChatScreen({
         {announcement}
       </div>
       <div className="chat-composer-dock">
+        {/* Android document pickers return content URIs; use the WebView File API instead. */}
         <Composer
           value={draft}
           onChange={setDraft}
@@ -1060,7 +1098,7 @@ export function ChatScreen({
           }
           onAttachHost={() => void attachFromHost()}
           onAttachBrowserFile={attachBrowserFile}
-          useHostPicker={runningInTauri}
+          useHostPicker={runningInTauri && !runningOnAndroid}
           textareaRef={composer}
           onFocusChange={onComposerFocus}
           status={
