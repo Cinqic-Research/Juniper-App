@@ -1,6 +1,6 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { initialAppData } from '../lib/defaults'
 import type { AppData, ProviderProfile } from '../types'
 
@@ -191,7 +191,7 @@ describe('Juniper native startup', () => {
       invocations.filter((call) => call.command === 'plugin:app|register_listener')
     expect(registrations()).toHaveLength(0)
 
-    const settings = Array.from(container.querySelectorAll('button')).find(
+    const settings = Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find(
       (button) => button.textContent?.trim() === 'Settings',
     )!
     await act(async () => {
@@ -207,6 +207,43 @@ describe('Juniper native startup', () => {
     })
     expect(commands).toContain('plugin:app|remove_listener')
     expect(container.querySelector('.chat-screen')).not.toBeNull()
+  })
+
+  it('uses the Android WebView file chooser and hides desktop-only GGUF import', async () => {
+    installTauri((command) => (command === 'load_app_data' ? storedStateWithOllama() : null))
+    await mountApp()
+
+    const attach = container.querySelector<HTMLButtonElement>('button[aria-label="Attach a file"]')
+    const fileInput = container.querySelector<HTMLInputElement>('input[type="file"]')
+    expect(attach).not.toBeNull()
+    expect(fileInput).not.toBeNull()
+    const openWebViewChooser = vi.spyOn(fileInput!, 'click').mockImplementation(() => {})
+    await act(async () => attach!.click())
+    expect(openWebViewChooser).toHaveBeenCalledOnce()
+    expect(commands).not.toContain('pick_attachment')
+    const mobileFile = new File(['Android attachment text'], 'mobile.txt', {
+      type: 'text/plain',
+    })
+    Object.defineProperty(mobileFile, 'text', {
+      value: async () => 'Android attachment text',
+    })
+    Object.defineProperty(fileInput!, 'files', { configurable: true, value: [mobileFile] })
+    await act(async () => {
+      fileInput!.dispatchEvent(new Event('change', { bubbles: true }))
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    expect(container.querySelector('.attachment-chips')?.textContent).toContain('mobile.txt')
+
+    const settings = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent?.trim() === 'Settings',
+    )!
+    await act(async () => settings.click())
+    const connections = Array.from(
+      container.querySelectorAll<HTMLButtonElement>('.settings-nav-item'),
+    ).find((button) => button.textContent?.includes('Connections'))!
+    await act(async () => connections.click())
+    expect(container.textContent).not.toContain('Import a GGUF file')
+    openWebViewChooser.mockRestore()
   })
 
   it('does not double the keyboard offset when the WebView already shrank', async () => {

@@ -3,8 +3,10 @@ import { readFile } from 'node:fs/promises'
 import { decodeXwd } from './lib/images.mjs'
 
 const [beforePath, afterPath, mode] = process.argv.slice(2)
-if (!beforePath || !afterPath || (mode && mode !== '--composer')) {
-  console.error('Usage: compare-window-captures.mjs BEFORE.xwd AFTER.xwd [--composer]')
+if (!beforePath || !afterPath || (mode && !['--composer', '--gguf', '--stable'].includes(mode))) {
+  console.error(
+    'Usage: compare-window-captures.mjs BEFORE.xwd AFTER.xwd [--composer|--gguf|--stable]',
+  )
   process.exit(2)
 }
 const before = decodeXwd(await readFile(beforePath))
@@ -18,7 +20,9 @@ let sampled = 0
 const bounds =
   mode === '--composer'
     ? { left: 380, top: before.height - 160, right: before.width - 50, bottom: before.height - 20 }
-    : { left: 280, top: 60, right: before.width - 30, bottom: before.height - 80 }
+    : mode === '--gguf'
+      ? { left: 580, top: 420, right: before.width - 30, bottom: 620 }
+      : { left: 280, top: 60, right: before.width - 30, bottom: before.height - 80 }
 for (let y = bounds.top; y < bounds.bottom; y += 8) {
   for (let x = bounds.left; x < bounds.right; x += 8) {
     const index = (y * before.width + x) * 4
@@ -31,5 +35,10 @@ for (let y = bounds.top; y < bounds.bottom; y += 8) {
   }
 }
 const fraction = changed / sampled
-console.log(JSON.stringify({ changed, sampled, fraction, mode: mode ?? 'content' }))
-process.exit(fraction >= (mode === '--composer' ? 0.02 : 0.05) ? 0 : 3)
+const threshold =
+  mode === '--composer' || mode === '--gguf' ? 0.02 : mode === '--stable' ? 0.005 : 0.05
+const passed = mode === '--stable' ? fraction <= threshold : fraction >= threshold
+console.log(
+  JSON.stringify({ changed, sampled, fraction, threshold, passed, mode: mode ?? 'content' }),
+)
+process.exit(passed ? 0 : 3)

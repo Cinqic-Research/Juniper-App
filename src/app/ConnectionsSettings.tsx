@@ -6,6 +6,7 @@ import {
   deleteProviderCredential,
   getDeviceCapabilities,
   runningInTauri,
+  runningOnAndroid,
   saveProviderCredential,
 } from '../lib/runtime'
 import { inferTransportLocation } from '../lib/storage'
@@ -421,52 +422,54 @@ export function ModelsRuntimeSettings({ data, update }: { data: AppData; update:
         )}
       </Section>
 
-      <Section
-        title="Import a GGUF file"
-        description="Desktop only. The picker validates and scopes the file, then Ollama imports it."
-      >
-        <div className="button-row">
-          <button className="button secondary" onClick={() => void external.chooseGguf()}>
-            {external.ggufSelection ? 'Choose another .gguf' : 'Choose .gguf file'}
-          </button>
-          {external.ggufSelection && (
-            <span className="muted small">
-              {external.ggufSelection.name} ·{' '}
-              {(external.ggufSelection.sizeBytes / 1_000_000).toFixed(1)} MB
-            </span>
-          )}
-        </div>
-        {external.ggufSelection && (
-          <div className="inline-field">
-            <label className="field">
-              <span>Name in Ollama</span>
-              <input
-                value={external.ggufModelName}
-                onChange={(event) => external.setGgufModelName(event.target.value)}
-                maxLength={128}
-              />
-            </label>
-            {external.importing ? (
-              <button className="button secondary" onClick={external.cancelGguf}>
-                Cancel import
-              </button>
-            ) : (
-              <button
-                className="button primary"
-                onClick={() => void external.importSelectedGguf()}
-                disabled={!external.ggufModelName.trim()}
-              >
-                Import through Ollama
-              </button>
+      {!runningOnAndroid && (
+        <Section
+          title="Import a GGUF file"
+          description="Desktop only. The picker validates and scopes the file, then Ollama imports it."
+        >
+          <div className="button-row">
+            <button className="button secondary" onClick={() => void external.chooseGguf()}>
+              {external.ggufSelection ? 'Choose another .gguf' : 'Choose .gguf file'}
+            </button>
+            {external.ggufSelection && (
+              <span className="muted small">
+                {external.ggufSelection.name} ·{' '}
+                {(external.ggufSelection.sizeBytes / 1_000_000).toFixed(1)} MB
+              </span>
             )}
           </div>
-        )}
-        {external.ggufStatus && (
-          <p className="muted small" role="status">
-            {external.ggufStatus}
-          </p>
-        )}
-      </Section>
+          {external.ggufSelection && (
+            <div className="inline-field">
+              <label className="field">
+                <span>Name in Ollama</span>
+                <input
+                  value={external.ggufModelName}
+                  onChange={(event) => external.setGgufModelName(event.target.value)}
+                  maxLength={128}
+                />
+              </label>
+              {external.importing ? (
+                <button className="button secondary" onClick={external.cancelGguf}>
+                  Cancel import
+                </button>
+              ) : (
+                <button
+                  className="button primary"
+                  onClick={() => void external.importSelectedGguf()}
+                  disabled={!external.ggufModelName.trim()}
+                >
+                  Import through Ollama
+                </button>
+              )}
+            </div>
+          )}
+          {external.ggufStatus && (
+            <p className="muted small" role="status">
+              {external.ggufStatus}
+            </p>
+          )}
+        </Section>
+      )}
 
       <Section title="Fit guidance">
         <p className="muted">

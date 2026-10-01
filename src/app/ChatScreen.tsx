@@ -8,6 +8,7 @@ import {
   readAttachment,
   resolvePermission,
   runningInTauri,
+  runningOnAndroid,
   streamChat,
 } from '../lib/runtime'
 import type {
@@ -1065,7 +1066,7 @@ export function ChatScreen({
           }
           onAttachHost={() => void attachFromHost()}
           onAttachBrowserFile={attachBrowserFile}
-          useHostPicker={runningInTauri}
+          useHostPicker={runningInTauri && !runningOnAndroid}
           textareaRef={composer}
           onFocusChange={onComposerFocus}
           status={

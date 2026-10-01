@@ -73,6 +73,9 @@ fn is_reparse_point(_metadata: &std::fs::Metadata) -> bool {
     false
 }
 
+#[cfg(windows)]
+const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+
 fn open_regular_file(path: &std::path::Path, unavailable: &str) -> Result<File, String> {
     let path_metadata = std::fs::symlink_metadata(path).map_err(|_| unavailable.to_owned())?;
     if path_metadata.file_type().is_symlink()
@@ -90,12 +93,14 @@ fn open_regular_file(path: &std::path::Path, unavailable: &str) -> Result<File, 
         use std::os::unix::fs::OpenOptionsExt;
         options.custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW);
     }
-    let file = options.open(path).map_err(|_| unavailable.to_owned())?;
-    if !file
-        .metadata()
-        .map_err(|_| unavailable.to_owned())?
-        .is_file()
+    #[cfg(windows)]
     {
+        use std::os::windows::fs::OpenOptionsExt;
+        options.custom_flags(FILE_FLAG_OPEN_REPARSE_POINT);
+    }
+    let file = options.open(path).map_err(|_| unavailable.to_owned())?;
+    let opened_metadata = file.metadata().map_err(|_| unavailable.to_owned())?;
+    if !opened_metadata.is_file() || is_reparse_point(&opened_metadata) {
         return Err("Only regular files are accepted.".into());
     }
     Ok(file)
@@ -1148,6 +1153,28 @@ mod tests {
         assert!(read_attachment_grant(&state, &grant.id).is_err());
         std::fs::remove_file(&target).expect("replacement symlink should be removable");
         std::fs::remove_file(link).expect("fixture symlink should be removable");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn attachment_grant_rejects_windows_file_symlinks_and_replacements() {
+        use std::os::windows::fs::symlink_file;
+
+        let target = temporary_path("txt");
+        let link = target.with_file_name(format!(
+            "{}-link.txt",
+            target.file_stem().unwrap_or_default().to_string_lossy()
+        ));
+        std::fs::write(&target, "linked content").expect("fixture should write");
+        symlink_file(&target, &link).expect("Windows file symlink should be created");
+        let state = AppState::default();
+        assert!(register_attachment_path(&state, link.clone()).is_err());
+        let grant = register_attachment_path(&state, target.clone()).expect("target should grant");
+        std::fs::remove_file(&target).expect("target should be removable");
+        symlink_file(&link, &target).expect("replacement reparse point should be created");
+        assert!(read_attachment_grant(&state, &grant.id).is_err());
+        std::fs::remove_file(&target).expect("replacement symlink should be removable");
+        std::fs::remove_file(&link).expect("fixture symlink should be removable");
     }
 
     #[test]
