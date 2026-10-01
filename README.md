@@ -61,7 +61,7 @@ These are deliberate exclusions in this release, not oversights:
 - Desktop provider credentials are stored in the OS keychain; Android provider credentials use Android Keystore. Both are referenced only by an opaque identifier. Secrets are never written to the SQLite state and are stripped from exports.
 - Device Link is a protocol/policy preview only in this candidate. No listener, usable pairing flow, discovery, peer connection, remote-control path, or Juniper Network provider is enabled.
 - Private chats are held in memory only; they are excluded from persistence and from user exports.
-- Attachments are opened through a scoped native picker with symlink rejection, an extension allowlist, and a 1 MiB cap enforced at both grant time and read time. Attachment content is labeled untrusted to the model.
+- Desktop attachments use a scoped native picker; Android uses its WebView document chooser. Both paths enforce the supported text-extension allowlist, strict UTF-8 decoding, and a 1 MiB cap. Native reads also reject symlinks, and attachment content is labeled untrusted to the model.
 
 See [PRIVACY.md](PRIVACY.md), [SECURITY.md](SECURITY.md), and [docs/privacy/network-policy.md](docs/privacy/network-policy.md).
 

@@ -221,18 +221,45 @@ describe('Juniper native startup', () => {
     await act(async () => attach!.click())
     expect(openWebViewChooser).toHaveBeenCalledOnce()
     expect(commands).not.toContain('pick_attachment')
-    const mobileFile = new File(['Android attachment text'], 'mobile.txt', {
+    const mobileFile = new File(['Android attachment text'], 'mobile.TXT', {
       type: 'text/plain',
     })
-    Object.defineProperty(mobileFile, 'text', {
-      value: async () => 'Android attachment text',
+    Object.defineProperty(mobileFile, 'arrayBuffer', {
+      value: async () => new TextEncoder().encode('Android attachment text').buffer,
     })
     Object.defineProperty(fileInput!, 'files', { configurable: true, value: [mobileFile] })
     await act(async () => {
       fileInput!.dispatchEvent(new Event('change', { bubbles: true }))
       await new Promise((resolve) => setTimeout(resolve, 0))
     })
-    expect(container.querySelector('.attachment-chips')?.textContent).toContain('mobile.txt')
+    expect(container.querySelector('.attachment-chips')?.textContent).toContain('mobile.TXT')
+
+    const unsupportedFile = new File(['not text'], 'mobile.pdf', { type: 'application/pdf' })
+    Object.defineProperty(fileInput!, 'files', {
+      configurable: true,
+      value: [unsupportedFile],
+    })
+    await act(async () => {
+      fileInput!.dispatchEvent(new Event('change', { bubbles: true }))
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    expect(container.querySelector('.attachment-chips')?.textContent).not.toContain('mobile.pdf')
+
+    const malformedFile = new File([new Uint8Array([0xff])], 'malformed.txt', {
+      type: 'text/plain',
+    })
+    Object.defineProperty(malformedFile, 'arrayBuffer', {
+      value: async () => new Uint8Array([0xff]).buffer,
+    })
+    Object.defineProperty(fileInput!, 'files', {
+      configurable: true,
+      value: [malformedFile],
+    })
+    await act(async () => {
+      fileInput!.dispatchEvent(new Event('change', { bubbles: true }))
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    expect(container.querySelector('.attachment-chips')?.textContent).not.toContain('malformed.txt')
 
     const settings = Array.from(container.querySelectorAll('button')).find(
       (button) => button.textContent?.trim() === 'Settings',
