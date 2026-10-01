@@ -309,6 +309,8 @@ jobs:
           name: windows-smoke-evidence
           path: |
             windows-artifacts/*.txt
+            windows-artifacts/windows-smoke/**/*.txt
+            windows-artifacts/windows-smoke/**/*.png
             windows-artifacts/windows-smoke
           if-no-files-found: warn
 

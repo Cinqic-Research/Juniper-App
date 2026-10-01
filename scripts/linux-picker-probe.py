@@ -28,6 +28,39 @@ def windows(root, title):
     return found
 
 
+def describe_windows(root, dpy):
+    lines = []
+    try:
+        focus = dpy.get_input_focus().focus
+        focus_id = getattr(focus, "id", None)
+        lines.append(f"input_focus={focus_id}")
+    except XError as error:
+        lines.append(f"input_focus_error={error}")
+    for window in root.query_tree().children:
+        try:
+            attributes = window.get_attributes()
+            geometry = window.get_geometry()
+            lines.append(
+                "window="
+                f"id={window.id} title={window.get_wm_name()!r} class={window.get_wm_class()!r} "
+                f"map_state={attributes.map_state} geometry="
+                f"{geometry.x},{geometry.y},{geometry.width},{geometry.height}"
+            )
+        except XError as error:
+            lines.append(f"window_id={window.id} error={error}")
+    return "\n".join(lines) + "\n"
+
+
+def focus_window(dpy, window):
+    # The CI Xvfb display has no window manager; explicitly focus and raise the
+    # native chooser before sending keyboard events rather than assuming that
+    # its mapping event has already transferred focus.
+    window.configure(stack_mode=X.Above)
+    window.set_input_focus(X.RevertToParent, X.CurrentTime)
+    dpy.sync()
+    time.sleep(0.25)
+
+
 def click(dpy, window, x, y):
     geometry = window.get_geometry()
     # The probe runs on a dedicated Xvfb/Xephyr display without a window
@@ -44,22 +77,34 @@ def capture(window, path):
     subprocess.run(["xwd", "-silent", "-id", hex(window.id), "-out", str(path)], check=True)
 
 
-def choose_path(dpy, path):
+def choose_path(dpy, dialog, path, evidence):
+    focus_window(dpy, dialog)
     control = dpy.keysym_to_keycode(XK.string_to_keysym("Control_L"))
     letter_l = dpy.keysym_to_keycode(XK.string_to_keysym("l"))
     xtest.fake_input(dpy, X.KeyPress, control)
     xtest.fake_input(dpy, X.KeyPress, letter_l)
+    time.sleep(0.05)
     xtest.fake_input(dpy, X.KeyRelease, letter_l)
     xtest.fake_input(dpy, X.KeyRelease, control)
+    dpy.sync()
+    # GTK's location-entry transition is asynchronous. Give it time to receive
+    # focus before typing, then pace key events as a user would.
+    time.sleep(0.4)
     for character in str(path):
         symbol = {"/": "slash", "-": "minus", ".": "period"}.get(character, character)
         code = dpy.keysym_to_keycode(XK.string_to_keysym(symbol))
         if not code:
             raise RuntimeError(f"Cannot type picker fixture path character: {character}")
         xtest.fake_input(dpy, X.KeyPress, code)
+        time.sleep(0.025)
         xtest.fake_input(dpy, X.KeyRelease, code)
+        time.sleep(0.025)
+    dpy.sync()
+    time.sleep(0.3)
+    capture(dialog, evidence / "picker-location-entry.xwd")
     enter = dpy.keysym_to_keycode(XK.string_to_keysym("Return"))
     xtest.fake_input(dpy, X.KeyPress, enter)
+    time.sleep(0.05)
     xtest.fake_input(dpy, X.KeyRelease, enter)
     dpy.sync()
 
@@ -105,6 +150,7 @@ def main():
             click(dpy, app, 420, 775)  # chat composer: Attach a file
             click(dpy, app, 420, 775)  # rapid repeat must not open another picker
             dialog = wait_for(lambda: next(iter(windows(root, "Open File")), None), 15, "native Open File dialog", proc)
+            (evidence / "picker-before-cancel-windows.txt").write_text(describe_windows(root, dpy))
             time.sleep(0.5)
             count = len(windows(root, "Open File"))
             if count != 1:
@@ -114,9 +160,17 @@ def main():
             wait_for(lambda: not windows(root, "Open File"), 10, "picker cancellation", proc)
             time.sleep(0.5)
             click(dpy, app, 420, 775)
-            wait_for(lambda: next(iter(windows(root, "Open File")), None), 15, "second native dialog", proc)
-            choose_path(dpy, fixture)
-            wait_for(lambda: not windows(root, "Open File"), 10, "valid attachment selection", proc)
+            dialog = wait_for(lambda: next(iter(windows(root, "Open File")), None), 15, "second native dialog", proc)
+            (evidence / "picker-before-selection-windows.txt").write_text(describe_windows(root, dpy))
+            capture(dialog, evidence / "picker-before-selection.xwd")
+            choose_path(dpy, dialog, fixture, evidence)
+            try:
+                wait_for(lambda: not windows(root, "Open File"), 10, "valid attachment selection", proc)
+            except RuntimeError:
+                (evidence / "picker-selection-timeout-windows.txt").write_text(describe_windows(root, dpy))
+                for index, visible in enumerate(windows(root, "Open File")):
+                    capture(visible, evidence / f"picker-selection-timeout-{index}.xwd")
+                raise
             time.sleep(0.5)
             capture(app, evidence / "after-valid-selection.xwd")
             click(dpy, app, 80, 210)  # Settings: must still respond after cancellation

@@ -109,6 +109,8 @@ public static class JuniperWindowProbe {
   [DllImport("user32.dll")] public static extern bool IsHungAppWindow(IntPtr window);
   [DllImport("user32.dll")] public static extern bool GetClientRect(IntPtr window, out Rect rect);
   [DllImport("user32.dll")] public static extern bool ClientToScreen(IntPtr window, ref Point point);
+  [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr window, out Rect rect);
+  [DllImport("user32.dll")] public static extern uint GetDpiForWindow(IntPtr window);
 }
 '@
 
@@ -161,10 +163,32 @@ function Assert-RenderedWindow([System.Diagnostics.Process]$Process, [string]$La
   if ($width -lt 400 -or $height -lt 300) { throw "[$Label] Juniper client area is too small: ${width}x${height}" }
   $origin = New-Object JuniperWindowProbe+Point
   if (-not [JuniperWindowProbe]::ClientToScreen($window, [ref]$origin)) { throw "[$Label] Cannot locate client area" }
-  $bounds = [System.Windows.Forms.Screen]::FromHandle($window).Bounds
+  $monitor = [System.Windows.Forms.Screen]::FromHandle($window)
+  $bounds = $monitor.Bounds
+  $workingArea = $monitor.WorkingArea
+  $outer = New-Object JuniperWindowProbe+Rect
+  $hasOuter = [JuniperWindowProbe]::GetWindowRect($window, [ref]$outer)
+  $dpi = [JuniperWindowProbe]::GetDpiForWindow($window)
+  $metricsPath = Join-Path $evidenceDirectory "windows-$Label-window-metrics.txt"
+  @(
+    "ProcessId=$($Process.Id)"
+    "WindowHandle=$($window.ToInt64())"
+    "WindowVisible=$([JuniperWindowProbe]::IsWindowVisible($window))"
+    "WindowHung=$([JuniperWindowProbe]::IsHungAppWindow($window))"
+    "ClientSize=${width}x${height}"
+    "ClientOrigin=($($origin.X),$($origin.Y))"
+    "ClientBounds=($($origin.X),$($origin.Y),$($origin.X + $width),$($origin.Y + $height))"
+    "OuterRectAvailable=$hasOuter"
+    "OuterRect=($($outer.Left),$($outer.Top),$($outer.Right),$($outer.Bottom))"
+    "Monitor=$($monitor.DeviceName)"
+    "MonitorBounds=($($bounds.Left),$($bounds.Top),$($bounds.Right),$($bounds.Bottom))"
+    "WorkingArea=($($workingArea.Left),$($workingArea.Top),$($workingArea.Right),$($workingArea.Bottom))"
+    "DpiForWindow=$dpi"
+    "AllScreens=$(([System.Windows.Forms.Screen]::AllScreens | ForEach-Object { "$($_.DeviceName):$($_.Bounds.Left),$($_.Bounds.Top),$($_.Bounds.Right),$($_.Bounds.Bottom)" }) -join ';')"
+  ) | Set-Content -LiteralPath $metricsPath -Encoding utf8
   if ($origin.X -lt $bounds.Left -or $origin.Y -lt $bounds.Top -or
       ($origin.X + $width) -gt $bounds.Right -or ($origin.Y + $height) -gt $bounds.Bottom) {
-    throw "[$Label] Juniper client area is outside the visible screen"
+    throw "[$Label] Juniper client area ($($origin.X),$($origin.Y),$($origin.X + $width),$($origin.Y + $height)) is outside monitor bounds ($($bounds.Left),$($bounds.Top),$($bounds.Right),$($bounds.Bottom)); details: $metricsPath"
   }
   $bitmap = [System.Drawing.Bitmap]::new($width, $height)
   try {
