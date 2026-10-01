@@ -1,7 +1,13 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { initialAppData, modelProfileFromDiscovery } from '../lib/defaults'
+import { serializeAssistant } from '../lib/assistant'
+import {
+  DEFAULT_SYSTEM_PROMPT,
+  HISTORICAL_STOCK_JUNIPER_SYSTEM_PROMPTS,
+  initialAppData,
+  modelProfileFromDiscovery,
+} from '../lib/defaults'
 import { rc32StoredState } from '../test/fixtures'
 import type { AppData } from '../types'
 import App from './App'
@@ -65,6 +71,18 @@ describe('Juniper application shell', () => {
   async function openSettingsSection(label: string) {
     await click(buttonByText(document.querySelector('.sidebar-nav')!, 'Settings'))
     await click(buttonByText(document.querySelector('.settings-nav')!, label))
+  }
+
+  async function importAssistantFile(contents: string) {
+    const input = container.querySelector<HTMLInputElement>('.builder input[type="file"]')
+    if (!input) throw new Error('Assistant import input was not found')
+    const file = new File([contents], 'assistant-backup.juniper', { type: 'application/json' })
+    Object.defineProperty(file, 'text', { configurable: true, value: async () => contents })
+    Object.defineProperty(input, 'files', { configurable: true, value: [file] })
+    await act(async () => {
+      input.dispatchEvent(new Event('change', { bubbles: true }))
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
   }
 
   beforeEach(async () => {
@@ -195,6 +213,57 @@ describe('Juniper application shell', () => {
       'Export',
     ])
       expect(container.textContent).toContain(text)
+  })
+
+  it('keeps Juniper reserved when importing a Juniper backup into a custom assistant', async () => {
+    await mount(settingsFor())
+    await openSettingsSection('Assistants')
+    await click(buttonByText(container, 'New assistant'))
+    await click(buttonByText(container, 'Save'))
+    const originalCustom = stored().assistants.find(
+      (assistant) => assistant.name === 'New assistant',
+    )!
+
+    await click(buttonByText(container, 'Edit New assistant'))
+    await importAssistantFile(
+      serializeAssistant({
+        ...initialAppData().assistants[0]!,
+        name: 'Imported Juniper backup',
+        systemPrompt: HISTORICAL_STOCK_JUNIPER_SYSTEM_PROMPTS[0],
+        createdAt: '2024-01-02T03:04:05.000Z',
+      }),
+    )
+    await click(buttonByText(container, 'Save'))
+
+    const assistants = stored().assistants
+    const custom = assistants.find((assistant) => assistant.name === 'Imported Juniper backup')!
+    const juniper = assistants.find((assistant) => assistant.id === 'assistant-juniper')!
+    expect(custom.id).toBe(originalCustom.id)
+    expect(custom.createdAt).toBe(originalCustom.createdAt)
+    expect(custom.systemPrompt).toBe(HISTORICAL_STOCK_JUNIPER_SYSTEM_PROMPTS[0])
+    expect(juniper.name).toBe('Juniper')
+    expect(juniper.systemPrompt).toBe(DEFAULT_SYSTEM_PROMPT)
+  })
+
+  it('restores a Juniper backup into the canonical Juniper editor', async () => {
+    await mount(settingsFor())
+    await openSettingsSection('Assistants')
+    await click(buttonByText(container, 'Edit Juniper'))
+    await importAssistantFile(
+      serializeAssistant({
+        ...initialAppData().assistants[0]!,
+        name: 'Restored Juniper',
+        systemPrompt: 'A restored Juniper backup prompt.',
+        createdAt: '2024-01-02T03:04:05.000Z',
+      }),
+    )
+    await click(buttonByText(container, 'Save'))
+
+    const juniper = stored().assistants.find((assistant) => assistant.id === 'assistant-juniper')!
+    expect(juniper.name).toBe('Restored Juniper')
+    expect(juniper.createdAt).toBe('2024-01-02T03:04:05.000Z')
+    expect(juniper.systemPrompt).toBe('A restored Juniper backup prompt.')
+    expect(stored().assistants).toHaveLength(2)
   })
 
   it('shows each chat with its own assistant avatar and names the composer after it', async () => {

@@ -77,6 +77,41 @@ def capture(window, path):
     subprocess.run(["xwd", "-silent", "-id", hex(window.id), "-out", str(path)], check=True)
 
 
+def wait_for_rendered_capture(window, evidence, name, timeout=20):
+    scripts = Path(__file__).parent
+    capture_path = evidence / f"{name}.xwd"
+    png_path = evidence / f"{name}.png"
+    analyzer = scripts / "analyze-window-capture.mjs"
+    observations = []
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        capture(window, capture_path)
+        result = subprocess.run(
+            ["node", str(analyzer), str(capture_path), str(png_path)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        detail = result.stdout.strip() or result.stderr.strip()
+        observations.append(f"exit={result.returncode} {detail}")
+        if result.returncode == 0:
+            (evidence / f"{name}-render-readiness.txt").write_text(
+                "\n".join(observations) + "\n"
+            )
+            return
+        if result.returncode != 3:
+            break
+        time.sleep(0.25)
+
+    (evidence / f"{name}-render-readiness.txt").write_text(
+        "\n".join(observations) + "\n"
+    )
+    raise RuntimeError(
+        f"Juniper window did not render within {timeout}s at {name}; "
+        f"last analysis: {observations[-1] if observations else 'no capture'}"
+    )
+
+
 def choose_path(dpy, dialog, path, evidence):
     focus_window(dpy, dialog)
     control = dpy.keysym_to_keycode(XK.string_to_keysym("Control_L"))
@@ -145,8 +180,7 @@ def main():
             if geometry.width < 1000 or geometry.height < 800:
                 raise RuntimeError("Unexpected Juniper window geometry for the picker probe")
             click(dpy, app, 480, 535)  # fresh-profile onboarding: Skip
-            time.sleep(0.5)
-            capture(app, evidence / "before-attachment.xwd")
+            wait_for_rendered_capture(app, evidence, "before-attachment")
             click(dpy, app, 420, 775)  # chat composer: Attach a file
             click(dpy, app, 420, 775)  # rapid repeat must not open another picker
             dialog = wait_for(lambda: next(iter(windows(root, "Open File")), None), 15, "native Open File dialog", proc)
@@ -172,10 +206,9 @@ def main():
                     capture(visible, evidence / f"picker-selection-timeout-{index}.xwd")
                 raise
             time.sleep(0.5)
-            capture(app, evidence / "after-valid-selection.xwd")
+            wait_for_rendered_capture(app, evidence, "after-valid-selection")
             click(dpy, app, 80, 210)  # Settings: must still respond after cancellation
-            time.sleep(1)
-            capture(app, evidence / "after-cancel-settings.xwd")
+            wait_for_rendered_capture(app, evidence, "after-cancel-settings")
             scripts = Path(__file__).parent
             for name in ("before-attachment", "after-valid-selection", "after-cancel-settings"):
                 with (evidence / f"{name}-render.json").open("w") as output:

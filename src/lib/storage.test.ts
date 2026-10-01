@@ -21,12 +21,12 @@ describe('browser-preview storage', () => {
     const rc32Assistant = stored.assistants[0]!
     const currentMainStockAssistant = {
       ...rc32Assistant,
-      systemPrompt: HISTORICAL_STOCK_JUNIPER_SYSTEM_PROMPTS[1],
+      systemPrompt: HISTORICAL_STOCK_JUNIPER_SYSTEM_PROMPTS[0],
       updatedAt: '2026-09-18T09:00:00.000Z',
     }
     const customizedBuiltin = {
       ...rc32Assistant,
-      systemPrompt: `${HISTORICAL_STOCK_JUNIPER_SYSTEM_PROMPTS[1]}\nKeep answers concise.`,
+      systemPrompt: `${HISTORICAL_STOCK_JUNIPER_SYSTEM_PROMPTS[0]}\nKeep answers concise.`,
       welcomeMessage: 'Use my own opening.',
     }
     const customAssistantWithStockText = {
@@ -58,6 +58,16 @@ describe('browser-preview storage', () => {
       normalized.assistants.map((assistant) => assistant.systemPrompt),
     )
   })
+
+  it('preserves an unverified one-line prompt even on the built-in id', () => {
+    const unverifiedPrompt = 'You are Juniper, a capable and helpful personal AI.'
+    const stored = rc32StoredState()
+    stored.assistants[0]!.systemPrompt = unverifiedPrompt
+
+    expect(normalizeAppData(stored).assistants[0]!.systemPrompt).toBe(unverifiedPrompt)
+    expect(HISTORICAL_STOCK_JUNIPER_SYSTEM_PROMPTS).toHaveLength(1)
+  })
+
   it('does not persist private chats', () => {
     const data = initialAppData()
     data.conversations = [

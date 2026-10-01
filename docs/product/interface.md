@@ -25,30 +25,35 @@ first, then returns through the screens you visited.
 
 Every feature from `0.3.0-rc.32` remains available.
 
-| Feature (rc.32 location)                            | Now                                                                                                |
-| --------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| Chat list and search (Chats page)                   | Sidebar history, or the history drawer on phones                                                   |
-| New chat, private chat (Chats page)                 | New chat; the lock button at the top of a new chat makes it private                                |
-| Conversation model `<select>` (chat header)         | Model pill in the chat header                                                                      |
-| Rename, Export, Delete (chat header)                | Chat options menu (⋯); Delete asks for confirmation                                                |
-| Context inspector (developer mode, above messages)  | Chat options › Context inspector (developer mode)                                                  |
-| Model ID, usage, Copy (under every reply)           | Reply actions: Copy, Regenerate, Details; or Appearance › Always show response details             |
-| Regenerate last (beside the composer)               | Regenerate on the latest reply                                                                     |
-| Reasoning, tool calls, host results (cards)         | "Thought process" and "Used …" disclosures in the reply                                            |
-| Assistants page, builder, import/export             | Settings › Assistants                                                                              |
-| Active assistant for new chats                      | Settings › Assistants › Use for new chats, Settings › General, or the assistant menu on a new chat |
-| Models Market (Models page)                         | Models                                                                                             |
-| External models, refresh, re-download, delete       | Models › From your connections                                                                     |
-| Add/edit/test/enable/remove provider, API key       | Settings › Connections                                                                             |
-| Import GGUF through Ollama, fit guidance            | Settings › Models & runtime                                                                        |
-| Tools page, schemas, tool policy, permission grants | Settings › Tools & permissions (policy is now per assistant)                                       |
-| Memories                                            | Settings › Memory                                                                                  |
-| Privacy center, export data, clear chats/memory     | Settings › Privacy & data                                                                          |
-| Diagnostics                                         | Settings › Advanced › Open diagnostics                                                             |
-| Developer mode                                      | Settings › Advanced                                                                                |
-| Runtime limits and MCP (shown as unavailable)       | Settings › Advanced (still shown as unavailable)                                                   |
-| Device Link preview                                 | Settings › Connections                                                                             |
-| Theme, accent, font scale, density, reduced motion  | Settings › Appearance and Settings › Accessibility                                                 |
+| Feature (rc.32 location)                            | Now                                                                                    |
+| --------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Chat list and search (Chats page)                   | Sidebar history, or the history drawer on phones                                       |
+| New chat, private chat (Chats page)                 | New chat; the lock button at the top of a new chat makes it private                    |
+| Conversation model `<select>` (chat header)         | Model pill in the chat header                                                          |
+| Rename, Export, Delete (chat header)                | Chat options menu (⋯); Delete asks for confirmation                                    |
+| Context inspector (developer mode, above messages)  | Chat options › Context inspector (developer mode)                                      |
+| Model ID, usage, Copy (under every reply)           | Reply actions: Copy, Regenerate, Details; or Appearance › Always show response details |
+| Regenerate last (beside the composer)               | Regenerate on the latest reply                                                         |
+| Reasoning, tool calls, host results (cards)         | "Thought process" and "Used …" disclosures in the reply                                |
+| Assistants page, builder, import/export             | Settings › Assistants                                                                  |
+| Active assistant for new chats                      | Settings › Assistants › Use for new chats, General, or the new chat assistant menu     |
+| Models Market (Models page)                         | Models                                                                                 |
+| External models, refresh, re-download, delete       | Models › From your connections                                                         |
+| Add/edit/test/enable/remove provider, API key       | Settings › Connections                                                                 |
+| Import GGUF through Ollama, fit guidance            | Settings › Models & runtime                                                            |
+| Tools page, schemas, tool policy, permission grants | Settings › Tools & permissions (policy is now per assistant)                           |
+| Memories                                            | Settings › Memory                                                                      |
+| Privacy center, export data, clear chats/memory     | Settings › Privacy & data                                                              |
+| Diagnostics                                         | Settings › Advanced › Open diagnostics                                                 |
+| Developer mode                                      | Settings › Advanced                                                                    |
+| Runtime limits and MCP (shown as unavailable)       | Settings › Advanced (still shown as unavailable)                                       |
+| Device Link preview                                 | Settings › Connections                                                                 |
+| Theme, accent, font scale, density, reduced motion  | Settings › Appearance and Settings › Accessibility                                     |
+
+The built-in assistant id `assistant-juniper` is reserved. Import a Juniper
+backup while editing Juniper to restore that identity. If a Juniper backup is
+imported into a custom assistant, its settings are applied to that profile
+while the custom profile keeps its own id and creation time.
 
 New in this release: Settings › General › Show welcome replays onboarding, and
 Settings › Models & runtime can pull an Ollama model by name.
