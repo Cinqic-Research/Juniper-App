@@ -23,6 +23,7 @@ import type {
   ModelProfile,
   PermissionDecision,
   PermissionRequest,
+  RuntimeActivity,
 } from '../types'
 import { AssistantAvatar } from './branding'
 import { Composer, isSupportedBrowserAttachmentName, type StagedAttachment } from './Composer'
@@ -65,16 +66,6 @@ export function applyStreamEvent(message: ChatMessage, event: ChatStreamEvent): 
     if (textIndex >= 0) parts[textIndex] = text
     else parts.unshift(text)
   }
-  if (event.reasoning) {
-    const reasoningIndex = parts.findIndex((part) => part.type === 'reasoning')
-    const reasoning: MessagePart = {
-      id: reasoningIndex >= 0 ? parts[reasoningIndex]!.id : uid('part'),
-      type: 'reasoning',
-      text: `${reasoningIndex >= 0 ? (parts[reasoningIndex]!.text ?? '') : ''}${event.reasoning}`,
-    }
-    if (reasoningIndex >= 0) parts[reasoningIndex] = reasoning
-    else parts.push(reasoning)
-  }
   for (const call of event.toolCalls ?? []) {
     const existingIndex = parts.findIndex(
       (part) => part.type === 'tool-call' && part.metadata?.callId === call.id,
@@ -114,7 +105,43 @@ export function applyStreamEvent(message: ChatMessage, event: ChatStreamEvent): 
     ...message,
     parts,
     usage: event.usage ? { ...message.usage, ...event.usage } : message.usage,
+    ...(event.provenance ? { provenance: event.provenance } : {}),
   }
+}
+
+/** Status text for host activity before answer text arrives. */
+export function activityLabel(activity: RuntimeActivity, assistantName: string): string {
+  switch (activity) {
+    case 'loading-model':
+      return 'Loading the model into memory. A large model can take a few minutes the first time.'
+    case 'warming-up':
+      return 'Warming up the model…'
+    case 'restarting-model':
+      return 'The local model stopped. Restarting it…'
+    case 'reasoning':
+      return `${assistantName} is reasoning…`
+  }
+}
+
+/**
+ * A truncated answer stays visible but marked incomplete; any other failure
+ * replaces partial output, which may be malformed.
+ */
+export function applyStreamError(
+  message: ChatMessage,
+  error: { code: string; message: string },
+): ChatMessage {
+  const errorPart: MessagePart = {
+    id: uid('part'),
+    type: 'error',
+    text: error.message,
+    metadata: error.code ? { errorCode: error.code } : undefined,
+  }
+  const keep =
+    error.code === 'GENERATION_TRUNCATED'
+      ? message.parts.filter((part) => part.type === 'text' && part.text)
+      : []
+  return { ...message, isStreaming: false, parts: [...keep, errorPart] }
 }
 
 function applyHostToolResult(data: AppData, result: HostToolResult): AppData {
@@ -482,11 +509,15 @@ export function ChatScreen({
     const pendingReply = { ...assistantMessage, conversationId: id }
     for (const attachment of requestAttachments) recordAttachment(id, attachment)
     const nextMessages = [...history, { ...userMessage, conversationId: id }, pendingReply]
+    // The native host applies the same private-chat isolation; filtering here
+    // keeps the context estimate and inspector honest.
     const enabledTools =
       assistant.toolPolicy !== 'disabled' && model.capabilities.tools === 'supported'
         ? builtinTools.filter(
             (tool) =>
-              tool.enabled && (tool.risk === 'automatic-safe' || assistant.toolPolicy === 'ask'),
+              tool.enabled &&
+              (tool.risk === 'automatic-safe' || assistant.toolPolicy === 'ask') &&
+              !(privateMode && (tool.name.startsWith('memory.') || tool.name === 'chat.search')),
           )
         : []
     const context = buildContext(
@@ -497,12 +528,31 @@ export function ChatScreen({
       model.contextLength,
       content,
       requestAttachments,
+      { privateChat: privateMode, reservedOutputTokens: assistant.generation.maxOutput },
     )
     setLastContext(context)
+    if (context.overflow) {
+      updateConversation(id, (chat) => ({
+        ...chat,
+        updatedAt: now(),
+        messages: [
+          ...history,
+          { ...userMessage, conversationId: id },
+          applyStreamError(pendingReply, {
+            code: 'CONTEXT_OVERFLOW',
+            message: `This message and its attachments do not fit in ${model.displayName}'s ${context.contextLimit.toLocaleString()}-token context with room for an answer. Shorten it or attach less.`,
+          }),
+        ],
+      }))
+      setAnnouncement('The response did not complete.')
+      return
+    }
     setIsGenerating(true)
     setAnnouncement('')
     setPhase(
-      provider.kind === 'juniper-local' ? 'Loading the model…' : `${assistant.name} is thinking…`,
+      provider.kind === 'juniper-local'
+        ? 'Preparing the local model…'
+        : `${assistant.name} is thinking…`,
     )
     pinnedToBottom.current = true
     controller.current = new AbortController()
@@ -520,12 +570,13 @@ export function ChatScreen({
         {
           requestId: currentRequestId,
           assistantId: assistant.id,
+          assistantName: assistant.name,
           conversationId: id,
           privateChat: privateMode,
           provider,
           model,
           messages: [
-            { role: 'system', content: context.system },
+            { role: 'system', content: context.profile },
             ...context.conversation,
             { role: 'user', content: context.currentUserMessage },
           ],
@@ -541,13 +592,16 @@ export function ChatScreen({
             conversations: data.conversations.filter((chat) => !chat.privateChat),
           },
           attachments: requestAttachments,
+          contextMemoryIds: context.memoryIds,
         },
         (streamEvent) => {
-          if (streamEvent.delta || streamEvent.reasoning) setPhase(null)
+          if (streamEvent.delta) setPhase(null)
+          else if (streamEvent.activity)
+            setPhase(activityLabel(streamEvent.activity, assistant.name))
           if (streamEvent.permissionRequest) setPermissionRequest(streamEvent.permissionRequest)
           if (
             streamEvent.delta ||
-            streamEvent.reasoning ||
+            streamEvent.provenance ||
             streamEvent.toolCalls?.length ||
             streamEvent.toolResults?.length
           )
@@ -562,26 +616,14 @@ export function ChatScreen({
           for (const result of streamEvent.toolResults ?? []) {
             update((current) => applyHostToolResult(current, result))
           }
-          if (streamEvent.error) {
+          const streamError = streamEvent.error
+          if (streamError) {
             failed = true
             updateConversation(id, (chat) => ({
               ...chat,
               messages: chat.messages.map((message) =>
                 message.id === assistantMessage.id
-                  ? {
-                      ...message,
-                      isStreaming: false,
-                      parts: [
-                        {
-                          id: uid('part'),
-                          type: 'error',
-                          text: streamEvent.error?.message,
-                          metadata: streamEvent.error?.code
-                            ? { errorCode: streamEvent.error.code }
-                            : undefined,
-                        },
-                      ],
-                    }
+                  ? applyStreamError(message, streamError)
                   : message,
               ),
             }))
@@ -770,9 +812,11 @@ export function ChatScreen({
     )
   }
 
-  async function decidePermission(decision: PermissionDecision) {
+  async function decidePermission(requested: PermissionDecision) {
     const pending = permissionRequest
     if (!pending) return
+    const decision: PermissionDecision =
+      pending.standingGrantAllowed || requested === 'deny' ? requested : 'allow-once'
     try {
       await resolvePermission(pending.requestId, pending.callId, decision)
       if (decision === 'allow-chat' || decision === 'allow-assistant') {
@@ -1182,10 +1226,12 @@ export function ChatScreen({
           open={inspectorOpen}
           onClose={() => setInspectorOpen(false)}
           title="Context inspector"
-          description={`Estimated ${lastContext.estimatedTokens.toLocaleString()} / ${lastContext.contextLimit.toLocaleString()} tokens · ${lastContext.contextLimitAssumed ? 'context limit assumed' : 'runtime limit'} · ${lastContext.truncated ? 'older history truncated' : 'no truncation'}`}
+          description={`Estimated ${lastContext.estimatedTokens.toLocaleString()} / ${lastContext.contextLimit.toLocaleString()} tokens, including ${lastContext.reservedOutputTokens.toLocaleString()} reserved for the answer · ${lastContext.contextLimitAssumed ? 'context limit assumed' : 'runtime limit'} · ${lastContext.truncated ? 'older history truncated' : 'no truncation'}`}
         >
           <div className="context-inspector">
-            <pre>{`[Juniper system]\n${lastContext.system}`}</pre>
+            <pre>{`[Added by the native host]\n${lastContext.constitutionId}, then a runtime section listing the model, where it runs, and these tools:\n${lastContext.tools.join('\n') || 'None'}`}</pre>
+            <pre>{`[Assistant profile]\n${lastContext.profile}`}</pre>
+            <pre>{`[Memories, sent as data]\n${lastContext.memory.join('\n') || 'None'}`}</pre>
             <pre>{`[Conversation]\n${lastContext.conversation.map((item) => `${item.role}: ${item.content}`).join('\n\n')}`}</pre>
             <pre>{`[Files]\n${lastContext.attachments.join('\n') || 'None'}\n\n[Current user]\n${lastContext.currentUserMessage}`}</pre>
           </div>
@@ -1205,8 +1251,13 @@ export function ChatScreen({
                 <code>{permissionRequest.toolName}</code>. Juniper runs it only if you allow it.
                 Closing this dialog denies the request.
               </p>
+              {permissionRequest.preview && (
+                <p className="permission-preview">{permissionRequest.preview}</p>
+              )}
               <p className="muted">
                 {builtinTools.find((tool) => tool.name === permissionRequest.toolName)?.description}
+                {!permissionRequest.standingGrantAllowed &&
+                  ' Changes to saved data are approved one at a time.'}
               </p>
             </>
           }
@@ -1218,18 +1269,22 @@ export function ChatScreen({
               >
                 Allow once
               </button>
-              <button
-                className="button secondary"
-                onClick={() => void decidePermission('allow-chat')}
-              >
-                Allow for this chat
-              </button>
-              <button
-                className="button secondary"
-                onClick={() => void decidePermission('allow-assistant')}
-              >
-                Always allow for this assistant
-              </button>
+              {permissionRequest.standingGrantAllowed && (
+                <>
+                  <button
+                    className="button secondary"
+                    onClick={() => void decidePermission('allow-chat')}
+                  >
+                    Allow for this chat
+                  </button>
+                  <button
+                    className="button secondary"
+                    onClick={() => void decidePermission('allow-assistant')}
+                  >
+                    Always allow for this assistant
+                  </button>
+                </>
+              )}
               <button
                 className="button ghost"
                 data-autofocus

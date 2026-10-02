@@ -51,6 +51,20 @@ export function saveAppData(data: AppData): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(withoutPrivateChats(data)))
 }
 
+/**
+ * Earlier versions stored raw model reasoning as message parts. It is not
+ * history and is never shown or sent again, so it is dropped on load.
+ */
+function withoutRawReasoning(conversation: AppData['conversations'][number]) {
+  return {
+    ...conversation,
+    messages: (conversation.messages ?? []).map((message) => ({
+      ...message,
+      parts: message.parts.filter((part) => (part.type as string) !== 'reasoning'),
+    })),
+  }
+}
+
 function migrateBuiltinAssistantPrompt(assistant: AppData['assistants'][number]): string {
   if (
     assistant.id === 'assistant-juniper' &&
@@ -154,7 +168,7 @@ export function normalizeAppData(value: unknown): AppData {
     models,
     providers,
     conversations: Array.isArray(parsed.conversations)
-      ? parsed.conversations
+      ? parsed.conversations.map(withoutRawReasoning)
       : defaults.conversations,
     memories: Array.isArray(parsed.memories) ? parsed.memories : defaults.memories,
     attachments,

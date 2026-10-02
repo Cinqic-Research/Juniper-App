@@ -1,17 +1,30 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { AppData, Assistant, ManagedModel, ModelProfile, SettingsSection } from '../types'
+import type {
+  AppData,
+  Assistant,
+  LocalRuntimeStatus,
+  ManagedModel,
+  ModelProfile,
+  SettingsSection,
+} from '../types'
 import { defaultProvider, modelProfileFromDiscovery } from '../lib/defaults'
 import {
   deleteManagedModel,
   downloadManagedModel,
   getDeviceCapabilities,
+  getLocalRuntimeStatus,
   getManagedModels,
   getModelCatalog,
+  importManagedModel,
+  pickGguf,
   runningInTauri,
+  runningOnAndroid,
+  unloadLocalRuntime,
 } from '../lib/runtime'
 import {
   MODEL_CATALOG,
   formatBytes,
+  isImportOnly,
   recommendModels,
   runtimeOptionsForModel,
   type CatalogModel,
@@ -55,6 +68,12 @@ export function nativeRuntimeLabel(device: DeviceCapabilities | null): string {
     default:
       return 'Loads on first chat'
   }
+}
+
+function parameterLabel(count: number): string {
+  return count >= 1_000_000_000
+    ? `${(count / 1_000_000_000).toFixed(1)}B`
+    : `${Math.round(count / 1_000_000)}M`
 }
 
 function fitLabel(value: ModelRecommendation['fit']): string {
@@ -101,6 +120,7 @@ export function ModelsScreen({
   const [activeDownload, setActiveDownload] = useState<string | null>(null)
   const [progress, setProgress] = useState<{ completed: number; total: number } | null>(null)
   const [message, setMessage] = useState<string | null>(null)
+  const [runtimeStatus, setRuntimeStatus] = useState<LocalRuntimeStatus>({ state: 'idle' })
   const controller = useRef<AbortController | null>(null)
   const external = useExternalModels(data, update)
   const defaultAssistant = defaultAssistantFor(data)
@@ -115,6 +135,7 @@ export function ModelsScreen({
       setCatalog(nextCatalog)
       setDevice(nextDevice)
       setInstalled(nextInstalled)
+      if (!runningOnAndroid) setRuntimeStatus(await getLocalRuntimeStatus())
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not inspect this device.')
     }
@@ -160,6 +181,7 @@ export function ModelsScreen({
 
   function profileFor(entry: CatalogModel): ModelProfile {
     const provider = data.providers.find((item) => item.kind === 'juniper-local') ?? defaultProvider
+    const qualified = entry.artifacts[0]?.capabilities
     return modelProfileFromDiscovery(provider, entry.id, {
       catalogId: entry.id,
       managedVariantId: entry.artifacts[0]?.id,
@@ -170,7 +192,7 @@ export function ModelsScreen({
       sourceReference: entry.sourceRepository,
       family: entry.family,
       architecture: entry.architecture,
-      parameterSize: `${Math.round(entry.parameterCount / 1_000_000)}M`,
+      parameterSize: parameterLabel(entry.parameterCount),
       fileSizeBytes: entry.artifacts[0]?.sizeBytes,
       quantization: entry.artifacts[0]?.quantization,
       format: entry.artifacts[0]?.format,
@@ -184,6 +206,7 @@ export function ModelsScreen({
         chat: 'supported',
         text: 'supported',
         streaming: 'supported',
+        ...qualified,
       },
     })
   }
@@ -240,6 +263,60 @@ export function ModelsScreen({
       if (controller.current === next) controller.current = null
       setActiveDownload(null)
       setProgress(null)
+    }
+  }
+
+  /** Installs an import-only model from a file the user already has. */
+  async function importFile(entry: CatalogModel) {
+    if (!runningInTauri) {
+      setMessage('Model import is available in the Juniper desktop app.')
+      return
+    }
+    let selection
+    try {
+      selection = await pickGguf()
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not open the file picker.')
+      return
+    }
+    if (!selection) return
+    controller.current?.abort()
+    const next = new AbortController()
+    controller.current = next
+    setActiveDownload(entry.id)
+    setProgress(null)
+    setMessage(null)
+    try {
+      await importManagedModel(
+        selection.id,
+        entry.id,
+        (event) =>
+          setProgress({ completed: event.completedBytes ?? 0, total: event.totalBytes ?? 0 }),
+        next.signal,
+      )
+      setInstalled(await getManagedModels())
+      registerManagedModel(entry, false)
+    } catch (error) {
+      setMessage(
+        next.signal.aborted
+          ? 'Import cancelled.'
+          : error instanceof Error
+            ? error.message
+            : 'Import failed.',
+      )
+    } finally {
+      if (controller.current === next) controller.current = null
+      setActiveDownload(null)
+      setProgress(null)
+    }
+  }
+
+  async function unload() {
+    try {
+      await unloadLocalRuntime()
+      setRuntimeStatus(await getLocalRuntimeStatus())
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not unload the model.')
     }
   }
 
@@ -330,7 +407,13 @@ export function ModelsScreen({
               isDefault={Boolean(profile && profile.id === defaultModelId)}
               defaultAssistantName={defaultAssistant.name}
               runtimeOptions={runtimeOptionsForModel(entry, device?.runtimes)}
-              onDownload={() => void download(entry)}
+              resident={
+                runtimeStatus.artifactId === entry.artifacts[0]?.id ? runtimeStatus.state : null
+              }
+              onDownload={() =>
+                void (isImportOnly(recommendation.artifact) ? importFile(entry) : download(entry))
+              }
+              onUnload={() => void unload()}
               onPause={() => controller.current?.abort()}
               onMakeDefault={() => registerManagedModel(entry, true)}
               onRemove={() => void remove(entry)}
@@ -537,7 +620,9 @@ function CatalogModelCard({
   isDefault,
   defaultAssistantName,
   runtimeOptions,
+  resident,
   onDownload,
+  onUnload,
   onPause,
   onMakeDefault,
   onRemove,
@@ -550,7 +635,9 @@ function CatalogModelCard({
   isDefault: boolean
   defaultAssistantName: string
   runtimeOptions: ReturnType<typeof runtimeOptionsForModel>
+  resident: LocalRuntimeStatus['state'] | null
   onDownload: () => void
+  onUnload: () => void
   onPause: () => void
   onMakeDefault: () => void
   onRemove: () => void
@@ -559,6 +646,7 @@ function CatalogModelCard({
   const percent = progress?.total ? Math.round((progress.completed / progress.total) * 100) : 0
   const usableEngine = runtimeOptions.find((option) => option.selectable)
   const engineUnavailable = runtimeOptions.length > 0 && !usableEngine
+  const importOnly = isImportOnly(artifact)
   return (
     <article className="model-card">
       <div className="model-card-head">
@@ -573,6 +661,12 @@ function CatalogModelCard({
       {!recommendation.storageSafe && (
         <p className="warning-line">
           <Icon name="info" size={16} /> Not enough free storage for a safe download.
+        </p>
+      )}
+      {importOnly && !installed && (
+        <p className="note-line">
+          Juniper does not download this model. Import a copy of the exact file; Juniper checks its
+          SHA-256 before using it.
         </p>
       )}
       {engineUnavailable && (
@@ -597,13 +691,15 @@ function CatalogModelCard({
       )}
       {installed && (
         <p className="success-line" role="status">
-          <Icon name="check" size={16} /> Downloaded and verified
+          <Icon name="check" size={16} /> {importOnly ? 'Imported' : 'Downloaded'} and verified
+          {resident === 'ready' || resident === 'busy' ? ' · loaded in memory' : ''}
+          {resident === 'loading' ? ' · loading' : ''}
         </p>
       )}
       {downloading && (
         <div className="progress-block" role="status">
           <div>
-            <span>Downloading and verifying</span>
+            <span>{importOnly ? 'Verifying the file' : 'Downloading and verifying'}</span>
             <strong>{percent}%</strong>
           </div>
           <progress value={percent} max="100" aria-label={`${model.displayName} download`} />
@@ -620,26 +716,33 @@ function CatalogModelCard({
                 Use as default
               </button>
             )}
+            {resident === 'ready' && (
+              <button className="button secondary" onClick={onUnload}>
+                Unload from memory
+              </button>
+            )}
             <button className="button ghost" onClick={onRemove}>
               Remove
             </button>
           </>
         ) : downloading ? (
           <button className="button secondary" onClick={onPause}>
-            Pause download
+            {importOnly ? 'Cancel import' : 'Pause download'}
           </button>
         ) : (
           <>
             <button
               className="button primary"
               onClick={onDownload}
-              disabled={!recommendation.storageSafe}
+              disabled={!importOnly && !recommendation.storageSafe}
             >
-              {recommendation.storageSafe
-                ? managedState === 'partial'
-                  ? 'Resume download'
-                  : `Download · ${formatBytes(artifact.sizeBytes)}`
-                : 'Not enough storage'}
+              {importOnly
+                ? 'Import verified file…'
+                : recommendation.storageSafe
+                  ? managedState === 'partial'
+                    ? 'Resume download'
+                    : `Download · ${formatBytes(artifact.sizeBytes)}`
+                  : 'Not enough storage'}
             </button>
             {managedState && (
               <button className="button ghost" onClick={onRemove}>
@@ -662,7 +765,7 @@ function CatalogModelCard({
           </div>
           <div>
             <dt>Parameters</dt>
-            <dd>{Math.round(model.parameterCount / 1_000_000)}M</dd>
+            <dd>{parameterLabel(model.parameterCount)}</dd>
           </div>
           <div>
             <dt>Format</dt>

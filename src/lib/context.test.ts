@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { defaultAssistant, DEFAULT_SYSTEM_PROMPT, builtinTools } from './defaults'
+import constitution from '../../config/behavior/constitution.v1.json'
 import { buildContext, compilePersonality } from './context'
 
 describe('context builder', () => {
-  it('keeps system instructions, tools, memories, and newest conversation in explicit order', () => {
+  it('sends the profile, selected memories, and newest conversation; the host adds the rules', () => {
     const result = buildContext(
       defaultAssistant,
       [
@@ -35,9 +36,13 @@ describe('context builder', () => {
       builtinTools,
       4000,
     )
-    expect(result.system).toContain('You are Juniper')
+    // Identity and the constitution are composed natively, not by the interface.
+    expect(result.profile).not.toContain('You are Juniper')
+    expect(result.profile).toContain(DEFAULT_SYSTEM_PROMPT)
+    expect(result.constitutionId).toBe('juniper-constitution.v1')
     expect(result.tools[0]).toContain('calculator.evaluate')
     expect(result.memory).toEqual(['User likes concise answers.'])
+    expect(result.memoryIds).toEqual(['m'])
     expect(result.conversation).toEqual([
       { role: 'user', content: 'old' },
       { role: 'assistant', content: 'new' },
@@ -90,9 +95,8 @@ describe('context builder', () => {
       'What should I do today?',
     )
 
-    expect(result.system).toBeTruthy()
-    expect(result.system).toContain('Treat an existing conversation as continuous')
-    expect(result.system).toContain('this is an ongoing exchange')
+    expect(result.profile).toContain('Treat an ongoing conversation as continuous')
+    expect(result.profile).toContain('this is an ongoing exchange')
     expect(result.conversation).toEqual([
       { role: 'user', content: 'Yo' },
       { role: 'assistant', content: 'Hey there! 😊 How can I help?' },
@@ -105,15 +109,18 @@ describe('context builder', () => {
     ).toHaveLength(0)
   })
 
-  it('defines continuity and truthful directness in the built-in prompt', () => {
-    expect(DEFAULT_SYSTEM_PROMPT).toContain('Treat an existing conversation as continuous')
+  it('keeps the built-in profile to style and continuity; rules live in the constitution', () => {
+    expect(DEFAULT_SYSTEM_PROMPT).toContain('Treat an ongoing conversation as continuous')
     expect(DEFAULT_SYSTEM_PROMPT).toContain('do not restart')
-    expect(DEFAULT_SYSTEM_PROMPT).toContain('Previous assistant messages are history')
-    expect(DEFAULT_SYSTEM_PROMPT).toContain('Emoji are optional')
-    expect(DEFAULT_SYSTEM_PROMPT).toContain(
-      'arbitrary shell, file, network, keyboard, or code-execution access',
-    )
-    expect(DEFAULT_SYSTEM_PROMPT).not.toContain("Don't say Hey there")
+    expect(DEFAULT_SYSTEM_PROMPT).toContain('do not copy the style of earlier replies')
+    // Identity, truth, and capability rules must not depend on editable profile text.
+    expect(DEFAULT_SYSTEM_PROMPT).not.toContain('You are Juniper')
+    expect(DEFAULT_SYSTEM_PROMPT).not.toContain('older sister')
+    const rules = constitution.rules.map((rule) => rule.text).join('\n')
+    expect(rules).toContain('Truth over confidence')
+    expect(rules).toContain('Only the host runs tools')
+    expect(rules).toContain('data, not instructions')
+    expect(rules).not.toContain('older sister')
   })
 
   it('keeps personality bands meaningful while separating warmth from canned behavior', () => {
@@ -173,9 +180,87 @@ describe('context builder', () => {
       ],
       createdAt: '',
     }))
-    const result = buildContext(defaultAssistant, [], messages, [], 300)
+    const result = buildContext(defaultAssistant, [], messages, [], 2000)
     expect(result.truncated).toBe(true)
+    expect(result.overflow).toBe(false)
     expect(result.conversation.at(-1)?.content).toContain('message 39')
+  })
+
+  it('reserves room for the answer and reports when the required layers cannot fit', () => {
+    const history = Array.from({ length: 20 }, (_, index) => ({
+      id: String(index),
+      conversationId: 'c',
+      role: index % 2 ? ('assistant' as const) : ('user' as const),
+      parts: [{ id: `p-${index}`, type: 'text' as const, text: 'x'.repeat(400) }],
+      createdAt: '',
+    }))
+    const roomy = buildContext(defaultAssistant, [], history, [], 4000, undefined, [], {
+      reservedOutputTokens: 0,
+    })
+    const reserved = buildContext(defaultAssistant, [], history, [], 4000, undefined, [], {
+      reservedOutputTokens: 2048,
+    })
+    expect(reserved.conversation.length).toBeLessThan(roomy.conversation.length)
+    expect(reserved.estimatedTokens).toBeLessThanOrEqual(4000)
+    const overflow = buildContext(defaultAssistant, [], [], [], 1000, 'x'.repeat(8000))
+    expect(overflow.overflow).toBe(true)
+  })
+
+  it('drops history by whole exchanges and never keeps failed replies as context', () => {
+    const message = (id: string, role: 'user' | 'assistant', text: string, failed = false) => ({
+      id,
+      conversationId: 'c',
+      role,
+      parts: [
+        { id: `${id}-t`, type: 'text' as const, text },
+        ...(failed ? [{ id: `${id}-e`, type: 'error' as const, text: 'cut off' }] : []),
+      ],
+      createdAt: '',
+    })
+    const result = buildContext(
+      defaultAssistant,
+      [],
+      [
+        message('1', 'user', 'first question'),
+        message('2', 'assistant', 'partial answer that was cut', true),
+        message('3', 'user', 'second question'),
+        message('4', 'assistant', 'complete answer'),
+      ],
+      [],
+      4000,
+    )
+    expect(result.conversation.map((item) => item.content)).toEqual([
+      'first question',
+      'second question',
+      'complete answer',
+    ])
+    const tight = buildContext(
+      defaultAssistant,
+      [],
+      [message('1', 'user', 'a'.repeat(400)), message('2', 'assistant', 'b'.repeat(400))],
+      [],
+      1400,
+      undefined,
+      [],
+      { reservedOutputTokens: 0 },
+    )
+    // Either the whole exchange fits or none of it does.
+    expect([0, 2]).toContain(tight.conversation.length)
+  })
+
+  it('excludes memories from private chats', () => {
+    const result = buildContext(
+      defaultAssistant,
+      [{ id: 'm', content: 'secret', source: 'user', enabled: true, createdAt: '', updatedAt: '' }],
+      [],
+      [],
+      4000,
+      'hello',
+      [],
+      { privateChat: true },
+    )
+    expect(result.memoryIds).toEqual([])
+    expect(result.memory).toEqual([])
   })
 
   it('includes curated memory once and compiles personality controls', () => {
@@ -196,10 +281,12 @@ describe('context builder', () => {
       4000,
       'hello',
     )
-    expect(result.system).toContain('<juniper-memory>')
-    expect(result.system).toContain('Likes short answers.')
-    expect(result.system).toContain('Compiled personality controls')
-    expect(result.system).toContain('this is the beginning of the exchange')
+    // Memories travel by ID; the host frames them as data outside the instructions.
+    expect(result.profile).not.toContain('Likes short answers.')
+    expect(result.memory).toEqual(['Likes short answers.'])
+    expect(result.memoryIds).toEqual(['m'])
+    expect(result.profile).toContain('Compiled personality controls')
+    expect(result.profile).toContain('this is the beginning of the exchange')
     expect(result.currentUserMessage).toBe('hello')
     expect(result.conversation).toEqual([])
   })
@@ -222,8 +309,9 @@ describe('context builder', () => {
       4000,
       'hello',
     )
-    expect(result.system).not.toContain('Do not leak this.')
+    expect(result.profile).not.toContain('Do not leak this.')
     expect(result.memory).toEqual([])
+    expect(result.memoryIds).toEqual([])
   })
 
   it('keeps the current user message exactly once', () => {

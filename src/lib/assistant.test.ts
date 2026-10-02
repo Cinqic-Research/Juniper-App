@@ -11,7 +11,7 @@ describe('assistant format', () => {
   it('round-trips the portable versioned format', () => {
     const parsed = parseAssistant(serializeAssistant(defaultAssistant))
     expect(parsed.id).toBe(defaultAssistant.id)
-    expect(parsed.systemPrompt).toContain('You are Juniper')
+    expect(parsed.systemPrompt).toBe(defaultAssistant.systemPrompt)
   })
 
   it('rejects executable-looking or malformed imports', () => {

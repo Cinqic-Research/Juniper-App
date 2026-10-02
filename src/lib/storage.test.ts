@@ -65,7 +65,7 @@ describe('browser-preview storage', () => {
     stored.assistants[0]!.systemPrompt = unverifiedPrompt
 
     expect(normalizeAppData(stored).assistants[0]!.systemPrompt).toBe(unverifiedPrompt)
-    expect(HISTORICAL_STOCK_JUNIPER_SYSTEM_PROMPTS).toHaveLength(1)
+    expect(HISTORICAL_STOCK_JUNIPER_SYSTEM_PROMPTS).toHaveLength(2)
   })
 
   it('does not persist private chats', () => {

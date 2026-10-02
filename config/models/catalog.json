@@ -195,6 +195,58 @@
           "qualification": "package-only"
         }
       ]
+    },
+    {
+      "id": "gpt-oss-20b",
+      "displayName": "gpt-oss-20b",
+      "organization": "OpenAI",
+      "family": "gpt-oss",
+      "parameterCount": 20914757184,
+      "description": "OpenAI's open-weight mixture-of-experts model (3.6B active parameters), qualified as Juniper's first large local language model. Needs Juniper's CUDA runtime and an NVIDIA GPU with at least 6 GB of memory; qualified on a 16 GB Linux desktop with an RTX 2060.",
+      "useCases": ["Everyday chat", "Reasoning", "Coding", "Tools"],
+      "instructionTuned": true,
+      "architecture": "gpt-oss",
+      "sourceRepository": "https://huggingface.co/openai/gpt-oss-20b",
+      "sourceRevision": "6cee5e81ee83917806bbde320786a8fb61efebee",
+      "license": "Apache-2.0",
+      "licenseUrl": "https://huggingface.co/openai/gpt-oss-20b/blob/6cee5e81ee83917806bbde320786a8fb61efebee/LICENSE",
+      "attribution": "gpt-oss-20b by OpenAI (Apache-2.0, with OpenAI's gpt-oss usage policy). Cinqic converted the unmodified weights to GGUF and quantized them to MXFP4_MOE, keeping OpenAI's MXFP4 expert values.",
+      "chatTemplate": "gpt-oss-harmony.v1",
+      "contextLength": 16384,
+      "minimumRecommendedRamBytes": 12884901888,
+      "recommendedRamBytes": 17179869184,
+      "minimumStorageBytes": 12700000000,
+      "supportedArchitectures": ["x86_64"],
+      "tags": ["general", "reasoning", "coding", "tools", "large"],
+      "releaseStatus": "available",
+      "artifacts": [
+        {
+          "id": "gpt-oss-20b-6cee5e81ee83-mxfp4-moe",
+          "runtimeId": "llama.cpp",
+          "backendProfile": "gpt-oss-20b-mxfp4-flowbox.v1",
+          "capabilities": {
+            "tools": "supported",
+            "thinking": "supported",
+            "generationParameters": ["maxOutput"]
+          },
+          "format": "GGUF",
+          "platforms": ["linux"],
+          "architectures": ["x86_64"],
+          "quantization": "MXFP4_MOE",
+          "sizeBytes": 12109566784,
+          "sha256": "9d7364f02d9952e158ab462629e72401bec844d2243cc3854b271bb35d33d23d",
+          "sourceRevision": "6cee5e81ee83917806bbde320786a8fb61efebee",
+          "files": [
+            {
+              "path": "gpt-oss-20b-6cee5e81ee83-MXFP4_MOE.gguf",
+              "sizeBytes": 12109566784,
+              "sha256": "9d7364f02d9952e158ab462629e72401bec844d2243cc3854b271bb35d33d23d"
+            }
+          ],
+          "maturity": "experimental",
+          "qualification": "qualified"
+        }
+      ]
     }
   ]
 }

@@ -1,5 +1,5 @@
 import catalogJson from '../../config/models/catalog.json'
-import type { ArtifactQualification, RuntimeDescriptor } from '../types'
+import type { ArtifactQualification, RuntimeDescriptor, SupportLevel } from '../types'
 
 export interface CatalogArtifactFile {
   path: string
@@ -24,6 +24,14 @@ export interface CatalogArtifact {
   minimumRuntimeVersion?: string
   maturity: 'stable' | 'beta' | 'experimental'
   qualification: ArtifactQualification
+  /** A qualified native backend profile this artifact runs with. */
+  backendProfile?: string
+  /** Capabilities established by qualification; absent means unknown. */
+  capabilities?: {
+    tools: SupportLevel
+    thinking: SupportLevel
+    generationParameters: string[]
+  }
   /** @deprecated Compatibility fields for older UI consumers. */
   fileName?: string
   /** @deprecated Compatibility fields for older UI consumers. */
@@ -214,6 +222,16 @@ function parseArtifact(raw: unknown, modelId: string): CatalogArtifact {
   if (raw.sha256 !== undefined && !isSha256(raw.sha256)) {
     throw new Error(`Catalog entry ${modelId} contains an invalid variant/artifact hash.`)
   }
+  const levels = ['supported', 'unsupported', 'unknown']
+  if (
+    raw.capabilities !== undefined &&
+    (!isRecord(raw.capabilities) ||
+      !levels.includes(String(raw.capabilities.tools)) ||
+      !levels.includes(String(raw.capabilities.thinking)) ||
+      !isStringArray(raw.capabilities.generationParameters))
+  ) {
+    throw new Error(`Catalog entry ${modelId} declares invalid capabilities.`)
+  }
   if (parsedFiles.reduce((sum, file) => sum + file.sizeBytes, 0) !== raw.sizeBytes) {
     throw new Error(
       `Catalog entry ${modelId} variant/artifact size does not match its file manifest.`,
@@ -291,6 +309,11 @@ export function parseCatalog(value: unknown): ModelCatalog {
     } as unknown as CatalogModel
   })
   return { version: 2, minimumAppVersion: value.minimumAppVersion, models }
+}
+
+/** True when Juniper has no download source and the file must be imported. */
+export function isImportOnly(artifact: CatalogArtifact): boolean {
+  return !artifact.sourceUrl && artifact.files.every((file) => !file.url)
 }
 
 export function formatBytes(bytes: number | undefined): string {

@@ -6,6 +6,7 @@ pub const MAX_EXPRESSION_BYTES: usize = 256;
 pub const MAX_TOOL_ROUNDS: u32 = 4;
 pub const MAX_TOOL_CALLS_PER_ROUND: u32 = 8;
 pub const MAX_PAYLOAD_BYTES: usize = 64 * 1024;
+pub const PROTOCOL_VERSION: &str = "juniper-tool-protocol-v1";
 
 #[derive(Debug, Error, PartialEq)]
 pub enum ToolError {
@@ -281,7 +282,7 @@ pub fn host_result(
     error: Option<Value>,
 ) -> Value {
     json!({
-        "protocolVersion": "juniper-tool-protocol-v1",
+        "protocolVersion": PROTOCOL_VERSION,
         "callId": call_id,
         "name": name,
         "status": status,

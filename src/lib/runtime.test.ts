@@ -10,6 +10,7 @@ describe('deterministic fake provider', () => {
       {
         requestId: 'test',
         assistantId: defaultAssistant.id,
+        assistantName: defaultAssistant.name,
         conversationId: 'conversation-test',
         privateChat: false,
         provider: defaultProvider,
@@ -19,6 +20,7 @@ describe('deterministic fake provider', () => {
         generation: defaultAssistant.generation,
         permissionGrants: [],
         hostContext: { memories: [], conversations: [] },
+        contextMemoryIds: [],
       },
       (event) => {
         if (event.delta) events.push(event.delta)

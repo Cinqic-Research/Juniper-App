@@ -24,5 +24,7 @@ runtime/
 !src-tauri/runtime/README.md
 src-tauri/runtime/llama-server
 src-tauri/runtime/llama-server.exe
+src-tauri/runtime/llama-server-cuda
+src-tauri/runtime/llama-server-cuda.exe
 .DS_Store
 release-artifacts/

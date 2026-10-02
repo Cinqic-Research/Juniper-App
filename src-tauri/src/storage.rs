@@ -290,6 +290,16 @@ pub fn save_app_data_with_paths(
         {
             conversations
                 .retain(|conversation| !conversation["privateChat"].as_bool().unwrap_or(false));
+            // Raw model reasoning is never persisted, whatever the interface sends.
+            for message in conversations
+                .iter_mut()
+                .filter_map(|conversation| conversation["messages"].as_array_mut())
+                .flatten()
+            {
+                if let Some(parts) = message["parts"].as_array_mut() {
+                    parts.retain(|part| part["type"] != "reasoning");
+                }
+            }
         }
         if let Some(attachments) = object.get_mut("attachments").and_then(Value::as_array_mut) {
             attachments.retain(|attachment| {
@@ -971,6 +981,38 @@ mod tests {
     /// removing a managed model leaves chats pinned to it. Both used to fail
     /// the foreign keys, so that save and every later one was rejected and all
     /// subsequent changes were lost on restart.
+    #[test]
+    fn raw_reasoning_parts_are_never_persisted() -> Result<()> {
+        let path =
+            std::env::temp_dir().join(format!("juniper-reasoning-{}.db", uuid::Uuid::new_v4()));
+        save_app_data_with_paths(
+            &path,
+            &json!({
+                "assistants": [{ "id": "assistant-1", "schemaVersion": 2 }],
+                "conversations": [{
+                    "id": "chat-1", "assistantId": "assistant-1", "title": "Chat",
+                    "messages": [{ "id": "message-1", "role": "assistant", "parts": [
+                        { "id": "part-1", "type": "reasoning", "text": "private analysis" },
+                        { "id": "part-2", "type": "text", "text": "Answer." }
+                    ], "provenance": { "backend": "generic" } }]
+                }]
+            }),
+            &HashMap::new(),
+        )?;
+        let loaded = load_app_data(&path)?.expect("saved state");
+        let message = &loaded["conversations"][0]["messages"][0];
+        assert_eq!(message["parts"].as_array().map(Vec::len), Some(1));
+        assert_eq!(message["parts"][0]["type"], "text");
+        assert_eq!(message["provenance"]["backend"], "generic");
+        assert!(
+            !std::fs::read(&path)
+                .map(|bytes| String::from_utf8_lossy(&bytes).contains("private analysis"))
+                .unwrap_or(true)
+        );
+        let _ = std::fs::remove_file(path);
+        Ok(())
+    }
+
     #[test]
     fn saves_survive_references_left_dangling_by_removals() -> Result<()> {
         let path =

@@ -2140,6 +2140,7 @@ dependencies = [
  "juniper-local-runtime",
  "keyring",
  "libc",
+ "regex",
  "reqwest 0.12.28",
  "rusqlite",
  "serde",

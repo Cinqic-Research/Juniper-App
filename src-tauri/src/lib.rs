@@ -1,10 +1,14 @@
 #[cfg(target_os = "android")]
 mod android_runtime;
+mod backend;
+mod behavior;
 mod catalog;
 mod commands;
 mod device;
 pub mod device_link;
 mod domain;
+#[cfg(all(test, not(target_os = "android")))]
+mod live_gpt_oss;
 #[cfg(not(target_os = "android"))]
 mod local_runtime;
 mod managed_models;
@@ -48,6 +52,9 @@ pub fn run() {
             commands::managed_models,
             commands::download_managed_model,
             commands::cancel_managed_model,
+            commands::import_managed_model,
+            commands::local_runtime_status,
+            commands::unload_local_runtime,
             commands::delete_managed_model,
             commands::runtime_logs,
             commands::load_app_data,
@@ -78,7 +85,7 @@ pub fn run() {
         .run(|_app, _event| {
             #[cfg(not(target_os = "android"))]
             if let tauri::RunEvent::Exit = _event {
-                _app.state::<AppState>().local_runtimes.terminate_all();
+                _app.state::<AppState>().local_runtime.terminate_all();
             }
         });
 }

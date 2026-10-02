@@ -7,6 +7,8 @@ Juniper state and context builder
   ↓
 Rust Tauri commands / orchestrator boundary
   ├─ runtime registry and artifact-centric model catalog
+  ├─ instruction layers (constitution, runtime section) and backend policies
+  ├─ resident local runtime (one Juniper-owned loopback llama-server)
   ├─ provider adapters (Juniper local, Ollama, OpenAI-compatible, llama.cpp)
   ├─ Device Link preview policy (no listener, pairing UI, or transport)
   ├─ host tool runtime and permissions
@@ -25,13 +27,19 @@ connected. In the Tauri shell, provider requests happen behind Rust commands.
 
 ## Data flow
 
-1. The assistant template, selected memories, enabled tools, conversation, and
-   current message form a deterministic context summary.
-2. The provider adapter receives normalized messages and only the generation
-   parameters it knows the provider can accept.
-3. Model tool calls remain untrusted until schema/permission checks complete.
-4. Only host implementations create trusted tool results.
-5. Persistence uses normalized tables, not a provider-specific message blob.
+1. The webview builds the assistant profile, selects curated memories and
+   history within the context budget, and sends them with the current message.
+2. The native host composes the identity, constitution, and runtime section in
+   front of the profile and frames memories and attachments as data
+   ([wrapper.md](wrapper.md), ADR-0022).
+3. A backend policy shapes the request for the model family; the provider
+   adapter receives normalized messages and only the generation parameters it
+   knows the provider can accept (ADR-0023).
+4. Model tool calls remain untrusted until offered-tool, schema, and
+   permission checks complete. Only host implementations create tool results.
+5. An answer is accepted only if it finished normally and carries no protocol
+   text; raw reasoning never reaches the webview.
+6. Persistence uses normalized tables, not a provider-specific message blob.
 
 ## Platform boundary
 

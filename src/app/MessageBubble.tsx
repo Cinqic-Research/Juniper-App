@@ -43,6 +43,44 @@ function formatTime(value: string): string | null {
   return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
 }
 
+const MODEL_WRITTEN_REFERENCE =
+  /\bhttps?:\/\/\S+|\bwww\.\S+\.\S+|\b10\.\d{4,9}\/\S+|\barXiv:\s?\d{4}\.\d{4,5}/i
+
+/**
+ * Juniper has no browsing tool, so a link, DOI, or arXiv ID in an answer came
+ * from the model and has not been checked. A host tool result that contains
+ * the same text is the only evidence the host itself supplied it.
+ */
+export function hasUncheckedReferences(message: ChatMessage): boolean {
+  const content = textPart(message)
+  const evidence = message.parts
+    .filter((part) => part.type === 'tool-result' && part.status === 'success')
+    .map((part) => part.text ?? '')
+    .join('\n')
+  const references = content.match(new RegExp(MODEL_WRITTEN_REFERENCE.source, 'gi')) ?? []
+  return references.some((reference) => !evidence.includes(reference.replace(/[).,;]+$/, '')))
+}
+
+function provenanceDetails(message: ChatMessage, developerMode: boolean): string[] {
+  const provenance = message.provenance
+  if (!provenance) return []
+  const runtime = provenance.runtime
+  const details = [
+    provenance.reasoningEffort ? `Reasoning effort: ${provenance.reasoningEffort}` : null,
+    runtime?.runtimeBuild ? `Runtime: llama.cpp ${runtime.runtimeBuild}` : null,
+  ]
+  if (developerMode) {
+    details.push(
+      `Behavior: ${provenance.constitution} · ${provenance.backend}`,
+      runtime?.artifactSha256
+        ? `Model file SHA-256: ${runtime.artifactSha256.slice(0, 12)}…`
+        : null,
+      runtime?.templateSha256 ? `Template SHA-256: ${runtime.templateSha256.slice(0, 12)}…` : null,
+    )
+  }
+  return details.filter(Boolean) as string[]
+}
+
 function toolLabel(part: MessagePart): string {
   return part.name ?? 'tool'
 }
@@ -88,10 +126,6 @@ export function MessageBubble({
 }) {
   const user = message.role === 'user'
   const content = textPart(message)
-  const reasoning = message.parts
-    .filter((part) => part.type === 'reasoning')
-    .map((part) => part.text ?? '')
-    .join('')
   const toolCalls = message.parts.filter((part) => part.type === 'tool-call')
   const toolResults = message.parts.filter((part) => part.type === 'tool-result')
   const errorPart = message.parts.find((part) => part.type === 'error')
@@ -101,7 +135,8 @@ export function MessageBubble({
   const time = formatTime(message.createdAt)
   const detailsVisible = showDetails || detailsOpen
   const author = user ? 'You' : assistant.name
-  const waiting = !user && message.isStreaming && !content && !reasoning && !toolCalls.length
+  const waiting = !user && message.isStreaming && !content && !toolCalls.length
+  const unchecked = !user && !message.isStreaming && hasUncheckedReferences(message)
 
   async function copy() {
     if (await copyText(content)) {
@@ -118,6 +153,7 @@ export function MessageBubble({
       ? `${message.usage.outputTokens.toLocaleString()} output tokens`
       : null,
     message.usage?.durationMs ? `${(message.usage.durationMs / 1000).toFixed(1)} s` : null,
+    ...provenanceDetails(message, developerMode),
     time,
   ].filter(Boolean) as string[]
 
@@ -139,15 +175,6 @@ export function MessageBubble({
         </div>
       )}
       <div className="message-body">
-        {reasoning && (
-          <details className="disclosure">
-            <summary>
-              <Icon name="chevronRight" size={16} />
-              {message.isStreaming && !content ? 'Thinking…' : 'Thought process'}
-            </summary>
-            <p className="reasoning-text">{reasoning}</p>
-          </details>
-        )}
         {toolCalls.length > 0 && (
           <details className="disclosure">
             <summary>
@@ -199,6 +226,7 @@ export function MessageBubble({
             </ul>
           </details>
         )}
+        {errorPart && content && <Markdown content={content} />}
         {errorPart ? (
           <div className="message-error" role="alert">
             <Icon name="info" size={18} />
@@ -220,9 +248,15 @@ export function MessageBubble({
             </span>
             <span className="typing-label">{statusText ?? `${assistant.name} is responding…`}</span>
           </span>
-        ) : !user && !message.isStreaming && !reasoning && !toolCalls.length ? (
+        ) : !user && !message.isStreaming && !toolCalls.length ? (
           <p className="message-empty">No text was returned.</p>
         ) : null}
+        {unchecked && (
+          <p className="message-note">
+            Links and citations in this answer were written by the model. Juniper has not checked
+            that they exist.
+          </p>
+        )}
       </div>
       {!message.isStreaming && (
         <div className="message-actions">
