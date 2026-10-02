@@ -327,7 +327,8 @@ pub async fn download<R: Runtime>(
     }
     fs::rename(&partial_file, &final_file)
         .map_err(|error| format!("MODEL_INSTALL_ERROR: {error}"))?;
-    remember_verified(&final_file, artifact);
+    // Juniper wrote and hashed these bytes itself; nothing else holds the file.
+    write_record(&final_file, current_record(&final_file, artifact));
     emit_progress(
         &app,
         request_id,
@@ -400,8 +401,8 @@ fn current_record(path: &Path, artifact: &CatalogArtifact) -> Option<Verificatio
     })
 }
 
-fn remember_verified(path: &Path, artifact: &CatalogArtifact) {
-    if let Some(record) = current_record(path, artifact)
+fn write_record(path: &Path, record: Option<VerificationRecord>) {
+    if let Some(record) = record
         && let Ok(text) = serde_json::to_string(&record)
     {
         let _ = fs::write(record_path(path), text);
@@ -420,18 +421,22 @@ fn verify_file(path: &Path, artifact: &CatalogArtifact) -> Result<bool, String> 
     let recorded = fs::read_to_string(record_path(path))
         .ok()
         .and_then(|text| serde_json::from_str::<VerificationRecord>(&text).ok());
-    if recorded.is_some() && recorded == current_record(path, artifact) {
+    let before = current_record(path, artifact);
+    if recorded.is_some() && recorded == before {
         return Ok(true);
     }
     let mut hasher = Sha256::new();
     hash_existing(path, &mut hasher)?;
     let verified = artifact.sha256.as_deref() == Some(format!("{:x}", hasher.finalize()).as_str());
-    if verified {
-        remember_verified(path, artifact);
+    // A file that changed while it was being hashed is not the file that was
+    // hashed; it is neither trusted now nor recorded.
+    let unchanged = before.is_some() && before == current_record(path, artifact);
+    if verified && unchanged {
+        write_record(path, before);
     } else {
         let _ = fs::remove_file(record_path(path));
     }
-    Ok(verified)
+    Ok(verified && unchanged)
 }
 
 /// Installs a catalog artifact from a file the user selected. On the same
@@ -497,6 +502,7 @@ pub async fn import<R: Runtime>(
             ));
         }
     }
+    let before = current_record(&partial_file, &artifact);
     let task_source = source.to_owned();
     let task_partial = partial_file.clone();
     let task_app = app.clone();
@@ -548,9 +554,15 @@ pub async fn import<R: Runtime>(
             "MODEL_CHECKSUM_MISMATCH: The selected file is not the verified model file.".into(),
         );
     }
+    // A hard link shares its bytes with the user's file, which can still be
+    // changed under its original name; record only what was actually hashed.
+    if linked && before != current_record(&partial_file, &artifact) {
+        let _ = fs::remove_file(&partial_file);
+        return Err("MODEL_CHECKSUM_MISMATCH: The selected file changed during import.".into());
+    }
     fs::rename(&partial_file, &final_file)
         .map_err(|error| format!("MODEL_INSTALL_ERROR: {error}"))?;
-    remember_verified(&final_file, &artifact);
+    write_record(&final_file, current_record(&final_file, &artifact));
     emit_progress(&app, request_id, "ready", total, total, None);
     crate::commands::record_runtime_log(
         state,
@@ -717,6 +729,25 @@ mod tests {
             maturity: "stable".into(),
             qualification: "qualified".into(),
         }
+    }
+
+    #[test]
+    fn a_verification_record_is_trusted_only_for_the_unchanged_file() {
+        let root =
+            std::env::temp_dir().join(format!("juniper-record-test-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&root).expect("test directory should be created");
+        let path = root.join("model.gguf");
+        fs::write(&path, b"model").expect("model written");
+        let artifact = artifact_for_test(5, &format!("{:x}", Sha256::digest(b"model")));
+        assert!(verify_file(&path, &artifact).expect("verify"));
+        assert!(record_path(&path).exists());
+        assert!(verify_file(&path, &artifact).expect("cached verify"));
+        // Same size, different bytes, newer modification time: rehashed and rejected.
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        fs::write(&path, b"MODEL").expect("model replaced");
+        assert!(!verify_file(&path, &artifact).expect("verify"));
+        assert!(!record_path(&path).exists());
+        fs::remove_dir_all(root).expect("cleanup");
     }
 
     #[cfg(unix)]

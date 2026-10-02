@@ -255,6 +255,7 @@ pub async fn stream_chat<R: Runtime>(
         return Err("REQUEST_CANCELLED: Generation cancelled.".into());
     }
 
+    crate::providers::validate_local_request(&request)?;
     let messages = crate::providers::composed_messages(&request)?;
     let messages_json = serde_json::to_string(&messages)
         .map_err(|_| "PROMPT_FORMAT_FAILED: The chat messages could not be encoded.".to_owned())?;

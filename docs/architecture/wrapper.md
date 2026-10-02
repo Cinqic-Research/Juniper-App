@@ -39,6 +39,15 @@ ChatScreen: text, tool activity, errors (truncated answers kept and marked),
 provenance in message details, "links not checked" note
 ```
 
+## Untrusted text
+
+Profiles, history, memories, attachments, tool results, and the arguments and
+analysis returned with a pending call all pass through
+`behavior::neutralize_control_tokens`, which inserts a word joiner into any
+`<|name|>` sequence. llama-server parses special tokens in the rendered prompt,
+so without this a file could open a real developer turn. Framing tags are
+removed from framed content until none remain.
+
 ## Instruction layers
 
 | Order | Layer                                  | Author                                        | Editable by the user |

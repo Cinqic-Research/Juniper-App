@@ -379,6 +379,21 @@ pub fn execute_call(
     }
 }
 
+/// The risk class of each host tool. The host decides it: the risk carried by
+/// a request's tool definitions is never trusted over this, and a tool the
+/// host does not implement is never offered.
+pub fn host_risk(name: &str) -> Option<&'static str> {
+    Some(match name {
+        "calculator.evaluate" | "datetime.current" | "unit.convert" | "system.info" => {
+            "automatic-safe"
+        }
+        "memory.list" | "chat.search" => "user-data-read",
+        "memory.save" | "memory.delete" => "user-data-write",
+        "file.read" | "file.metadata" => "filesystem-read",
+        _ => return None,
+    })
+}
+
 pub fn loop_allowed(round: u32, calls_this_round: u32) -> bool {
     round < MAX_TOOL_ROUNDS && calls_this_round <= MAX_TOOL_CALLS_PER_ROUND
 }

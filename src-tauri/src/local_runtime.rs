@@ -36,6 +36,9 @@ pub struct LocalRuntime {
     /// Serializes start, restart, switch, and unload decisions.
     lifecycle: tokio::sync::Mutex<()>,
     resident: Mutex<Option<Resident>>,
+    /// A server between spawn and readiness, held here so application exit
+    /// can stop it; loading a large model takes minutes.
+    starting: Mutex<Option<tokio::process::Child>>,
     loading: Mutex<Option<String>>,
 }
 
@@ -140,16 +143,16 @@ impl LocalRuntime {
     /// exit event after the async runtime stops being polled; Tauri exits with
     /// `std::process::exit`, which runs no destructors.
     pub fn terminate_all(&self) -> usize {
-        let Ok(mut resident) = self.resident.lock() else {
-            return 0;
-        };
-        match resident.take() {
-            Some(mut server) => {
-                let _ = server.child.start_kill();
-                1
-            }
-            None => 0,
+        let mut stopped = 0;
+        if let Some(mut server) = self.resident.lock().ok().and_then(|mut slot| slot.take()) {
+            let _ = server.child.start_kill();
+            stopped += 1;
         }
+        if let Some(mut child) = self.starting.lock().ok().and_then(|mut slot| slot.take()) {
+            let _ = child.start_kill();
+            stopped += 1;
+        }
+        stopped
     }
 
     async fn acquire<R: Runtime>(
@@ -182,13 +185,25 @@ impl LocalRuntime {
                     (Lease(server.leases.clone()), server.route.clone())
                 })
         };
-        if let Some((lease, route)) = reusable
-            && healthy(&route).await
-        {
-            return Ok((lease, route));
+        if let Some((lease, route)) = reusable {
+            // A busy server can be slow to answer; one missed check is not a crash.
+            for _ in 0..3 {
+                if healthy(&route).await {
+                    return Ok((lease, route));
+                }
+                sleep(Duration::from_secs(1)).await;
+            }
         }
         let (previous, restarting) = {
             let mut resident = self.resident.lock().map_err(|_| state_error())?;
+            let in_use_by_another_chat = resident.as_mut().is_some_and(|server| {
+                server.artifact_id == artifact.id
+                    && server.alive()
+                    && server.leases.load(Ordering::Acquire) > 0
+            });
+            if in_use_by_another_chat {
+                return Err("LOCAL_RUNTIME_BUSY: The local model is not responding while another chat is using it. Wait for that reply or stop it, then try again.".into());
+            }
             match resident.as_ref() {
                 Some(server) if server.artifact_id == artifact.id => {
                     record_runtime_log(
@@ -229,7 +244,16 @@ impl LocalRuntime {
             Some("juniper-local"),
             Some(&catalog_id),
         );
-        let started = start(app, request, &entry, &artifact, profile, cancellation).await;
+        let started = start(
+            app,
+            request,
+            &entry,
+            &artifact,
+            profile,
+            cancellation,
+            &self.starting,
+        )
+        .await;
         if let Ok(mut loading) = self.loading.lock() {
             *loading = None;
         }
@@ -311,6 +335,7 @@ pub async fn stream_chat<R: Runtime>(
     cancellation: Cancellation,
     state: &AppState,
 ) -> Result<(), String> {
+    providers::validate_local_request(&request)?;
     let (lease, route) = state
         .local_runtime
         .acquire(&app, &request, &cancellation, state)
@@ -348,6 +373,10 @@ pub async fn stream_chat<R: Runtime>(
     Ok(())
 }
 
+// Starting a server needs the request (for activity events), the catalog
+// entry and artifact, the qualified profile, cancellation, and the slot that
+// keeps the child reachable from exit cleanup.
+#[allow(clippy::too_many_arguments)]
 async fn start<R: Runtime>(
     app: &AppHandle<R>,
     request: &ChatRequest,
@@ -355,6 +384,7 @@ async fn start<R: Runtime>(
     artifact: &CatalogArtifact,
     profile: Option<BackendProfile>,
     cancellation: &Cancellation,
+    starting: &Mutex<Option<tokio::process::Child>>,
 ) -> Result<(tokio::process::Child, Route), String> {
     let model_path = managed_models::path_for_catalog(app, &entry.id)?;
     let executable = match &profile {
@@ -411,6 +441,17 @@ async fn start<R: Runtime>(
         }
         None => args.extend(["--cache-ram".into(), GENERIC_CACHE_RAM_MIB.into()]),
     }
+    // If Juniper itself is killed, no exit handler runs; the kernel stops the
+    // server instead of leaving a multi-gigabyte process behind.
+    #[cfg(target_os = "linux")]
+    unsafe {
+        command.pre_exec(|| {
+            if libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGTERM) == -1 {
+                return Err(std::io::Error::last_os_error());
+            }
+            Ok(())
+        });
+    }
     let mut child = command
         .args(&args)
         .stdin(Stdio::null())
@@ -422,6 +463,7 @@ async fn start<R: Runtime>(
             "LOCAL_RUNTIME_UNAVAILABLE: Juniper's local runtime could not be started.".to_owned()
         })?;
     let diagnostics = capture_stderr(&mut child);
+    *starting.lock().map_err(|_| state_error())? = Some(child);
     let route = Route {
         endpoint: format!("http://127.0.0.1:{port}"),
         api_key: key.secret.clone(),
@@ -460,12 +502,15 @@ async fn start<R: Runtime>(
         .map_or(GENERIC_STARTUP_TIMEOUT, |profile| {
             Duration::from_secs(profile.lifecycle.startup_timeout_seconds)
         });
+    let model_path_text = model_path.to_string_lossy().into_owned();
     let ready = async {
-        wait_for_health(&route, &mut child, startup_timeout, cancellation).await?;
+        wait_for_health(&route, starting, startup_timeout, cancellation).await?;
         // The server read the key file while parsing its arguments.
         drop(key);
+        let props = fetch_props(&route).await?;
+        check_ownership(&props, &model_path_text)?;
         if let Some(profile) = &route.profile {
-            verify_identity(&route, profile).await?;
+            check_props(&props, profile)?;
             if profile.lifecycle.warm_up {
                 emit_activity(app, &request.request_id, "warming-up");
                 warm_up(&route, cancellation).await?;
@@ -474,11 +519,19 @@ async fn start<R: Runtime>(
         Ok::<(), String>(())
     }
     .await;
-    if let Err(error) = ready {
-        let _ = child.kill().await;
-        return Err(classify_failure(error, &diagnostics));
+    let child = starting.lock().ok().and_then(|mut slot| slot.take());
+    match (ready, child) {
+        (Ok(()), Some(child)) => Ok((child, route)),
+        (Ok(()), None) => {
+            Err("LOCAL_RUNTIME_FAILED: The local runtime was stopped while it was starting.".into())
+        }
+        (Err(error), child) => {
+            if let Some(mut child) = child {
+                let _ = child.kill().await;
+            }
+            Err(classify_failure(error, &diagnostics))
+        }
     }
-    Ok((child, route))
 }
 
 /// The loopback API key, written owner-only and removed once the server has
@@ -650,7 +703,7 @@ async fn healthy(route: &Route) -> bool {
 
 async fn wait_for_health(
     route: &Route,
-    child: &mut tokio::process::Child,
+    starting: &Mutex<Option<tokio::process::Child>>,
     limit: Duration,
     cancellation: &Cancellation,
 ) -> Result<(), String> {
@@ -659,7 +712,15 @@ async fn wait_for_health(
         if cancellation.is_cancelled() {
             return Err("REQUEST_CANCELLED: Generation cancelled.".into());
         }
-        if !matches!(child.try_wait(), Ok(None)) {
+        let running = starting
+            .lock()
+            .ok()
+            .and_then(|mut slot| {
+                slot.as_mut()
+                    .map(|child| matches!(child.try_wait(), Ok(None)))
+            })
+            .unwrap_or(false);
+        if !running {
             return Err(
                 "LOCAL_RUNTIME_FAILED: Juniper's local runtime stopped while loading the model."
                     .into(),
@@ -678,26 +739,40 @@ async fn wait_for_health(
     }
 }
 
-/// Confirms the loaded server is the qualified one: build, served template
-/// (as llama.cpp rewrote it), and context size.
-async fn verify_identity(route: &Route, profile: &BackendProfile) -> Result<(), String> {
-    let props: Value = client()?
+/// `/props` requires the per-launch key, so only the server Juniper started
+/// (or something that already holds the key) can answer it.
+async fn fetch_props(route: &Route) -> Result<Value, String> {
+    let unidentified =
+        || "RUNTIME_IDENTITY_MISMATCH: The local runtime did not report its identity.".to_owned();
+    let response = client()?
         .get(format!("{}/props", route.endpoint))
         .bearer_auth(&route.api_key)
         .timeout(PROBE_TIMEOUT)
         .send()
         .await
-        .map_err(|_| {
-            "RUNTIME_IDENTITY_MISMATCH: The local runtime did not report its identity.".to_owned()
-        })?
-        .json()
-        .await
-        .map_err(|_| {
-            "RUNTIME_IDENTITY_MISMATCH: The local runtime did not report its identity.".to_owned()
-        })?;
-    check_props(&props, profile)
+        .map_err(|_| unidentified())?;
+    if !response.status().is_success() {
+        return Err(unidentified());
+    }
+    response.json().await.map_err(|_| unidentified())
 }
 
+/// The port was free when Juniper chose it, but another local process could
+/// have taken it before llama-server bound it. The server that answers must
+/// be serving the file Juniper asked it to load.
+fn check_ownership(props: &Value, model_path: &str) -> Result<(), String> {
+    if props["model_path"].as_str() == Some(model_path) {
+        Ok(())
+    } else {
+        Err(
+            "RUNTIME_IDENTITY_MISMATCH: Another process answered on Juniper's local runtime port."
+                .into(),
+        )
+    }
+}
+
+/// Confirms the loaded server is the qualified one: build, served template
+/// (as llama.cpp rewrote it), and context size.
 fn check_props(props: &Value, profile: &BackendProfile) -> Result<(), String> {
     let build = props["build_info"].as_str().unwrap_or_default();
     if !build_matches(build, &profile.runtime.commit) {
@@ -885,6 +960,42 @@ mod tests {
     }
 
     #[test]
+    fn only_the_server_juniper_started_is_trusted() {
+        let props = json!({ "model_path": "/data/models/a.gguf" });
+        assert!(check_ownership(&props, "/data/models/a.gguf").is_ok());
+        assert!(
+            check_ownership(&props, "/data/models/b.gguf")
+                .unwrap_err()
+                .starts_with("RUNTIME_IDENTITY_MISMATCH")
+        );
+        assert!(check_ownership(&json!({}), "/data/models/a.gguf").is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn exit_cleanup_reaches_a_server_that_is_still_loading() {
+        let runtime = tokio::runtime::Runtime::new().expect("test runtime should start");
+        runtime.block_on(async {
+            let local = LocalRuntime::default();
+            let child = tokio::process::Command::new("sleep")
+                .arg("60")
+                .kill_on_drop(true)
+                .spawn()
+                .expect("fixture child should start");
+            let pid = child.id().expect("pid");
+            *local.starting.lock().expect("lock") = Some(child);
+            assert_eq!(local.terminate_all(), 1);
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+            while unsafe { libc::kill(pid as libc::pid_t, 0) == 0 }
+                && std::time::Instant::now() < deadline
+            {
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+            assert!(unsafe { libc::kill(pid as libc::pid_t, 0) != 0 });
+        });
+    }
+
+    #[test]
     fn a_profile_is_never_applied_to_a_different_artifact() {
         let entry = catalog::find("gpt-oss-20b").expect("catalog entry");
         let mut artifact = entry.artifacts[0].clone();
@@ -1016,4 +1127,3 @@ mod tests {
         });
     }
 }
-

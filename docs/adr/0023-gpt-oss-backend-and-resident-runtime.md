@@ -61,8 +61,13 @@ model:
   expected served-template hash, and context size after load;
 - one warm-up request after a qualified load; the interface shows loading,
   warm-up, restart, and reasoning activity;
-- a crashed server is detected on the next request and restarted; switching
-  models or unloading waits for in-flight generations instead of killing them;
+- the server that answers must hold the key and report the model path
+  Juniper passed, so a process that takes the port first is not trusted;
+- a crashed server is detected on the next request and restarted; a slow one
+  is retried, and one that another chat is using is never killed; switching
+  models or unloading waits for in-flight generations;
+- a server that is still loading is stopped on exit too, and on Linux the
+  server receives SIGTERM if Juniper itself dies;
 - the server is stopped on application exit and on "Unload from memory".
 
 **Request rules for GPT-OSS.** Sampling is pinned to the qualified values
