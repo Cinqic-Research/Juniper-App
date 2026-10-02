@@ -4353,7 +4353,7 @@ data: [DONE]
         assert_eq!(done["provenance"]["backend"], "generic");
         assert_eq!(
             done["provenance"]["constitution"],
-            "juniper-constitution.v1"
+            "juniper-constitution.v2"
         );
         assert_eq!(
             done["provenance"]["toolProtocol"],

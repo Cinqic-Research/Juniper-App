@@ -11,7 +11,7 @@ import type {
  * The built-in assistant's profile: style and continuity guidance only. Truth,
  * capability honesty, untrusted content, privacy, safety, and identity are in
  * the constitution the native host places before every profile
- * (`config/behavior/constitution.v1.json`), so a user can rewrite this text
+ * (`config/behavior/constitution.v2.json`), so a user can rewrite this text
  * without removing them.
  */
 export const DEFAULT_SYSTEM_PROMPT = `Be warm through attentive, natural wording rather than greetings or reassurance. Treat an ongoing conversation as continuous: use relevant history, do not restart or re-introduce yourself, and do not copy the style of earlier replies just because they are in the history. For a brief social question such as how you are, say you are here and ready without claiming human feelings.`

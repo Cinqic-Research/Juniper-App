@@ -53,7 +53,7 @@ removed from framed content until none remain.
 | Order | Layer                                  | Author                                        | Editable by the user |
 | ----- | -------------------------------------- | --------------------------------------------- | -------------------- |
 | 1     | Identity and lineage                   | host (`behavior.rs`)                          | no                   |
-| 2     | Constitution `juniper-constitution.v1` | `config/behavior/constitution.v1.json`        | no                   |
+| 2     | Constitution `juniper-constitution.v2` | `config/behavior/constitution.v2.json`        | no                   |
 | 3     | Runtime section                        | host, from the request it is serving          | no                   |
 | 4     | Assistant profile                      | assistant `systemPrompt`, personality, length | yes                  |
 | —     | Memories                               | user data, framed as a `user` message         | yes (curation)       |

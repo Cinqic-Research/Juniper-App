@@ -30,8 +30,8 @@ request `src-tauri/src/behavior.rs` builds the system/developer message as:
 
 1. identity and lineage — the assistant's name, Cinqic's role, and that Cinqic
    did not create or train the model;
-2. the constitution, `config/behavior/constitution.v1.json`
-   (`juniper-constitution.v1`): priority order, truth over confidence,
+2. the constitution, `config/behavior/constitution.v2.json`
+   (`juniper-constitution.v2`): priority order, truth over confidence,
    capability honesty, correction, user treatment, untrusted content, privacy,
    proportional safety;
 3. a runtime section generated from host state: the model's verified lineage,

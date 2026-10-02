@@ -337,10 +337,10 @@ requirements:
     phase: 14
     status: PASS-FRONTEND-TESTS-AND-EMULATOR-EVIDENCE
   REQ-WRAPPER-CONSTITUTION:
-    statement: Identity, juniper-constitution.v1, and a host-generated runtime section precede every assistant profile; memories and attachments are framed data; the webview cannot send tool or late system messages
+    statement: Identity, juniper-constitution.v2, and a host-generated runtime section precede every assistant profile; memories and attachments are framed data; the webview cannot send tool or late system messages
     implementation:
       [
-        config/behavior/constitution.v1.json,
+        config/behavior/constitution.v2.json,
         src-tauri/src/behavior.rs,
         src-tauri/src/providers.rs,
         src/lib/context.ts,

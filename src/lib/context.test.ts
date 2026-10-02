@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { defaultAssistant, DEFAULT_SYSTEM_PROMPT, builtinTools } from './defaults'
-import constitution from '../../config/behavior/constitution.v1.json'
+import constitution from '../../config/behavior/constitution.v2.json'
 import { buildContext, compilePersonality } from './context'
 
 describe('context builder', () => {
@@ -39,7 +39,7 @@ describe('context builder', () => {
     // Identity and the constitution are composed natively, not by the interface.
     expect(result.profile).not.toContain('You are Juniper')
     expect(result.profile).toContain(DEFAULT_SYSTEM_PROMPT)
-    expect(result.constitutionId).toBe('juniper-constitution.v1')
+    expect(result.constitutionId).toBe('juniper-constitution.v2')
     expect(result.tools[0]).toContain('calculator.evaluate')
     expect(result.memory).toEqual(['User likes concise answers.'])
     expect(result.memoryIds).toEqual(['m'])

@@ -28,7 +28,7 @@ describe('chat stream handling', () => {
       done: true,
       provenance: {
         backend: 'gpt-oss-20b-mxfp4-flowbox.v1',
-        constitution: 'juniper-constitution.v1',
+        constitution: 'juniper-constitution.v2',
         toolProtocol: 'juniper-tool-protocol-v1',
         providerKind: 'openai-compatible',
         modelId: 'gpt-oss-20b',

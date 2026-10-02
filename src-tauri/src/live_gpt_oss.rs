@@ -266,7 +266,7 @@ fn live_resident_runtime_lifecycle() {
             "9d7364f02d9952e158ab462629e72401bec844d2243cc3854b271bb35d33d23d"
         );
         assert_eq!(cold.provenance["reasoningEffort"], "medium");
-        assert_eq!(cold.provenance["constitution"], "juniper-constitution.v1");
+        assert_eq!(cold.provenance["constitution"], "juniper-constitution.v2");
 
         let warm = run(
             &handle,
@@ -645,6 +645,9 @@ fn live_wrapper_evaluation() {
         .ok()
         .and_then(|value| value.parse().ok())
         .unwrap_or(3);
+    // The raw condition does not depend on the wrapper; after a wrapper-only
+    // change it can be skipped and compared with an earlier run's raw rows.
+    let wrapper_only = std::env::var("JUNIPER_EVAL_WRAPPER_ONLY").as_deref() == Ok("1");
     let heldout_seeds: usize = std::env::var("JUNIPER_EVAL_HELDOUT_SEEDS")
         .ok()
         .and_then(|value| value.parse().ok())
@@ -711,12 +714,19 @@ fn live_wrapper_evaluation() {
             };
             for seed in 0..case_seeds {
                 let wrapped = run(&handle, state, wrapper_request(case, seed), case.permissions.clone()).await;
-                let (endpoint, key, _) = state.local_runtime.resident_for_tests().expect("resident");
-                let (raw_text, raw_tools, raw_error) = raw(&endpoint, &key, case).await;
-                for (condition, text, tools, error, seconds) in [
+                let (raw_text, raw_tools, raw_error) = if wrapper_only {
+                    (String::new(), Vec::new(), None)
+                } else {
+                    let (endpoint, key, _) = state.local_runtime.resident_for_tests().expect("resident");
+                    raw(&endpoint, &key, case).await
+                };
+                let conditions = [
                     ("wrapper", wrapped.text.as_str(), wrapped.tools_called.as_slice(), wrapped.error.clone(), wrapped.seconds),
                     ("raw", raw_text.as_str(), raw_tools.as_slice(), raw_error.clone(), 0.0),
-                ] {
+                ];
+                for (condition, text, tools, error, seconds) in
+                    conditions.into_iter().take(if wrapper_only { 1 } else { 2 })
+                {
                     let checks = case
                         .checks
                         .iter()

@@ -1,4 +1,4 @@
-import constitution from '../../config/behavior/constitution.v1.json'
+import constitution from '../../config/behavior/constitution.v2.json'
 import type { Assistant, ChatMessage, Memory, ToolDefinition } from '../types'
 
 export interface ContextMessage {

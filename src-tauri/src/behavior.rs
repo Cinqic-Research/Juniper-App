@@ -12,7 +12,7 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use std::borrow::Cow;
 
-const CONSTITUTION_JSON: &str = include_str!("../../config/behavior/constitution.v1.json");
+const CONSTITUTION_JSON: &str = include_str!("../../config/behavior/constitution.v2.json");
 
 #[derive(Debug, Deserialize)]
 struct Constitution {
@@ -165,6 +165,13 @@ fn runtime_section(
                 .join(", ")
         ));
     }
+    lines.push(match request.attachments.len() {
+        0 => "- Attachments: none in this message.".to_owned(),
+        1 => "- Attachments: 1 file the user attached is included below as data.".to_owned(),
+        count => {
+            format!("- Attachments: {count} files the user attached are included below as data.")
+        }
+    });
     let mut missing = Vec::new();
     if !offered.iter().any(|tool| tool.risk == "network") {
         missing.push("web search, browsing, or opening links");
@@ -389,6 +396,23 @@ mod tests {
     }
 
     #[test]
+    fn runtime_section_states_whether_files_are_attached() {
+        let mut request = request();
+        let lineage = Lineage::for_request(&request);
+        let none = instructions(&request, &lineage, &[], "").expect("compose");
+        assert!(none.contains("- Attachments: none in this message."));
+        request.attachments.push(AttachmentContext {
+            id: "a".into(),
+            name: "a.txt".into(),
+            content: "text".into(),
+            size_bytes: None,
+            content_type: None,
+        });
+        let one = instructions(&request, &lineage, &[], "").expect("compose");
+        assert!(one.contains("- Attachments: 1 file the user attached is included below as data."));
+    }
+
+    #[test]
     fn private_chats_state_that_memory_is_unavailable() {
         let mut request = request();
         request.private_chat = true;
@@ -469,6 +493,6 @@ mod tests {
 
     #[test]
     fn bundled_constitution_is_well_formed() {
-        assert_eq!(constitution_id(), "juniper-constitution.v1");
+        assert_eq!(constitution_id(), "juniper-constitution.v2");
     }
 }
