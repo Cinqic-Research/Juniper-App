@@ -53,7 +53,8 @@ keeps a single `llama-server` loaded across turns, for every managed local
 model:
 
 - loopback bind, a per-launch API key read from an owner-only file that is
-  deleted once the server has read it, `--no-webui`, `--no-slots`,
+  deleted once the server has read it (on Linux, as soon as the server is
+  listening, before the model loads; elsewhere, once it is healthy), `--no-webui`, `--no-slots`,
   `--offline`, and a bounded `--cache-ram`;
 - a qualified model starts only with its profile's exact flags (`--fit off`),
   the corrected template, and the CUDA build; `--version` must report the
@@ -61,11 +62,15 @@ model:
   expected served-template hash, and context size after load;
 - one warm-up request after a qualified load; the interface shows loading,
   warm-up, restart, and reasoning activity;
-- the server that answers must hold the key and report the model path
-  Juniper passed, so a process that takes the port first is not trusted;
+- before the key is sent anywhere, on Linux, the listening socket must belong
+  to the process Juniper started (checked through `/proc`), so a process that
+  takes the port first does not receive it; on every platform the server must
+  then report the model path Juniper passed. Elsewhere only the model-path
+  check applies, after the key has been sent;
 - a crashed server is detected on the next request and restarted; a slow one
   is retried, and one that another chat is using is never killed; switching
-  models or unloading waits for in-flight generations;
+  models or unloading while a generation is in flight is refused with
+  `LOCAL_RUNTIME_BUSY` rather than interrupting it;
 - a server that is still loading is stopped on exit too, and on Linux the
   server receives SIGTERM if Juniper itself dies;
 - the server is stopped on application exit and on "Unload from memory".
@@ -102,7 +107,10 @@ scripts/build-llama-runtime.sh`.
 
 The server accepts only loopback connections bearing the per-launch key, so
 other local users and browser pages cannot use the loaded model. Same-user
-processes can still read the key file during the moments before the server
-reads it; that is within the existing desktop threat model. Server stderr is
+processes can read the key file while it exists, and on platforms other than
+Linux a process that binds the port first could receive the key; both are
+within the existing desktop threat model. A key file left by a Juniper crash
+during startup is not cleaned up later; it names a server that no longer
+runs. Server stderr is
 kept only in memory, bounded, to classify startup failures, and is never
 logged or displayed. Nothing leaves the device.

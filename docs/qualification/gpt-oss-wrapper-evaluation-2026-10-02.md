@@ -34,7 +34,14 @@ and warm-up (page cache partly warm; the first run, which also hashed the 12 GB
 file in an unoptimized test build, took 408 s); warm turns 2.5 s; calculator
 round trip; `GENERATION_TRUNCATED` at 24 tokens; `CONTEXT_OVERFLOW` from the
 tokenizer check; UTF-8 intact; restart after `SIGKILL` 16–31 s; unload; no
-server left running; key file removed.
+server left running; key file removed. Rerun at `d98dd0f` (release build,
+page cache cold after the build): passed, cold start 218 s, warm turn 2.2 s,
+restart after `SIGKILL` 105 s, no server left running. Rerun after the
+review fixes that followed (listener ownership through `/proc`, no
+whole-request stream deadline, a normal stop required): passed, cold start
+132 s, warm turn 2.1 s, restart 39 s, no server or key file left. The
+evaluation below was not rerun after those fixes; they do not change the
+prompt for these cases.
 
 `live_generic_local_model` passed with SmolLM2-135M on the app's packaged CPU
 runtime (`b10788-e107984bc`, built by `scripts/build-llama-runtime.sh`): the

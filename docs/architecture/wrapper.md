@@ -41,12 +41,14 @@ provenance in message details, "links not checked" note
 
 ## Untrusted text
 
-Profiles, history, memories, attachments, tool results, and the arguments and
-analysis returned with a pending call all pass through
+Profiles, assistant, provider, and model names, history, memories,
+attachments, tool results, and the IDs, names, arguments, and analysis
+returned with a pending call all pass through
 `behavior::neutralize_control_tokens`, which inserts a word joiner into any
 `<|name|>` sequence. llama-server parses special tokens in the rendered prompt,
-so without this a file could open a real developer turn. Framing tags are
-removed from framed content until none remain.
+so without this a file could open a real developer turn. Framing tags (including
+each file's own `</attachment>`) are removed from framed content until none
+remain.
 
 ## Instruction layers
 
@@ -113,18 +115,21 @@ low (GPT-OSS always reasons), Low/Medium/High as named.
 | `LOCAL_RUNTIME_BUSY`            | a different model is mid-generation                                                                                                                                        |
 | `CONTEXT_OVERFLOW`              | the prompt and output budget do not fit                                                                                                                                    |
 | `CONTEXT_CHECK_FAILED`          | the server could not render or tokenize the prompt                                                                                                                         |
-| `GENERATION_TRUNCATED`          | the model hit its output limit; any partial text is marked incomplete                                                                                                      |
+| `GENERATION_TRUNCATED`          | the model hit its output limit, or (qualified backend) the stream ended without a normal stop; any partial text is marked incomplete                                       |
 | `EMPTY_ANSWER`                  | the model finished without text                                                                                                                                            |
 | `MODEL_OUTPUT_INVALID`          | the answer contained protocol markers and was not accepted                                                                                                                 |
 | `LOCAL_RUNTIME_ERROR`           | a Juniper-owned server reported an error mid-reply, such as llama.cpp failing to parse the model's Harmony output; its text is not shown because it can quote model output |
 | `MALFORMED_TOOL_CALL`           | a tool call could not be parsed                                                                                                                                            |
-| `STREAM_TIMEOUT`                | the stream was silent past the policy's idle limit                                                                                                                         |
+| `STREAM_TIMEOUT`                | the stream was silent past the policy's idle limit; there is no limit on a stream that keeps producing output                                                              |
 | `REQUEST_CANCELLED`             | the user stopped the request                                                                                                                                               |
 
 Tool-level denials (`TOOL_NOT_ENABLED`, `PERMISSION_DENIED`,
-`DUPLICATE_CALL_ID`, `TOOL_LOOP_LIMIT`, `INVALID_TOOL_ARGUMENT`,
-`MEMORY_NOT_FOUND`, `ATTACHMENT_NOT_GRANTED`) are host-authored tool results:
-the model sees them and the turn continues.
+`DUPLICATE_CALL_ID`, `INVALID_TOOL_ARGUMENT`, `MEMORY_NOT_FOUND`,
+`ATTACHMENT_NOT_GRANTED`, and `TOOL_LOOP_LIMIT` for calls past the per-round
+limit) are host-authored tool results: the model sees them and the turn
+continues. A request has four generations; tools run only in the first three,
+so a call made in the last is not run and the reply fails with
+`TOOL_LOOP_LIMIT`.
 
 ## Provenance
 

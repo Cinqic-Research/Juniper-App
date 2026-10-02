@@ -47,8 +47,11 @@ message and otherwise only `user` and `assistant` messages; `tool` messages
 are authored only by the host loop.
 
 **Data is not instruction.** Memories selected for context travel by ID; the
-host resolves them against its own data (enabled, this assistant's) and sends
-them as a framed `user`-role block. Attachments are framed the same way. Both
+host resolves them against the stored memories the interface supplies for
+the request (enabled, this assistant's, none in a private chat) and sends them
+as a framed `user`-role block. The interface is part of the application, so
+this check stops model output and saved text from choosing memories; it is
+not a defense against a compromised webview. Attachments are framed the same way. Both
 blocks strip their own closing tags so content cannot end its framing.
 
 **What code can enforce, code enforces.** The constitution covers behavior

@@ -8,7 +8,7 @@
 | Shell injection                        | No shell command is exposed in default capabilities; GGUF import uses a fixed executable with separate validated arguments.                             |
 | Secrets in logs/export                 | Credentials never enter normal UI state, logs, or exports.                                                                                              |
 | Dangerous Markdown                     | Renderer escapes all text and only creates controlled links with `target`/`rel`.                                                                        |
-| Unbounded tool loop/payload            | Four rounds, eight calls per round, and 64 KiB argument/result budget.                                                                                  |
+| Unbounded tool loop/payload            | Four generations with tools run in the first three, eight calls per round, and 64 KiB argument/result budget.                                           |
 | Local/remote confusion                 | Locality is a typed profile property, shown on the model pill, in the model picker, in chat details, in Models, and in Settings › Privacy & data.       |
 | Malformed assistant import             | Versioned schema validation and inert JSON parsing.                                                                                                     |
 | Database corruption                    | SQLite migrations, foreign-key enforcement, and normalized entities.                                                                                    |

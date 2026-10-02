@@ -394,8 +394,10 @@ pub fn host_risk(name: &str) -> Option<&'static str> {
     })
 }
 
+/// The last round's generation can only answer: a call made there would run
+/// with no later turn to read its result, so it is refused rather than run.
 pub fn loop_allowed(round: u32, calls_this_round: u32) -> bool {
-    round < MAX_TOOL_ROUNDS && calls_this_round <= MAX_TOOL_CALLS_PER_ROUND
+    round + 1 < MAX_TOOL_ROUNDS && calls_this_round <= MAX_TOOL_CALLS_PER_ROUND
 }
 
 struct Parser<'a> {
@@ -599,7 +601,8 @@ mod tests {
     #[test]
     fn loop_is_bounded() {
         assert!(loop_allowed(0, 8));
-        assert!(!loop_allowed(4, 0));
+        assert!(loop_allowed(MAX_TOOL_ROUNDS - 2, 1));
+        assert!(!loop_allowed(MAX_TOOL_ROUNDS - 1, 1));
         assert!(!loop_allowed(0, 9));
     }
 

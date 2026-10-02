@@ -227,6 +227,12 @@ impl RequestPolicy {
         matches!(self.backend, Backend::GptOss(_))
     }
 
+    /// llama-server reports `stop` for a completed qualified answer; a stream
+    /// that ends any other way is not treated as a finished answer.
+    pub fn requires_stop_finish(&self) -> bool {
+        matches!(self.backend, Backend::GptOss(_))
+    }
+
     pub fn protocol_markers(&self) -> &'static [&'static str] {
         match self.backend {
             Backend::Generic => &[],

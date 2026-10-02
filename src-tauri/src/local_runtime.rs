@@ -467,6 +467,8 @@ async fn start<R: Runtime>(
             "LOCAL_RUNTIME_UNAVAILABLE: Juniper's local runtime could not be started.".to_owned()
         })?;
     let diagnostics = capture_stderr(&mut child);
+    #[cfg(target_os = "linux")]
+    let pid = child.id();
     *starting.lock().map_err(|_| state_error())? = Some(child);
     let route = Route {
         endpoint: format!("http://127.0.0.1:{port}"),
@@ -508,8 +510,19 @@ async fn start<R: Runtime>(
         });
     let model_path_text = model_path.to_string_lossy().into_owned();
     let ready = async {
-        wait_for_health(&route, starting, startup_timeout, cancellation).await?;
-        // The server read the key file while parsing its arguments.
+        // llama-server listens before it loads the model, and only after
+        // parsing its arguments, so a listener that is provably the child's
+        // means the key file has been read.
+        #[cfg(target_os = "linux")]
+        {
+            wait_until(starting, startup_timeout, cancellation, || async {
+                pid.is_some_and(|pid| listener_belongs_to(pid, port))
+            })
+            .await?;
+            drop(key);
+        }
+        wait_until(starting, startup_timeout, cancellation, || healthy(&route)).await?;
+        #[cfg(not(target_os = "linux"))]
         drop(key);
         let props = fetch_props(&route).await?;
         check_ownership(&props, &model_path_text)?;
@@ -705,12 +718,17 @@ async fn healthy(route: &Route) -> bool {
     .is_ok_and(|response| response.is_ok_and(|response| response.status().is_success()))
 }
 
-async fn wait_for_health(
-    route: &Route,
+/// Polls `check` while the starting server is alive, within `limit`.
+async fn wait_until<F, Fut>(
     starting: &Mutex<Option<tokio::process::Child>>,
     limit: Duration,
     cancellation: &Cancellation,
-) -> Result<(), String> {
+    mut check: F,
+) -> Result<(), String>
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = bool>,
+{
     let started = Instant::now();
     loop {
         if cancellation.is_cancelled() {
@@ -730,7 +748,7 @@ async fn wait_for_health(
                     .into(),
             );
         }
-        if healthy(route).await {
+        if check().await {
             return Ok(());
         }
         if started.elapsed() >= limit {
@@ -741,6 +759,45 @@ async fn wait_for_health(
             _ = cancellation.wait() => return Err("REQUEST_CANCELLED: Generation cancelled.".into()),
         }
     }
+}
+
+/// Whether the loopback listener on `port` is a socket held by process `pid`.
+/// The port was free when Juniper chose it, but any local process, including
+/// another user's, could bind it first; the key is not sent until this holds.
+#[cfg(target_os = "linux")]
+fn listener_belongs_to(pid: u32, port: u16) -> bool {
+    // /proc/net/tcp prints the address as the raw in-memory u32.
+    let local = format!(
+        "{:08X}:{port:04X}",
+        u32::from_ne_bytes(std::net::Ipv4Addr::LOCALHOST.octets())
+    );
+    let Ok(table) = std::fs::read_to_string("/proc/net/tcp") else {
+        return false;
+    };
+    let sockets: Vec<String> = table
+        .lines()
+        .skip(1)
+        .filter_map(|line| {
+            let fields: Vec<&str> = line.split_whitespace().collect();
+            // State 0A is LISTEN; field 9 is the socket inode.
+            (fields.get(1) == Some(&local.as_str()) && fields.get(3) == Some(&"0A"))
+                .then(|| fields.get(9).map(|inode| format!("socket:[{inode}]")))
+                .flatten()
+        })
+        .collect();
+    if sockets.is_empty() {
+        return false;
+    }
+    let Ok(descriptors) = std::fs::read_dir(format!("/proc/{pid}/fd")) else {
+        return false;
+    };
+    descriptors.flatten().any(|entry| {
+        std::fs::read_link(entry.path()).is_ok_and(|target| {
+            sockets
+                .iter()
+                .any(|socket| target.as_os_str() == socket.as_str())
+        })
+    })
 }
 
 /// `/props` requires the per-launch key, so only the server Juniper started
@@ -761,9 +818,10 @@ async fn fetch_props(route: &Route) -> Result<Value, String> {
     response.json().await.map_err(|_| unidentified())
 }
 
-/// The port was free when Juniper chose it, but another local process could
-/// have taken it before llama-server bound it. The server that answers must
-/// be serving the file Juniper asked it to load.
+/// The server that answers must be serving the file Juniper asked it to load.
+/// On Linux `listener_belongs_to` has already proven the listener is the
+/// child's; elsewhere this is the only check, and it does not stop a process
+/// that took the port first from receiving the key.
 fn check_ownership(props: &Value, model_path: &str) -> Result<(), String> {
     if props["model_path"].as_str() == Some(model_path) {
         Ok(())
@@ -909,6 +967,19 @@ mod tests {
 
     fn profile() -> BackendProfile {
         backend::profile("gpt-oss-20b-mxfp4-flowbox.v1").expect("bundled profile")
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn only_the_process_holding_the_listener_owns_the_port() {
+        let listener =
+            std::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0)).expect("listener");
+        let port = listener.local_addr().expect("address").port();
+        assert!(listener_belongs_to(std::process::id(), port));
+        // PID 1 holds no socket of this test's.
+        assert!(!listener_belongs_to(1, port));
+        drop(listener);
+        assert!(!listener_belongs_to(std::process::id(), port));
     }
 
     #[test]
