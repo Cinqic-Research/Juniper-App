@@ -24,6 +24,10 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::time::{Duration, Instant, sleep, timeout};
 
 const GENERIC_STARTUP_TIMEOUT: Duration = Duration::from_secs(20);
+/// Silence allowed on a Juniper-owned server's stream without a qualified
+/// profile. Fixed here rather than taken from the provider loop, whose test
+/// builds shorten it for fake servers.
+const GENERIC_IDLE_TIMEOUT: Duration = Duration::from_secs(60);
 const HEALTH_INTERVAL: Duration = Duration::from_millis(250);
 const PROBE_TIMEOUT: Duration = Duration::from_secs(10);
 const WARM_UP_TIMEOUT: Duration = Duration::from_secs(300);
@@ -344,7 +348,7 @@ pub async fn stream_chat<R: Runtime>(
         idle_timeout: route
             .profile
             .as_ref()
-            .map_or(providers::STREAM_IDLE_TIMEOUT, |profile| {
+            .map_or(GENERIC_IDLE_TIMEOUT, |profile| {
                 Duration::from_secs(profile.lifecycle.first_token_timeout_seconds)
             }),
         context_window: route
