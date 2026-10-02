@@ -336,3 +336,58 @@ requirements:
     tests: [src/app/App.tauri.test.tsx]
     phase: 14
     status: PASS-FRONTEND-TESTS-AND-EMULATOR-EVIDENCE
+  REQ-WRAPPER-CONSTITUTION:
+    statement: Identity, juniper-constitution.v1, and a host-generated runtime section precede every assistant profile; memories and attachments are framed data; the webview cannot send tool or late system messages
+    implementation:
+      [
+        config/behavior/constitution.v1.json,
+        src-tauri/src/behavior.rs,
+        src-tauri/src/providers.rs,
+        src/lib/context.ts,
+      ]
+    tests: [src-tauri/src/behavior.rs, src-tauri/src/providers.rs, src/lib/context.test.ts]
+    phase: 15
+    status: IMPLEMENTED-NATIVE-TESTED
+  REQ-WRAPPER-DISTRUST:
+    statement: Host-owned tool risk; per-call approval with full previews for memory writes; reused call IDs refused; private chats isolated; truncated, empty, or protocol-marked output not accepted; control tokens in untrusted text neutralized
+    implementation:
+      [
+        src-tauri/src/providers.rs,
+        src-tauri/src/tools.rs,
+        src-tauri/src/backend.rs,
+        src/app/ChatScreen.tsx,
+      ]
+    tests: [src-tauri/src/providers.rs, src/app/chat-stream.test.ts]
+    phase: 15
+    status: IMPLEMENTED-NATIVE-TESTED
+  REQ-WRAPPER-REASONING:
+    statement: Raw model reasoning is never emitted to the interface, persisted, or re-sent, except the analysis of a pending Harmony tool call within its turn
+    implementation:
+      [
+        src-tauri/src/providers.rs,
+        src-tauri/src/storage.rs,
+        src/lib/storage.ts,
+        src/app/MessageBubble.tsx,
+      ]
+    tests:
+      [
+        src-tauri/src/providers.rs,
+        src-tauri/src/storage.rs,
+        src/app/App.test.tsx,
+        src/app/chat-stream.test.ts,
+      ]
+    phase: 15
+    status: IMPLEMENTED-NATIVE-TESTED
+  REQ-GPTOSS-BACKEND:
+    statement: gpt-oss-20b runs only with its qualified profile, CUDA build, corrected Harmony template, and verified artifact, in a resident loopback server with identity checks, warm-up, recovery, and no fallback
+    implementation:
+      [
+        config/backends/gpt-oss-20b.json,
+        config/backends/gpt-oss-harmony.v1.jinja,
+        src-tauri/src/backend.rs,
+        src-tauri/src/local_runtime.rs,
+        src-tauri/src/managed_models.rs,
+      ]
+    tests: [src-tauri/src/backend.rs, src-tauri/src/local_runtime.rs, src-tauri/src/live_gpt_oss.rs]
+    phase: 15
+    status: PASS-FLOWBOX-HARDWARE-TEST

@@ -35,6 +35,16 @@ software under any license.
 Release packaging should run a dependency license audit for the target bundle
 and include any generated notices required by the selected platform.
 
+## GPT-OSS chat template
+
+`config/backends/gpt-oss-harmony.v1.jinja` is derived from the
+`chat_template.jinja` that OpenAI publishes with `openai/gpt-oss-20b`
+(Apache-2.0). Cinqic corrected it, in the Juniper LM 1.1 qualification, to
+render token-identically to OpenAI's `openai-harmony` reference renderer; the
+file's header lists the changes. Juniper does not distribute gpt-oss-20b
+weights. A user who imports them receives them under OpenAI's Apache-2.0
+license and gpt-oss usage policy.
+
 ## Android native runtime
 
 Juniper's Android local runtime embeds the pinned `llama.cpp` source revision
