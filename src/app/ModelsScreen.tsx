@@ -227,7 +227,7 @@ export function ModelsScreen({
     setMessage(
       makeDefault
         ? `${entry.displayName} is now ${defaultAssistant.name}’s default model.`
-        : `${entry.displayName} is downloaded and verified. The local engine loads it on first use.`,
+        : `${entry.displayName} is ${entry.artifacts[0] && isImportOnly(entry.artifacts[0]) ? 'imported' : 'downloaded'} and verified. The local engine loads it on first use.`,
     )
   }
 

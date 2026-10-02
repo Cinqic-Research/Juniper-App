@@ -101,22 +101,10 @@ pub struct Lineage {
 }
 
 impl Lineage {
-    pub fn for_request(
-        request: &ChatRequest,
-        qualified: Option<&crate::backend::BackendProfile>,
-    ) -> Self {
-        if let Some(profile) = qualified {
-            return Self {
-                description: format!(
-                    "{} by {} ({} license), unmodified weights served by {} {}",
-                    profile.model.name,
-                    profile.model.developer,
-                    profile.model.license,
-                    profile.runtime.engine,
-                    profile.runtime.tag
-                ),
-            };
-        }
+    /// For a request without host-verified lineage from the local runtime:
+    /// catalog attribution for Juniper's own models, otherwise only what the
+    /// provider calls the model.
+    pub fn for_request(request: &ChatRequest) -> Self {
         if request.provider.kind == "juniper-local"
             && let Some(entry) = request
                 .model
@@ -349,7 +337,7 @@ mod tests {
     #[test]
     fn constitution_precedes_runtime_and_profile() {
         let request = request();
-        let lineage = Lineage::for_request(&request, None);
+        let lineage = Lineage::for_request(&request);
         let text = instructions(&request, &lineage, &[], "Be playful.").expect("compose");
         let truth = text.find("Truth over confidence").expect("truth rule");
         let runtime = text.find("# Runtime").expect("runtime");
@@ -361,7 +349,7 @@ mod tests {
     #[test]
     fn a_profile_cannot_displace_the_constitution() {
         let request = request();
-        let lineage = Lineage::for_request(&request, None);
+        let lineage = Lineage::for_request(&request);
         let text = instructions(
             &request,
             &lineage,
@@ -377,7 +365,7 @@ mod tests {
     #[test]
     fn runtime_section_lists_exactly_the_offered_tools() {
         let request = request();
-        let lineage = Lineage::for_request(&request, None);
+        let lineage = Lineage::for_request(&request);
         let calculator = tool("calculator.evaluate", "automatic-safe");
         let text = instructions(&request, &lineage, &[&calculator], "").expect("compose");
         assert!(text.contains("- Host tools: calculator.evaluate."));
@@ -389,7 +377,7 @@ mod tests {
     #[test]
     fn unverified_external_lineage_is_not_attributed_to_anyone() {
         let request = request();
-        let lineage = Lineage::for_request(&request, None);
+        let lineage = Lineage::for_request(&request);
         assert!(
             lineage
                 .description
@@ -404,7 +392,7 @@ mod tests {
     fn private_chats_state_that_memory_is_unavailable() {
         let mut request = request();
         request.private_chat = true;
-        let lineage = Lineage::for_request(&request, None);
+        let lineage = Lineage::for_request(&request);
         let save = tool("memory.save", "user-data-write");
         let text = instructions(&request, &lineage, &[&save], "").expect("compose");
         assert!(text.contains("Private chat: nothing is saved"));

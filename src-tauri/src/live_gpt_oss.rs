@@ -403,6 +403,55 @@ fn live_resident_runtime_lifecycle() {
     });
 }
 
+/// The generic local path: a small catalog model (`JUNIPER_LIVE_GENERIC_MODEL`,
+/// already in `$XDG_DATA_HOME/models`) through the same resident runtime,
+/// with `JUNIPER_LLAMA_SERVER` naming the CPU server.
+#[test]
+#[ignore = "requires a downloaded catalog model and JUNIPER_LIVE_GENERIC_MODEL"]
+fn live_generic_local_model() {
+    let catalog_id = std::env::var("JUNIPER_LIVE_GENERIC_MODEL")
+        .expect("set JUNIPER_LIVE_GENERIC_MODEL to a catalog id");
+    let (app, state) = app_and_state();
+    let _stop = StopOnDrop(state);
+    let handle = app.handle().clone();
+    let runtime = tokio::runtime::Runtime::new().expect("runtime");
+    runtime.block_on(async {
+        let ask = |id: &str| {
+            let mut request = request(
+                id,
+                None,
+                vec![("user", "Say hello in one short sentence.".into())],
+            );
+            request.model.catalog_id = Some(catalog_id.clone());
+            request.model.model_id = catalog_id.clone();
+            request.model.capabilities.tools = "unknown".into();
+            request.model.capabilities.thinking = "unknown".into();
+            request
+        };
+        let first = run(&handle, state, ask("generic-1"), HashMap::new()).await;
+        println!(
+            "LIVE generic first seconds={:.1} activities={:?} error={:?} text={:?} provenance={}",
+            first.seconds, first.activities, first.error, first.text, first.provenance
+        );
+        assert_eq!(first.error, None);
+        assert_eq!(first.provenance["backend"], "generic");
+        assert!(first.activities.contains(&"loading-model".to_owned()));
+        let second = run(&handle, state, ask("generic-2"), HashMap::new()).await;
+        println!(
+            "LIVE generic second seconds={:.1} activities={:?}",
+            second.seconds, second.activities
+        );
+        assert_eq!(second.error, None);
+        assert!(
+            !second
+                .activities
+                .iter()
+                .any(|activity| activity == "loading-model")
+        );
+        assert!(state.local_runtime.unload().await.expect("unload"));
+    });
+}
+
 #[derive(Debug, serde::Deserialize)]
 struct Case {
     id: String,

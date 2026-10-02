@@ -671,7 +671,7 @@ fn request_messages(
         .lineage
         .clone()
         .map(|description| behavior::Lineage { description })
-        .unwrap_or_else(|| behavior::Lineage::for_request(request, None));
+        .unwrap_or_else(|| behavior::Lineage::for_request(request));
     let instructions = behavior::instructions(request, &lineage, &offered_tools(request), profile)
         .map_err(|error| ProviderError::new("CONSTITUTION_INVALID", error))?;
     let mut messages = vec![json!({ "role": "system", "content": instructions })];

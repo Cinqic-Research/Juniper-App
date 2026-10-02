@@ -176,7 +176,12 @@ export function buildContext(
   const contextLimit = contextLimitAssumed
     ? DEFAULT_CONTEXT_LIMIT
     : Math.max(256, Math.floor(limit))
-  const reservedOutputTokens = Math.max(0, Math.floor(options.reservedOutputTokens ?? 0))
+  // A configured output budget larger than the context cannot all be
+  // reserved; servers cap it, and the host checks the real figure where it can.
+  const reservedOutputTokens = Math.min(
+    Math.max(0, Math.floor(options.reservedOutputTokens ?? 0)),
+    Math.floor(contextLimit / 2),
+  )
   const hostLayerTokens =
     CONSTITUTION_TOKENS + RUNTIME_SECTION_TOKENS + estimateTokens(toolNames.join('\n'))
   const attachmentTokens = attachments.reduce(

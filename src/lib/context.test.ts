@@ -204,6 +204,12 @@ describe('context builder', () => {
     expect(reserved.estimatedTokens).toBeLessThanOrEqual(4000)
     const overflow = buildContext(defaultAssistant, [], [], [], 1000, 'x'.repeat(8000))
     expect(overflow.overflow).toBe(true)
+    // An output budget beyond the context does not by itself overflow.
+    const generous = buildContext(defaultAssistant, [], [], [], 16384, 'hi', [], {
+      reservedOutputTokens: 32768,
+    })
+    expect(generous.overflow).toBe(false)
+    expect(generous.reservedOutputTokens).toBe(8192)
   })
 
   it('drops history by whole exchanges and never keeps failed replies as context', () => {
