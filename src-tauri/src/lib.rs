@@ -7,7 +7,8 @@ mod commands;
 mod device;
 pub mod device_link;
 mod domain;
-#[cfg(all(test, not(target_os = "android")))]
+// Hardware tests: they stop the server with a Unix signal to test recovery.
+#[cfg(all(test, unix, not(target_os = "android")))]
 mod live_gpt_oss;
 #[cfg(not(target_os = "android"))]
 mod local_runtime;
