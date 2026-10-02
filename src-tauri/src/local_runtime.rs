@@ -289,7 +289,7 @@ impl LocalRuntime {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix, not(target_os = "android")))]
 impl LocalRuntime {
     /// The resident server's endpoint, key, and process ID, for hardware tests.
     pub(crate) fn resident_for_tests(&self) -> Option<(String, String, u32)> {
