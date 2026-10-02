@@ -83,7 +83,7 @@ Qualification runs against a real installed model, not a fixture:
 
 ```bash
 JUNIPER_LIVE_OLLAMA_MODEL=<installed model> \
-  cargo test --manifest-path src-tauri/Cargo.toml --lib -- --ignored --nocapture
+  cargo test --manifest-path src-tauri/Cargo.toml --lib -- --ignored --nocapture live_ollama
 ```
 
 The suites in `tests/qualification/` each declare an `applies_when` capability
@@ -106,6 +106,27 @@ The current conversation-continuity qualification is recorded separately in
 It records the exact source/model/settings boundary and preserves residual
 stochastic observations; deterministic tests do not claim to prove arbitrary
 model wording.
+
+### gpt-oss-20b and the wrapper
+
+`src-tauri/src/live_gpt_oss.rs` holds two hardware tests for the qualified
+backend, run on FLOWBOX with the model file and the qualified CUDA server (setup
+in [../../tests/wrapper-eval/README.md](../../tests/wrapper-eval/README.md)):
+
+- `live_resident_runtime_lifecycle` drives the real resident runtime: cold load
+  with loading and warm-up activity, warm reuse, provenance (artifact hash,
+  runtime build, effort, constitution), a calculator round trip, an
+  output-limit failure, a context overflow caught by the tokenizer check, UTF-8
+  text, recovery after the server is killed, and unload.
+- `live_wrapper_evaluation` runs the development cases in
+  `tests/wrapper-eval/cases.v1.jsonl`, and optionally the frozen Juniper LM 1.1
+  truthfulness, injection, hierarchy, and lineage cases (read only, never
+  edited or tuned against), through the wrapper and as raw requests to the same
+  server, and writes one JSON line per run.
+
+The checks are regular expressions with the same known blind spots as the
+qualification's; results are read, not just counted. Recorded results are in
+[../qualification/gpt-oss-wrapper-evaluation-2026-10-02.md](../qualification/gpt-oss-wrapper-evaluation-2026-10-02.md).
 
 ## Platform validation
 
@@ -175,6 +196,9 @@ tests run on Linux.
 The fault-injection review targets malformed provider records, tool calls the
 request never enabled, unknown tool names, invalid arguments, private-chat
 leakage, attachment IDs outside the picker grant set, denied permissions,
-oversized results, and tool-loop overruns. These invariants are represented by
+oversized results, tool-loop overruns, reused call IDs, standing grants for
+memory writes, forged `tool` or late `system` messages from the webview,
+truncated, empty, or protocol-marked answers, raw reasoning in events or
+storage, and UTF-8 split across network reads. These invariants are represented by
 the provider, tool, storage, and frontend tests; a release reviewer should run
 the same fixtures against any adapter change.

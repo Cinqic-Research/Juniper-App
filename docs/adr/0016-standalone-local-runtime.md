@@ -1,7 +1,8 @@
 # ADR-0016: Standalone local runtime boundary
 
 Status: accepted for the rc31 release candidate; Android llama.cpp remains Beta
-pending physical qualification
+pending physical qualification. The desktop per-generation server is
+superseded by the resident runtime in ADR-0023 (proposed).
 
 ## Decision
 
