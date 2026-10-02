@@ -97,28 +97,29 @@ low (GPT-OSS always reasons), Low/Medium/High as named.
 
 ## Failure states
 
-| Code                            | Meaning                                                               |
-| ------------------------------- | --------------------------------------------------------------------- |
-| `LOCAL_MODEL_NOT_READY`         | the model file is missing or fails verification                       |
-| `MODEL_IMPORT_ONLY`             | the catalog has no download source for this artifact                  |
-| `MODEL_CHECKSUM_MISMATCH`       | an imported file is not the catalog's file                            |
-| `LOCAL_RUNTIME_UNAVAILABLE`     | the required server build is not installed                            |
-| `RUNTIME_IDENTITY_MISMATCH`     | the server build or context differs from the profile                  |
-| `TEMPLATE_IDENTITY_MISMATCH`    | the served chat template differs from the profile                     |
-| `BACKEND_PROFILE_MISMATCH`      | a profile was named by a different artifact                           |
-| `LOCAL_RUNTIME_OUT_OF_MEMORY`   | the qualified configuration did not fit in GPU or system memory       |
-| `LOCAL_RUNTIME_GPU_UNAVAILABLE` | the CUDA build could not use the GPU                                  |
-| `LOCAL_RUNTIME_TIMEOUT`         | loading exceeded the profile's startup limit                          |
-| `LOCAL_RUNTIME_FAILED`          | the server exited during load or failed warm-up                       |
-| `LOCAL_RUNTIME_BUSY`            | a different model is mid-generation                                   |
-| `CONTEXT_OVERFLOW`              | the prompt and output budget do not fit                               |
-| `CONTEXT_CHECK_FAILED`          | the server could not render or tokenize the prompt                    |
-| `GENERATION_TRUNCATED`          | the model hit its output limit; any partial text is marked incomplete |
-| `EMPTY_ANSWER`                  | the model finished without text                                       |
-| `MODEL_OUTPUT_INVALID`          | the answer contained protocol markers and was not accepted            |
-| `MALFORMED_TOOL_CALL`           | a tool call could not be parsed                                       |
-| `STREAM_TIMEOUT`                | the stream was silent past the policy's idle limit                    |
-| `REQUEST_CANCELLED`             | the user stopped the request                                          |
+| Code                            | Meaning                                                                                                                                                                    |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `LOCAL_MODEL_NOT_READY`         | the model file is missing or fails verification                                                                                                                            |
+| `MODEL_IMPORT_ONLY`             | the catalog has no download source for this artifact                                                                                                                       |
+| `MODEL_CHECKSUM_MISMATCH`       | an imported file is not the catalog's file                                                                                                                                 |
+| `LOCAL_RUNTIME_UNAVAILABLE`     | the required server build is not installed                                                                                                                                 |
+| `RUNTIME_IDENTITY_MISMATCH`     | the server build or context differs from the profile                                                                                                                       |
+| `TEMPLATE_IDENTITY_MISMATCH`    | the served chat template differs from the profile                                                                                                                          |
+| `BACKEND_PROFILE_MISMATCH`      | a profile was named by a different artifact                                                                                                                                |
+| `LOCAL_RUNTIME_OUT_OF_MEMORY`   | the qualified configuration did not fit in GPU or system memory                                                                                                            |
+| `LOCAL_RUNTIME_GPU_UNAVAILABLE` | the CUDA build could not use the GPU                                                                                                                                       |
+| `LOCAL_RUNTIME_TIMEOUT`         | loading exceeded the profile's startup limit                                                                                                                               |
+| `LOCAL_RUNTIME_FAILED`          | the server exited during load or failed warm-up                                                                                                                            |
+| `LOCAL_RUNTIME_BUSY`            | a different model is mid-generation                                                                                                                                        |
+| `CONTEXT_OVERFLOW`              | the prompt and output budget do not fit                                                                                                                                    |
+| `CONTEXT_CHECK_FAILED`          | the server could not render or tokenize the prompt                                                                                                                         |
+| `GENERATION_TRUNCATED`          | the model hit its output limit; any partial text is marked incomplete                                                                                                      |
+| `EMPTY_ANSWER`                  | the model finished without text                                                                                                                                            |
+| `MODEL_OUTPUT_INVALID`          | the answer contained protocol markers and was not accepted                                                                                                                 |
+| `LOCAL_RUNTIME_ERROR`           | a Juniper-owned server reported an error mid-reply, such as llama.cpp failing to parse the model's Harmony output; its text is not shown because it can quote model output |
+| `MALFORMED_TOOL_CALL`           | a tool call could not be parsed                                                                                                                                            |
+| `STREAM_TIMEOUT`                | the stream was silent past the policy's idle limit                                                                                                                         |
+| `REQUEST_CANCELLED`             | the user stopped the request                                                                                                                                               |
 
 Tool-level denials (`TOOL_NOT_ENABLED`, `PERMISSION_DENIED`,
 `DUPLICATE_CALL_ID`, `TOOL_LOOP_LIMIT`, `INVALID_TOOL_ARGUMENT`,
@@ -135,6 +136,11 @@ and revision, and context size. Message details show the runtime and effort;
 developer mode adds the hashes.
 
 ## Grounding
+
+When a reply talks about saving or deleting a memory and no `memory.save` or
+`memory.delete` host result exists in that reply, the interface adds "No
+memory was saved or deleted during this reply." gpt-oss-20b confirms memory
+saves it never made, especially when a message claims one happened.
 
 Juniper has no retrieval or browsing tool. The runtime section tells the model
 so, and the constitution tells it to say when something needs checking rather

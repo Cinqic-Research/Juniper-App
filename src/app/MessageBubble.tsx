@@ -61,6 +61,26 @@ export function hasUncheckedReferences(message: ChatMessage): boolean {
   return references.some((reference) => !evidence.includes(reference.replace(/[).,;]+$/, '')))
 }
 
+const MEMORY_WORD = /\b(memory|memories|remember(ed)?|reminder)\b/i
+const CHANGE_WORD = /\b(saved|stored|recorded|added|deleted|removed|forgot(ten)?)\b/i
+
+/**
+ * Models confirm memory changes that never happened, including when a user
+ * message or file only claims they did. Only a host result for memory.save or
+ * memory.delete in this reply shows a change; without one, the interface says
+ * so. The note states a host fact; it does not judge the rest of the answer.
+ */
+export function mentionsUnperformedMemoryChange(message: ChatMessage): boolean {
+  const content = textPart(message)
+  if (!MEMORY_WORD.test(content) || !CHANGE_WORD.test(content)) return false
+  return !message.parts.some(
+    (part) =>
+      part.type === 'tool-result' &&
+      part.status === 'success' &&
+      (part.name === 'memory.save' || part.name === 'memory.delete'),
+  )
+}
+
 function provenanceDetails(message: ChatMessage, developerMode: boolean): string[] {
   const provenance = message.provenance
   if (!provenance) return []
@@ -137,6 +157,7 @@ export function MessageBubble({
   const author = user ? 'You' : assistant.name
   const waiting = !user && message.isStreaming && !content && !toolCalls.length
   const unchecked = !user && !message.isStreaming && hasUncheckedReferences(message)
+  const noMemoryChange = !user && !message.isStreaming && mentionsUnperformedMemoryChange(message)
 
   async function copy() {
     if (await copyText(content)) {
@@ -251,6 +272,9 @@ export function MessageBubble({
         ) : !user && !message.isStreaming && !toolCalls.length ? (
           <p className="message-empty">No text was returned.</p>
         ) : null}
+        {noMemoryChange && (
+          <p className="message-note">No memory was saved or deleted during this reply.</p>
+        )}
         {unchecked && (
           <p className="message-note">
             Links and citations in this answer were written by the model. Juniper has not checked

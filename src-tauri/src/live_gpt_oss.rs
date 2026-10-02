@@ -108,6 +108,7 @@ fn builtin_tool(name: &str) -> crate::domain::ToolDefinition {
 struct Outcome {
     text: String,
     error: Option<String>,
+    error_message: Option<String>,
     activities: Vec<String>,
     tools_called: Vec<String>,
     tool_results: Vec<Value>,
@@ -208,6 +209,7 @@ async fn run<R: tauri::Runtime>(
         }
         if event["done"] == true {
             outcome.error = event["error"]["code"].as_str().map(str::to_owned);
+            outcome.error_message = event["error"]["message"].as_str().map(str::to_owned);
             outcome.provenance = event["provenance"].clone();
         }
     }
@@ -751,6 +753,7 @@ fn live_wrapper_evaluation() {
                             "suite": suite, "case": case.id, "category": case.category, "seed": seed,
                             "condition": condition, "pass": pass, "checks": checks, "error": error,
                             "truncated": truncated, "maxTokens": max_tokens(),
+                            "errorMessage": if condition == "wrapper" { wrapped.error_message.clone() } else { None },
                             "toolsCalled": tools, "seconds": seconds, "text": text
                         })
                     )

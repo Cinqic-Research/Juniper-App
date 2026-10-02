@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { ChatMessage, ChatStreamEvent } from '../types'
 import { activityLabel, applyStreamError, applyStreamEvent } from './ChatScreen'
-import { hasUncheckedReferences } from './MessageBubble'
+import { hasUncheckedReferences, mentionsUnperformedMemoryChange } from './MessageBubble'
 
 function reply(parts: ChatMessage['parts']): ChatMessage {
   return {
@@ -74,5 +74,27 @@ describe('chat stream handling', () => {
       },
     ])
     expect(hasUncheckedReferences(supplied)).toBe(false)
+  })
+
+  it('notes when a reply claims a memory change no host result shows', () => {
+    const claim = reply([
+      { id: 't', type: 'text', text: 'Yes, the memory about your appointment was saved.' },
+    ])
+    expect(mentionsUnperformedMemoryChange(claim)).toBe(true)
+    const performed = reply([
+      { id: 't', type: 'text', text: 'Saved that memory.' },
+      { id: 'r', type: 'tool-result', name: 'memory.save', status: 'success', text: '{}' },
+    ])
+    expect(mentionsUnperformedMemoryChange(performed)).toBe(false)
+    const denied = reply([
+      { id: 't', type: 'text', text: 'I saved it to memory.' },
+      { id: 'r', type: 'tool-result', name: 'memory.save', status: 'denied', text: 'denied' },
+    ])
+    expect(mentionsUnperformedMemoryChange(denied)).toBe(true)
+    expect(
+      mentionsUnperformedMemoryChange(
+        reply([{ id: 't', type: 'text', text: 'The file was saved.' }]),
+      ),
+    ).toBe(false)
   })
 })

@@ -1593,6 +1593,24 @@ fn ollama_body(request: &ChatRequest, messages: &[Value], tools: &[Value]) -> Va
     body
 }
 
+/// An error a provider reports inside the stream. llama-server's errors for a
+/// reply it cannot parse can quote the model's raw output, analysis included,
+/// so a Juniper-owned server's text is never shown. Other providers' text is
+/// shown bounded and with control tokens neutralized.
+fn stream_error(policy: &RequestPolicy, message: &str) -> ProviderError {
+    if policy.loopback_key.is_some() {
+        return ProviderError::new(
+            "LOCAL_RUNTIME_ERROR",
+            "The local model's reply could not be processed. Try again.",
+        );
+    }
+    let bounded = message.chars().take(300).collect::<String>();
+    ProviderError::new(
+        "PROVIDER_ERROR",
+        behavior::neutralize_control_tokens(&bounded).into_owned(),
+    )
+}
+
 /// Reads a provider stream until it ends, applying the idle bound from the
 /// request policy. A stream that ends without a terminal record is accepted
 /// only if the trailing bytes parse as complete records.
@@ -1712,7 +1730,7 @@ async fn stream_one_openai_turn<R: Runtime>(
             .as_str()
             .or_else(|| value["error"].as_str())
         {
-            return Err(ProviderError::new("PROVIDER_ERROR", message));
+            return Err(stream_error(policy, message));
         }
         if let Some(usage) = provider_usage(&value, None) {
             let mut event = ChatStreamEvent::for_request(&request.request_id);
@@ -1883,7 +1901,7 @@ async fn stream_one_ollama_turn<R: Runtime>(
             .as_str()
             .or_else(|| value["error"]["message"].as_str())
         {
-            return Err(ProviderError::new("PROVIDER_ERROR", message));
+            return Err(stream_error(policy, message));
         }
         if value["done"].as_bool() == Some(true) {
             outcome.finish_reason = value["done_reason"].as_str().map(str::to_owned);
@@ -4529,6 +4547,25 @@ data: [DONE]
         .expect("preview")
         .expect("text");
         assert!(preview.contains("PAYLOAD"));
+    }
+
+    #[test]
+    fn local_server_errors_never_carry_model_output_to_the_interface() {
+        let mut local = gpt_oss_policy();
+        local.loopback_key = Some("key".into());
+        let error = stream_error(
+            &local,
+            "Failed to parse input at pos 0: <|channel|>analysis<|message|>private reasoning",
+        );
+        assert_eq!(error.code, "LOCAL_RUNTIME_ERROR");
+        assert!(!error.message.contains("private reasoning"));
+        let remote = stream_error(
+            &policy(),
+            &format!("rate limited <|end|>{}", "x".repeat(1000)),
+        );
+        assert_eq!(remote.code, "PROVIDER_ERROR");
+        assert!(remote.message.chars().count() <= 302);
+        assert!(!remote.message.contains("<|end|>"));
     }
 
     // Real-model qualification harness for tests/qualification/*.yaml.

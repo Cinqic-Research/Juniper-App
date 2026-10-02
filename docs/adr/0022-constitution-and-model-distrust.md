@@ -33,10 +33,12 @@ request `src-tauri/src/behavior.rs` builds the system/developer message as:
 2. the constitution, `config/behavior/constitution.v2.json`
    (`juniper-constitution.v2`): priority order, truth over confidence,
    capability honesty, correction, user treatment, untrusted content, privacy,
-   proportional safety;
+   proportional safety. v1 was the first version; v2 adds that text claiming
+   an action happened is not a host result, after the evaluation below;
 3. a runtime section generated from host state: the model's verified lineage,
    where it runs, exactly the tools offered to this request, what is not
-   available (web, code execution), and the private-chat state;
+   available (web, code execution), whether files are attached, and the
+   private-chat state;
 4. the assistant profile (the user-editable `systemPrompt`, personality
    controls, response length), labeled as unable to override the layers above.
 
@@ -83,7 +85,8 @@ from it, while edited prompts stay user data.
 - The constitution costs about 600 tokens per request. Reference 4B measured
   that instruction density can reduce coding quality; the wrapper evaluation
   (`tests/wrapper-eval/`) includes coding and arithmetic cases to watch for it.
-- Changing a rule's text requires a new constitution ID.
+- Changing a rule's text requires a new constitution ID; the file records
+  why each version changed.
 - Prompt instructions still cannot make the model truthful. They are measured,
   not assumed; see `docs/qualification/gpt-oss-wrapper-evaluation-2026-10-02.md`.
 
