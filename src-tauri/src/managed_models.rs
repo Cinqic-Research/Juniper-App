@@ -770,6 +770,12 @@ mod tests {
             .expect("metadata should exist")
             .modified()
             .expect("modification time should exist");
+        let original_changed = changed_nanos(&fs::metadata(&path).expect("metadata should exist"))
+            .expect("Unix change time should exist");
+        // Some CI filesystems expose coarser change-time ticks than ext4.
+        // Ensure this edit lands in a later tick so the assertion below tests
+        // change-time invalidation rather than the filesystem clock's resolution.
+        std::thread::sleep(std::time::Duration::from_secs(2));
         fs::write(&path, b"MODEL").expect("model replaced");
         File::options()
             .write(true)
@@ -777,6 +783,11 @@ mod tests {
             .expect("model should open")
             .set_times(fs::FileTimes::new().set_modified(original_modified))
             .expect("original modification time should be restored");
+        assert_ne!(
+            changed_nanos(&fs::metadata(&path).expect("metadata should exist")),
+            Some(original_changed),
+            "same-size edit should advance Unix change time"
+        );
         assert!(!verify_file(&path, &artifact).expect("verify"));
         assert!(!record_path(&path).exists());
         fs::remove_dir_all(root).expect("cleanup");
