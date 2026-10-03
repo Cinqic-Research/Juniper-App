@@ -63,6 +63,7 @@ impl Resident {
 #[derive(Clone)]
 struct Route {
     endpoint: String,
+    #[cfg(target_os = "linux")]
     port: u16,
     #[cfg(target_os = "linux")]
     owner_pid: Option<u32>,
@@ -487,6 +488,7 @@ async fn start<R: Runtime>(
     *starting.lock().map_err(|_| state_error())? = Some(child);
     let route = Route {
         endpoint: format!("http://127.0.0.1:{port}"),
+        #[cfg(target_os = "linux")]
         port,
         #[cfg(target_os = "linux")]
         owner_pid,
@@ -1221,6 +1223,7 @@ mod tests {
                 child,
                 route: Route {
                     endpoint: "http://127.0.0.1:9".into(),
+                    #[cfg(target_os = "linux")]
                     port: 9,
                     #[cfg(target_os = "linux")]
                     owner_pid: Some(pid),
@@ -1262,6 +1265,7 @@ mod tests {
                 child,
                 route: Route {
                     endpoint: "http://127.0.0.1:9".into(),
+                    #[cfg(target_os = "linux")]
                     port: 9,
                     #[cfg(target_os = "linux")]
                     owner_pid: None,
