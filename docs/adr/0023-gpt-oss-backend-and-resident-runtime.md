@@ -45,8 +45,11 @@ exact bytes and Juniper does not redistribute weights. The catalog lists the
 file with its size and SHA-256 and no URL; `import_managed_model` installs a
 user-selected file only if it matches, hard-linking it on the same filesystem
 so a 12 GB model is not duplicated, copying (and hashing what it writes)
-otherwise. A verification record beside the file avoids re-hashing 12 GB on
-every start while the file's size and modification time are unchanged.
+otherwise. A verification record beside the file avoids re-hashing 12 GB only
+while its size, modification time, and change time remain unchanged. Before
+the record is trusted, Juniper probes the same filesystem for distinct change
+times across rapid rewrites. If change-time precision is coarse, unavailable,
+or the directory cannot hold the probe file, the model is re-hashed instead.
 
 **One resident server, owned by Juniper.** `src-tauri/src/local_runtime.rs`
 keeps a single `llama-server` loaded across turns, for every managed local

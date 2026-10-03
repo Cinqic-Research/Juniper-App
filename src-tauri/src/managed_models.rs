@@ -8,7 +8,7 @@ use sha2::{Digest, Sha256};
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 #[cfg(unix)]
-use std::os::unix::fs::MetadataExt;
+use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tokio::time::Duration;
@@ -371,10 +371,11 @@ pub fn is_import_only(artifact: &CatalogArtifact) -> bool {
 }
 
 /// Hashing a multi-gigabyte model takes minutes on a hard disk, so a
-/// successful verification is recorded beside the file and trusted on Unix
-/// only while size, modification time, and filesystem change time are stable.
-/// Other platforms rehash because the portable API exposes only a restorable
-/// modification time. The record itself is no stronger than its data file.
+/// successful verification may be recorded beside the file. Unix trusts it
+/// only while size, modification time, and change time are stable and a probe
+/// shows that the filesystem distinguishes rapid changes. Other platforms
+/// rehash because the portable API exposes only a restorable modification
+/// time. The record itself is no stronger than its data file.
 #[derive(Debug, PartialEq, Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct VerificationRecord {
@@ -395,6 +396,56 @@ fn changed_nanos(metadata: &fs::Metadata) -> Option<i128> {
 #[cfg(not(unix))]
 fn changed_nanos(_metadata: &fs::Metadata) -> Option<i128> {
     None
+}
+
+/// Filesystems with coarse change-time ticks can report the same ctime for a
+/// rapid same-size edit and mtime restore. Probe the model's own filesystem
+/// before trusting the verification cache; failure or coarse timestamps mean
+/// the model is rehashed on each use.
+#[cfg(unix)]
+fn ctime_is_precise_enough(path: &Path) -> bool {
+    let Some(parent) = path.parent() else {
+        return false;
+    };
+    let probe = parent.join(format!(
+        ".juniper-ctime-probe-{}",
+        uuid::Uuid::new_v4().simple()
+    ));
+    let mut created = false;
+    let result = (|| -> Option<bool> {
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(&probe)
+            .ok()?;
+        created = true;
+        file.write_all(&[0]).ok()?;
+        let mut previous = changed_nanos(&file.metadata().ok()?)?;
+        let started = std::time::Instant::now();
+        for value in 1u8..=16 {
+            file.set_len(0).ok()?;
+            file.seek(SeekFrom::Start(0)).ok()?;
+            file.write_all(&[value]).ok()?;
+            file.flush().ok()?;
+            let current = changed_nanos(&file.metadata().ok()?)?;
+            if current <= previous {
+                return Some(false);
+            }
+            previous = current;
+        }
+        Some(started.elapsed() <= std::time::Duration::from_secs(1))
+    })()
+    .unwrap_or(false);
+    if created {
+        let _ = fs::remove_file(probe);
+    }
+    result
+}
+
+#[cfg(not(unix))]
+fn ctime_is_precise_enough(_path: &Path) -> bool {
+    false
 }
 
 fn record_path(path: &Path) -> PathBuf {
@@ -444,6 +495,7 @@ fn verify_file(path: &Path, artifact: &CatalogArtifact) -> Result<bool, String> 
         .as_ref()
         .is_some_and(|record| record.changed_nanos.is_some())
         && recorded == before
+        && ctime_is_precise_enough(path)
     {
         return Ok(true);
     }
@@ -453,7 +505,7 @@ fn verify_file(path: &Path, artifact: &CatalogArtifact) -> Result<bool, String> 
     // A file that changed while it was being hashed is not the file that was
     // hashed; it is neither trusted now nor recorded.
     let unchanged = before.is_some() && before == current_record(path, artifact);
-    if verified && unchanged {
+    if verified && unchanged && ctime_is_precise_enough(path) {
         write_record(path, before);
     } else {
         let _ = fs::remove_file(record_path(path));
@@ -762,20 +814,11 @@ mod tests {
         fs::write(&path, b"model").expect("model written");
         let artifact = artifact_for_test(5, &format!("{:x}", Sha256::digest(b"model")));
         assert!(verify_file(&path, &artifact).expect("verify"));
-        assert!(record_path(&path).exists());
-        assert!(verify_file(&path, &artifact).expect("cached verify"));
-        // Restoring the original modification time cannot preserve Unix
-        // change time, so same-size edits are rehashed instead of trusted.
+        assert!(verify_file(&path, &artifact).expect("repeat verify"));
         let original_modified = fs::metadata(&path)
             .expect("metadata should exist")
             .modified()
             .expect("modification time should exist");
-        let original_changed = changed_nanos(&fs::metadata(&path).expect("metadata should exist"))
-            .expect("Unix change time should exist");
-        // Some CI filesystems expose coarser change-time ticks than ext4.
-        // Ensure this edit lands in a later tick so the assertion below tests
-        // change-time invalidation rather than the filesystem clock's resolution.
-        std::thread::sleep(std::time::Duration::from_secs(2));
         fs::write(&path, b"MODEL").expect("model replaced");
         File::options()
             .write(true)
@@ -783,11 +826,6 @@ mod tests {
             .expect("model should open")
             .set_times(fs::FileTimes::new().set_modified(original_modified))
             .expect("original modification time should be restored");
-        assert_ne!(
-            changed_nanos(&fs::metadata(&path).expect("metadata should exist")),
-            Some(original_changed),
-            "same-size edit should advance Unix change time"
-        );
         assert!(!verify_file(&path, &artifact).expect("verify"));
         assert!(!record_path(&path).exists());
         fs::remove_dir_all(root).expect("cleanup");

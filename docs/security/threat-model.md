@@ -28,4 +28,8 @@
 | Juniper killed while a model is loaded | A server still loading is reachable from exit cleanup; on Linux the server also receives SIGTERM when Juniper dies.                                     |
 | Imported file changed after import     | A hard-linked import shares bytes with the user's file; a size or modification-time change triggers a full rehash; a change during hashing is rejected. |
 
+The verification cache also checks Unix change time. Juniper disables it when a
+same-directory probe cannot distinguish rapid change-time updates; unsupported
+platforms and directories that cannot hold the probe file rehash on each use.
+
 This document is a v0.3 self-review artifact, not an independent security audit.
