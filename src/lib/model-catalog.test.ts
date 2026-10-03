@@ -5,6 +5,7 @@ import {
   recommendModel,
   recommendModels,
   type DeviceCapabilities,
+  isImportOnly,
 } from './model-catalog'
 
 const device: DeviceCapabilities = {
@@ -72,14 +73,31 @@ describe('model catalog', () => {
     expect(artifact.maturity).toBe('experimental')
     expect(artifact.qualification).toBe('unknown')
   })
-  it('ships four under-1B models with verified HTTPS variants', () => {
-    expect(MODEL_CATALOG.models).toHaveLength(4)
-    expect(MODEL_CATALOG.models.every((model) => model.parameterCount < 1_000_000_000)).toBe(true)
+  it('ships four under-1B downloads with verified HTTPS variants', () => {
+    const downloads = MODEL_CATALOG.models.filter((model) => !isImportOnly(model.artifacts[0]!))
+    expect(downloads).toHaveLength(4)
+    expect(downloads.every((model) => model.parameterCount < 1_000_000_000)).toBe(true)
     for (const model of MODEL_CATALOG.models) {
-      expect(model.variants[0]?.url).toMatch(/^https:\/\//)
       expect(model.variants[0]?.sha256).toMatch(/^[a-f0-9]{64}$/)
       expect(model.license).toBe('Apache-2.0')
     }
+    for (const model of downloads) expect(model.variants[0]?.url).toMatch(/^https:\/\//)
+  })
+
+  it('ships gpt-oss-20b as an import-only artifact with qualified capabilities', () => {
+    const model = MODEL_CATALOG.models.find((item) => item.id === 'gpt-oss-20b')!
+    const artifact = model.artifacts[0]!
+    expect(isImportOnly(artifact)).toBe(true)
+    expect(artifact.sha256).toBe('9d7364f02d9952e158ab462629e72401bec844d2243cc3854b271bb35d33d23d')
+    expect(artifact.backendProfile).toBe('gpt-oss-20b-mxfp4-flowbox.v1')
+    expect(artifact.capabilities).toEqual({
+      tools: 'supported',
+      thinking: 'supported',
+      generationParameters: ['maxOutput'],
+    })
+    expect(model.organization).toBe('OpenAI')
+    expect(model.attribution).toContain('gpt-oss-20b by OpenAI')
+    expect(model.contextLength).toBe(16384)
   })
 
   it('rejects duplicate ids, malformed hashes, and non-HTTPS variants', () => {
@@ -100,18 +118,21 @@ describe('model catalog', () => {
     const legacy = {
       version: 1,
       minimumAppVersion: MODEL_CATALOG.minimumAppVersion,
-      models: MODEL_CATALOG.models.map(({ artifacts, ...model }) => ({
-        ...model,
-        variants: artifacts.map((artifact) => ({
-          id: artifact.id,
-          fileName: artifact.files[0]!.path,
-          quantization: artifact.quantization,
-          sizeBytes: artifact.sizeBytes,
-          sha256: artifact.sha256,
-          url: artifact.sourceUrl,
-          sourceRevision: artifact.sourceRevision,
+      // The v1 format had no way to express an import-only artifact.
+      models: MODEL_CATALOG.models
+        .filter((model) => !isImportOnly(model.artifacts[0]!))
+        .map(({ artifacts, ...model }) => ({
+          ...model,
+          variants: artifacts.map((artifact) => ({
+            id: artifact.id,
+            fileName: artifact.files[0]!.path,
+            quantization: artifact.quantization,
+            sizeBytes: artifact.sizeBytes,
+            sha256: artifact.sha256,
+            url: artifact.sourceUrl,
+            sourceRevision: artifact.sourceRevision,
+          })),
         })),
-      })),
     }
     const parsed = parseCatalog(legacy)
     expect(parsed.version).toBe(2)

@@ -3,17 +3,29 @@
 import { readFile } from 'node:fs/promises'
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8')
-const [configText, rust, typescript, gradle, cmake, apkCheck, validation, release] =
-  await Promise.all([
-    read('config/llama-cpp.json'),
-    read('src-tauri/src/runtime_registry.rs'),
-    read('src/lib/runtime-registry.ts'),
-    read('src-tauri/plugins/juniper-local/android/build.gradle.kts'),
-    read('src-tauri/plugins/juniper-local/android/src/main/cpp/CMakeLists.txt'),
-    read('scripts/verify-android-apk.sh'),
-    read('.github/workflows/validation.yml'),
-    read('.github/workflows/release.yml'),
-  ])
+const [
+  configText,
+  rust,
+  typescript,
+  gradle,
+  cmake,
+  apkCheck,
+  validation,
+  release,
+  gptOssText,
+  catalogText,
+] = await Promise.all([
+  read('config/llama-cpp.json'),
+  read('src-tauri/src/runtime_registry.rs'),
+  read('src/lib/runtime-registry.ts'),
+  read('src-tauri/plugins/juniper-local/android/build.gradle.kts'),
+  read('src-tauri/plugins/juniper-local/android/src/main/cpp/CMakeLists.txt'),
+  read('scripts/verify-android-apk.sh'),
+  read('.github/workflows/validation.yml'),
+  read('.github/workflows/release.yml'),
+  read('config/backends/gpt-oss-20b.json'),
+  read('config/models/catalog.json'),
+])
 const config = JSON.parse(configText)
 const expectedPins = new Map([
   ['llama.cpp', config.commit],
@@ -57,6 +69,27 @@ if (!gradle.includes(`ndkVersion = "${config.ndkVersion}"`)) {
 }
 if (!gradle.includes(`version = "${config.cmakeVersion}"`)) {
   throw new Error('Gradle CMake pin differs from config/llama-cpp.json.')
+}
+
+// A qualified backend profile, the CUDA build pin, and the catalog artifact
+// that names the profile must describe the same runtime and file.
+const gptOss = JSON.parse(gptOssText)
+if (config.desktopCuda?.commit !== gptOss.runtime.commit) {
+  throw new Error('config/llama-cpp.json desktopCuda.commit differs from the GPT-OSS profile.')
+}
+if (config.desktopCuda?.tag !== gptOss.runtime.tag) {
+  throw new Error('config/llama-cpp.json desktopCuda.tag differs from the GPT-OSS profile.')
+}
+const profiled = JSON.parse(catalogText)
+  .models.flatMap((model) => model.artifacts)
+  .filter((artifact) => artifact.backendProfile === gptOss.id)
+if (
+  profiled.length !== 1 ||
+  profiled[0].id !== gptOss.artifact.id ||
+  profiled[0].sha256 !== gptOss.artifact.sha256 ||
+  profiled[0].sizeBytes !== gptOss.artifact.sizeBytes
+) {
+  throw new Error('The GPT-OSS backend profile and its catalog artifact disagree.')
 }
 
 console.log(

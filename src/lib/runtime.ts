@@ -7,6 +7,7 @@ import type {
   ChatStreamEvent,
   DiscoveredModel,
   GgufSelection,
+  LocalRuntimeStatus,
   ModelInspection,
   ModelProfile,
   ModelPullProgress,
@@ -208,6 +209,42 @@ export async function downloadManagedModel(
 
 export async function cancelManagedModel(requestId: string): Promise<void> {
   if (runningInTauri) await invoke('cancel_managed_model', { requestId })
+}
+
+/**
+ * Installs a catalog model from a GGUF the user picked. The native host checks
+ * the file against the catalog's size and SHA-256 before it becomes usable.
+ */
+export async function importManagedModel(
+  selectionId: string,
+  catalogId: string,
+  onProgress: (progress: ModelPullProgress) => void,
+  signal: AbortSignal,
+): Promise<void> {
+  if (!runningInTauri) throw new Error('Model import requires the Juniper native runtime.')
+  const requestId = `managed-import-${randomUuid()}`
+  const topic = `juniper://model-download/${requestId}`
+  const unlisten = await listen<ModelPullProgress>(topic, (event) => onProgress(event.payload))
+  const cancel = () => void cancelManagedModel(requestId)
+  signal.addEventListener('abort', cancel, { once: true })
+  try {
+    await invoke('import_managed_model', { selectionId, catalogId, requestId })
+    if (signal.aborted) throw abortError()
+  } finally {
+    signal.removeEventListener('abort', cancel)
+    await unlisten()
+  }
+}
+
+export async function getLocalRuntimeStatus(): Promise<LocalRuntimeStatus> {
+  if (!runningInTauri) return { state: 'idle' }
+  return invoke<LocalRuntimeStatus>('local_runtime_status')
+}
+
+/** Frees the resident local model's memory. Refused while a reply is generating. */
+export async function unloadLocalRuntime(): Promise<boolean> {
+  if (!runningInTauri) return false
+  return invoke<boolean>('unload_local_runtime')
 }
 
 export async function deleteManagedModel(catalogId: string): Promise<void> {

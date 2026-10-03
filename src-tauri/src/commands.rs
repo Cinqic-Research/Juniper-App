@@ -29,7 +29,7 @@ pub struct AppState {
     pub permission_waiters: Mutex<HashMap<String, oneshot::Sender<String>>>,
     pub runtime_logs: Mutex<VecDeque<RuntimeLogEntry>>,
     #[cfg(not(target_os = "android"))]
-    pub local_runtimes: crate::local_runtime::RuntimeProcesses,
+    pub local_runtime: crate::local_runtime::LocalRuntime,
 }
 
 struct PickerGuard<'a>(&'a AtomicBool);
@@ -366,6 +366,65 @@ pub async fn download_managed_model(
 #[tauri::command]
 pub fn cancel_managed_model(state: State<'_, AppState>, request_id: String) -> Result<(), String> {
     cancel_chat(state, request_id)
+}
+
+/// Installs a catalog model from a GGUF the user picked with `pick_gguf`. The
+/// file must match the catalog's size and SHA-256 before Juniper uses it.
+#[tauri::command]
+pub async fn import_managed_model(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    selection_id: String,
+    catalog_id: String,
+    request_id: String,
+) -> Result<(), String> {
+    let path = state
+        .gguf_files
+        .lock()
+        .map_err(|_| "GGUF selection state unavailable.")?
+        .get(&selection_id)
+        .cloned()
+        .ok_or_else(|| "This GGUF selection is no longer available.".to_owned())?;
+    let cancellation = begin_cancellable_operation(state.inner(), &request_id)?;
+    let result = managed_models::import(
+        app,
+        state.inner(),
+        &catalog_id,
+        &path,
+        &request_id,
+        cancellation,
+    )
+    .await;
+    state
+        .cancellations
+        .lock()
+        .map_err(|_| "Cancellation state unavailable.")?
+        .remove(&request_id);
+    result
+}
+
+/// The desktop resident server's state. Android's in-process engine reports
+/// through `device_capabilities` instead.
+#[tauri::command]
+pub fn local_runtime_status(state: State<'_, AppState>) -> Value {
+    #[cfg(not(target_os = "android"))]
+    return serde_json::to_value(state.local_runtime.status()).unwrap_or(Value::Null);
+    #[cfg(target_os = "android")]
+    {
+        let _ = state;
+        serde_json::json!({ "state": "idle" })
+    }
+}
+
+#[tauri::command]
+pub async fn unload_local_runtime(state: State<'_, AppState>) -> Result<bool, String> {
+    #[cfg(not(target_os = "android"))]
+    return state.local_runtime.unload().await;
+    #[cfg(target_os = "android")]
+    {
+        let _ = state;
+        Ok(false)
+    }
 }
 
 #[tauri::command]
@@ -764,7 +823,16 @@ pub async fn chat_stream(
             );
         }
     } else {
-        providers::stream(request.clone(), app, cancellation, state.inner()).await;
+        let policy = crate::backend::RequestPolicy::generic(providers::STREAM_IDLE_TIMEOUT);
+        providers::stream(
+            request.clone(),
+            app,
+            cancellation,
+            state.inner(),
+            policy,
+            None,
+        )
+        .await;
     }
     state
         .cancellations

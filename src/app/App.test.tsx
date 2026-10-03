@@ -443,12 +443,14 @@ describe('Juniper application shell', () => {
     )
   })
 
-  it('puts reasoning, tool results, and model details behind progressive disclosure', async () => {
+  it('puts tool results and model details behind disclosure and never shows raw reasoning', async () => {
     await mount(settingsFor({ developerMode: false }))
     await click(container.querySelector('.history-item')!)
     const reply = container.querySelector('.message.assistant')!
     expect(reply.textContent).toContain('A simple layout')
-    expect(reply.querySelectorAll('details:not([open])')).toHaveLength(2)
+    // The fixture stores a legacy reasoning part; it is dropped on load.
+    expect(reply.textContent).not.toContain('Consider sun direction')
+    expect(reply.querySelectorAll('details:not([open])')).toHaveLength(1)
     expect(reply.textContent).not.toContain('Model: qwen3:8b')
 
     const details = byLabel<HTMLButtonElement>(reply, 'Response details')

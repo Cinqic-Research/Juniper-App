@@ -102,7 +102,7 @@ pub fn emit_error<R: Runtime>(app: &AppHandle<R>, request_id: &str, error: &str)
         ChatStreamEvent {
             request_id: request_id.into(),
             delta: None,
-            reasoning: None,
+            activity: None,
             tool_calls: None,
             tool_results: None,
             done: Some(true),
@@ -112,6 +112,7 @@ pub fn emit_error<R: Runtime>(app: &AppHandle<R>, request_id: &str, error: &str)
                 message: message.into(),
             }),
             permission_request: None,
+            provenance: None,
         },
     );
 }
@@ -254,7 +255,9 @@ pub async fn stream_chat<R: Runtime>(
         return Err("REQUEST_CANCELLED: Generation cancelled.".into());
     }
 
-    let messages_json = serde_json::to_string(&request.messages)
+    crate::providers::validate_local_request(&request)?;
+    let messages = crate::providers::composed_messages(&request)?;
+    let messages_json = serde_json::to_string(&messages)
         .map_err(|_| "PROMPT_FORMAT_FAILED: The chat messages could not be encoded.".to_owned())?;
     call::<_, Accepted, _>(
         &app,
@@ -318,13 +321,14 @@ pub async fn stream_chat<R: Runtime>(
                                 .clone()
                                 .unwrap_or_else(|| request.request_id.clone()),
                             delta: event.text,
-                            reasoning: None,
+                            activity: None,
                             tool_calls: None,
                             tool_results: None,
                             done: Some(false),
                             usage: None,
                             error: None,
                             permission_request: None,
+                            provenance: None,
                         },
                     );
                 }
@@ -344,7 +348,7 @@ pub async fn stream_chat<R: Runtime>(
                         ChatStreamEvent {
                             request_id: request.request_id.clone(),
                             delta: None,
-                            reasoning: None,
+                            activity: None,
                             tool_calls: None,
                             tool_results: None,
                             done: Some(true),
@@ -359,6 +363,7 @@ pub async fn stream_chat<R: Runtime>(
                             }),
                             error,
                             permission_request: None,
+                            provenance: None,
                         },
                     );
                     return Ok(());

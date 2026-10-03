@@ -6,6 +6,7 @@ pub const MAX_EXPRESSION_BYTES: usize = 256;
 pub const MAX_TOOL_ROUNDS: u32 = 4;
 pub const MAX_TOOL_CALLS_PER_ROUND: u32 = 8;
 pub const MAX_PAYLOAD_BYTES: usize = 64 * 1024;
+pub const PROTOCOL_VERSION: &str = "juniper-tool-protocol-v1";
 
 #[derive(Debug, Error, PartialEq)]
 pub enum ToolError {
@@ -281,7 +282,7 @@ pub fn host_result(
     error: Option<Value>,
 ) -> Value {
     json!({
-        "protocolVersion": "juniper-tool-protocol-v1",
+        "protocolVersion": PROTOCOL_VERSION,
         "callId": call_id,
         "name": name,
         "status": status,
@@ -378,8 +379,25 @@ pub fn execute_call(
     }
 }
 
+/// The risk class of each host tool. The host decides it: the risk carried by
+/// a request's tool definitions is never trusted over this, and a tool the
+/// host does not implement is never offered.
+pub fn host_risk(name: &str) -> Option<&'static str> {
+    Some(match name {
+        "calculator.evaluate" | "datetime.current" | "unit.convert" | "system.info" => {
+            "automatic-safe"
+        }
+        "memory.list" | "chat.search" => "user-data-read",
+        "memory.save" | "memory.delete" => "user-data-write",
+        "file.read" | "file.metadata" => "filesystem-read",
+        _ => return None,
+    })
+}
+
+/// The last round's generation can only answer: a call made there would run
+/// with no later turn to read its result, so it is refused rather than run.
 pub fn loop_allowed(round: u32, calls_this_round: u32) -> bool {
-    round < MAX_TOOL_ROUNDS && calls_this_round <= MAX_TOOL_CALLS_PER_ROUND
+    round + 1 < MAX_TOOL_ROUNDS && calls_this_round <= MAX_TOOL_CALLS_PER_ROUND
 }
 
 struct Parser<'a> {
@@ -583,7 +601,8 @@ mod tests {
     #[test]
     fn loop_is_bounded() {
         assert!(loop_allowed(0, 8));
-        assert!(!loop_allowed(4, 0));
+        assert!(loop_allowed(MAX_TOOL_ROUNDS - 2, 1));
+        assert!(!loop_allowed(MAX_TOOL_ROUNDS - 1, 1));
         assert!(!loop_allowed(0, 9));
     }
 

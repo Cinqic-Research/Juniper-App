@@ -14,7 +14,12 @@ operations are narrow Rust commands:
 
 User-data and filesystem tools pause at a native permission dialog. The user
 can allow the current call once, grant access for the chat or assistant, or
-deny it. Chat-scoped grants are removed with private chats and are never
+deny it. Tools that change saved data (`memory.save`, `memory.delete`) are
+approved one call at a time: the dialog shows the exact text the host will
+save or delete, offers only "Allow once" or "Deny", and a stored grant never
+applies to them. Calls that cannot succeed (an unknown memory, an attachment
+not granted to this request, invalid arguments) are refused before the user is
+asked. Private chats are offered no memory or chat-search tools at all. Chat-scoped grants are removed with private chats and are never
 persisted for private conversations; assistant-scoped grants can be revoked
 from Settings › Tools & permissions.
 

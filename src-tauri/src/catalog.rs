@@ -13,9 +13,25 @@ pub struct CatalogArtifactFile {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ArtifactCapabilities {
+    pub tools: String,
+    pub thinking: String,
+    pub generation_parameters: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CatalogArtifact {
     pub id: String,
     pub runtime_id: String,
+    /// A qualified backend profile (`config/backends`) this artifact must run
+    /// with. Absent for models served by the generic local backend.
+    #[serde(default)]
+    pub backend_profile: Option<String>,
+    /// Capabilities established by qualification. Absent means unknown, and
+    /// unknown is never treated as supported.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capabilities: Option<ArtifactCapabilities>,
     pub format: String,
     pub platforms: Vec<String>,
     pub architectures: Vec<String>,
@@ -96,6 +112,17 @@ pub fn entries() -> Result<Vec<CatalogEntry>, String> {
                 || artifact.architectures.is_empty()
                 || artifact.size_bytes == 0
                 || artifact.source_revision.is_empty()
+                || artifact
+                    .backend_profile
+                    .as_deref()
+                    .is_some_and(|profile| crate::backend::profile(profile).is_err())
+                || artifact.capabilities.as_ref().is_some_and(|capabilities| {
+                    [&capabilities.tools, &capabilities.thinking]
+                        .iter()
+                        .any(|level| {
+                            !matches!(level.as_str(), "supported" | "unsupported" | "unknown")
+                        })
+                })
                 || !matches!(
                     artifact.maturity.as_str(),
                     "stable" | "beta" | "experimental"
@@ -151,12 +178,7 @@ mod tests {
     #[test]
     fn bundled_catalog_is_artifact_centric_and_integrity_pinned() {
         let entries = entries().expect("catalog should parse");
-        assert_eq!(entries.len(), 4);
-        assert!(
-            entries
-                .iter()
-                .all(|entry| entry.parameter_count < 1_000_000_000)
-        );
+        assert_eq!(entries.len(), 5);
         assert!(
             entries
                 .iter()
@@ -166,6 +188,42 @@ mod tests {
                         && artifact.files.iter().all(|file| valid_hash(&file.sha256))
                 })
         );
+        // Downloadable entries stay small; a large model is installed only
+        // from a file the user already has and that matches the pinned hash.
+        for entry in &entries {
+            let downloadable = entry.artifacts[0]
+                .files
+                .iter()
+                .all(|file| file.url.is_some());
+            assert!(
+                !downloadable || entry.parameter_count < 1_000_000_000,
+                "{}",
+                entry.id
+            );
+        }
+    }
+
+    #[test]
+    fn gpt_oss_is_import_only_and_bound_to_its_qualified_profile() {
+        let entry = find("gpt-oss-20b").expect("gpt-oss-20b should be cataloged");
+        let artifact = &entry.artifacts[0];
+        assert!(artifact.files.iter().all(|file| file.url.is_none()));
+        assert!(artifact.source_url.is_none());
+        let profile = crate::backend::profile(
+            artifact
+                .backend_profile
+                .as_deref()
+                .expect("backend profile"),
+        )
+        .expect("profile resolves");
+        assert_eq!(artifact.id, profile.artifact.id);
+        assert_eq!(
+            artifact.sha256.as_deref(),
+            Some(profile.artifact.sha256.as_str())
+        );
+        assert_eq!(artifact.size_bytes, profile.artifact.size_bytes);
+        assert_eq!(entry.source_revision, profile.model.revision);
+        assert_eq!(entry.context_length, u64::from(profile.server.ctx_size));
     }
 
     #[test]

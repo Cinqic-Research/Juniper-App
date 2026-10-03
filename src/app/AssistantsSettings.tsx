@@ -363,7 +363,10 @@ function AssistantBuilder({
           <Icon name="chevronRight" size={16} />
           Advanced generation
         </summary>
-        <p className="muted small">Only controls the selected runtime supports are sent to it.</p>
+        <p className="muted small">
+          Only controls the selected runtime supports are sent to it. Some models, such as gpt-oss,
+          always reason; for them “Off or lowest” means low effort.
+        </p>
         <div className="form-grid">
           {generationNumber('temperature', 'Temperature', 0, 2, 0.05)}
           {generationNumber('topP', 'Top P', 0, 1, 0.05)}
@@ -380,7 +383,7 @@ function AssistantBuilder({
               }
             >
               <option value="auto">Auto</option>
-              <option value="off">Off</option>
+              <option value="off">Off or lowest</option>
               <option value="on">On</option>
               <option value="low">Low</option>
               <option value="medium">Medium</option>

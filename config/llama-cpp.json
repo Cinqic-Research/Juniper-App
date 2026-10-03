@@ -3,5 +3,11 @@
   "commit": "e107984bcffcfd701e82738092a2b000b6fda7a2",
   "ndkVersion": "29.0.13113456",
   "cmakeVersion": "3.31.6",
-  "androidAbis": ["arm64-v8a", "x86_64"]
+  "androidAbis": ["arm64-v8a", "x86_64"],
+  "desktopCuda": {
+    "tag": "b11270",
+    "commit": "748d4225b9016b17ce4bcfa69fdc2c39f473a965",
+    "cudaArchitectures": "75",
+    "executable": "llama-server-cuda"
+  }
 }

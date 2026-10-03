@@ -7,6 +7,8 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
+#[cfg(unix)]
+use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tokio::time::Duration;
@@ -106,8 +108,10 @@ pub fn remove<R: Runtime>(app: &AppHandle<R>, catalog_id: &str) -> Result<(), St
         .artifacts
         .first()
         .ok_or_else(|| "The catalog entry has no downloadable artifact.".to_owned())?;
+    let installed = final_path(&directory, artifact)?;
     for path in [
-        final_path(&directory, artifact)?,
+        record_path(&installed),
+        installed.clone(),
         partial_path(&directory, artifact)?,
     ] {
         if path.exists() {
@@ -148,6 +152,11 @@ pub async fn download<R: Runtime>(
         .artifacts
         .first()
         .ok_or_else(|| "The catalog entry has no downloadable artifact.".to_owned())?;
+    if is_import_only(artifact) {
+        return Err(
+            "MODEL_IMPORT_ONLY: Juniper has no download source for this model. Import a copy of the verified file instead.".into(),
+        );
+    }
     if artifact.size_bytes > MAX_DOWNLOAD_BYTES {
         return Err(
             "MODEL_TOO_LARGE: This model is larger than Juniper's safe download limit.".into(),
@@ -320,6 +329,8 @@ pub async fn download<R: Runtime>(
     }
     fs::rename(&partial_file, &final_file)
         .map_err(|error| format!("MODEL_INSTALL_ERROR: {error}"))?;
+    // Juniper wrote and hashed these bytes itself; nothing else holds the file.
+    write_record(&final_file, current_record(&final_file, artifact));
     emit_progress(
         &app,
         request_id,
@@ -353,6 +364,120 @@ fn hash_existing(path: &Path, hasher: &mut Sha256) -> Result<(), String> {
     Ok(())
 }
 
+/// An artifact with no download source is installed only by importing a
+/// file the user already has.
+pub fn is_import_only(artifact: &CatalogArtifact) -> bool {
+    artifact.source_url.is_none() && artifact.files.iter().all(|file| file.url.is_none())
+}
+
+/// Hashing a multi-gigabyte model takes minutes on a hard disk, so a
+/// successful verification may be recorded beside the file. Unix trusts it
+/// only while size, modification time, and change time are stable and a probe
+/// shows that the filesystem distinguishes rapid changes. Other platforms
+/// rehash because the portable API exposes only a restorable modification
+/// time. The record itself is no stronger than its data file.
+#[derive(Debug, PartialEq, Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct VerificationRecord {
+    sha256: String,
+    size_bytes: u64,
+    modified_nanos: u128,
+    #[serde(default)]
+    changed_nanos: Option<i128>,
+}
+
+#[cfg(unix)]
+fn changed_nanos(metadata: &fs::Metadata) -> Option<i128> {
+    Some(i128::from(metadata.ctime()) * 1_000_000_000 + i128::from(metadata.ctime_nsec()))
+}
+
+// The portable metadata API exposes a user-settable modification time on
+// Windows. Without a change-time signal, the verification cache is disabled.
+#[cfg(not(unix))]
+fn changed_nanos(_metadata: &fs::Metadata) -> Option<i128> {
+    None
+}
+
+/// Filesystems with coarse change-time ticks can report the same ctime for a
+/// rapid same-size edit and mtime restore. Probe the model's own filesystem
+/// before trusting the verification cache; failure or coarse timestamps mean
+/// the model is rehashed on each use.
+#[cfg(unix)]
+fn ctime_is_precise_enough(path: &Path) -> bool {
+    let Some(parent) = path.parent() else {
+        return false;
+    };
+    let probe = parent.join(format!(
+        ".juniper-ctime-probe-{}",
+        uuid::Uuid::new_v4().simple()
+    ));
+    let mut created = false;
+    let result = (|| -> Option<bool> {
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(&probe)
+            .ok()?;
+        created = true;
+        file.write_all(&[0]).ok()?;
+        let mut previous = changed_nanos(&file.metadata().ok()?)?;
+        let started = std::time::Instant::now();
+        for value in 1u8..=16 {
+            file.set_len(0).ok()?;
+            file.seek(SeekFrom::Start(0)).ok()?;
+            file.write_all(&[value]).ok()?;
+            file.flush().ok()?;
+            let current = changed_nanos(&file.metadata().ok()?)?;
+            if current <= previous {
+                return Some(false);
+            }
+            previous = current;
+        }
+        Some(started.elapsed() <= std::time::Duration::from_secs(1))
+    })()
+    .unwrap_or(false);
+    if created {
+        let _ = fs::remove_file(probe);
+    }
+    result
+}
+
+#[cfg(not(unix))]
+fn ctime_is_precise_enough(_path: &Path) -> bool {
+    false
+}
+
+fn record_path(path: &Path) -> PathBuf {
+    path.with_extension("gguf.verified")
+}
+
+fn current_record(path: &Path, artifact: &CatalogArtifact) -> Option<VerificationRecord> {
+    let metadata = fs::symlink_metadata(path).ok()?;
+    if !metadata.file_type().is_file() {
+        return None;
+    }
+    Some(VerificationRecord {
+        sha256: artifact.sha256.clone()?,
+        size_bytes: metadata.len(),
+        modified_nanos: metadata
+            .modified()
+            .ok()?
+            .duration_since(std::time::UNIX_EPOCH)
+            .ok()?
+            .as_nanos(),
+        changed_nanos: changed_nanos(&metadata),
+    })
+}
+
+fn write_record(path: &Path, record: Option<VerificationRecord>) {
+    if let Some(record) = record
+        && let Ok(text) = serde_json::to_string(&record)
+    {
+        let _ = fs::write(record_path(path), text);
+    }
+}
+
 fn verify_file(path: &Path, artifact: &CatalogArtifact) -> Result<bool, String> {
     let link_metadata = fs::symlink_metadata(path).map_err(|error| error.to_string())?;
     if link_metadata.file_type().is_symlink() || !link_metadata.file_type().is_file() {
@@ -362,9 +487,229 @@ fn verify_file(path: &Path, artifact: &CatalogArtifact) -> Result<bool, String> 
     if metadata.len() != artifact.size_bytes {
         return Ok(false);
     }
+    let recorded = fs::read_to_string(record_path(path))
+        .ok()
+        .and_then(|text| serde_json::from_str::<VerificationRecord>(&text).ok());
+    let before = current_record(path, artifact);
+    if before
+        .as_ref()
+        .is_some_and(|record| record.changed_nanos.is_some())
+        && recorded == before
+        && ctime_is_precise_enough(path)
+    {
+        return Ok(true);
+    }
     let mut hasher = Sha256::new();
     hash_existing(path, &mut hasher)?;
-    Ok(artifact.sha256.as_deref() == Some(format!("{:x}", hasher.finalize()).as_str()))
+    let verified = artifact.sha256.as_deref() == Some(format!("{:x}", hasher.finalize()).as_str());
+    // A file that changed while it was being hashed is not the file that was
+    // hashed; it is neither trusted now nor recorded.
+    let unchanged = before.is_some() && before == current_record(path, artifact);
+    if verified && unchanged && ctime_is_precise_enough(path) {
+        write_record(path, before);
+    } else {
+        let _ = fs::remove_file(record_path(path));
+    }
+    Ok(verified && unchanged)
+}
+
+/// Installs a catalog artifact from a file the user selected. On the same
+/// filesystem the file is hard-linked rather than copied, so a 12 GB model is
+/// not duplicated; either way the installed bytes are hashed against the
+/// catalog before they become usable.
+pub async fn import<R: Runtime>(
+    app: AppHandle<R>,
+    state: &AppState,
+    catalog_id: &str,
+    source: &Path,
+    request_id: &str,
+    cancellation: Cancellation,
+) -> Result<(), String> {
+    let entry = catalog::find(catalog_id)?;
+    let artifact = entry
+        .artifacts
+        .first()
+        .ok_or_else(|| "The catalog entry has no artifact.".to_owned())?
+        .clone();
+    let source_metadata = fs::symlink_metadata(source)
+        .map_err(|_| "MODEL_IMPORT_ERROR: The selected file is no longer available.".to_owned())?;
+    if !source_metadata.file_type().is_file() {
+        return Err("MODEL_IMPORT_ERROR: Select a regular file, not a link.".into());
+    }
+    if source_metadata.len() != artifact.size_bytes {
+        return Err(format!(
+            "MODEL_CHECKSUM_MISMATCH: The selected file is {}, but this model's verified file is {}.",
+            format_bytes(source_metadata.len()),
+            format_bytes(artifact.size_bytes)
+        ));
+    }
+    let directory = models_directory(&app)?;
+    let final_file = final_path(&directory, &artifact)?;
+    let partial_file = partial_path(&directory, &artifact)?;
+    if final_file.is_file() && verify_file(&final_file, &artifact)? {
+        emit_progress(
+            &app,
+            request_id,
+            "ready",
+            artifact.size_bytes,
+            artifact.size_bytes,
+            None,
+        );
+        return Ok(());
+    }
+    if fs::symlink_metadata(&partial_file).is_ok() {
+        fs::remove_file(&partial_file).map_err(|error| format!("MODEL_STORAGE_ERROR: {error}"))?;
+    }
+    let linked = fs::hard_link(source, &partial_file).is_ok();
+    if !linked {
+        let required = artifact
+            .size_bytes
+            .saturating_add(STORAGE_HEADROOM_BYTES)
+            .max(entry.minimum_storage_bytes);
+        if device::collect(&directory)
+            .free_storage_bytes
+            .is_some_and(|free| free < required)
+        {
+            return Err(format!(
+                "INSUFFICIENT_STORAGE: Free {} before importing this model.",
+                format_bytes(required)
+            ));
+        }
+    }
+    let before = current_record(&partial_file, &artifact);
+    let task_source = source.to_owned();
+    let task_partial = partial_file.clone();
+    let task_app = app.clone();
+    let task_request = request_id.to_owned();
+    let total = artifact.size_bytes;
+    let task_cancellation = cancellation.clone();
+    let digest = tokio::task::spawn_blocking(move || {
+        hash_into_place(
+            &task_source,
+            &task_partial,
+            linked,
+            total,
+            &task_cancellation,
+            |completed| {
+                emit_progress(
+                    &task_app,
+                    &task_request,
+                    if linked { "verifying" } else { "copying" },
+                    completed,
+                    total,
+                    None,
+                )
+            },
+        )
+    })
+    .await
+    .map_err(|_| "MODEL_IMPORT_ERROR: The import was interrupted.".to_owned())?;
+    let digest = match digest {
+        Ok(digest) => digest,
+        Err(error) => {
+            let _ = fs::remove_file(&partial_file);
+            return Err(error);
+        }
+    };
+    if artifact.sha256.as_deref() != Some(digest.as_str()) {
+        let _ = fs::remove_file(&partial_file);
+        emit_progress(
+            &app,
+            request_id,
+            "failed",
+            total,
+            total,
+            Some((
+                "MODEL_CHECKSUM_MISMATCH",
+                "The selected file is not the verified model file.",
+            )),
+        );
+        return Err(
+            "MODEL_CHECKSUM_MISMATCH: The selected file is not the verified model file.".into(),
+        );
+    }
+    // A hard link shares its bytes with the user's file, which can still be
+    // changed under its original name; record only what was actually hashed.
+    if linked && before != current_record(&partial_file, &artifact) {
+        let _ = fs::remove_file(&partial_file);
+        return Err("MODEL_CHECKSUM_MISMATCH: The selected file changed during import.".into());
+    }
+    fs::rename(&partial_file, &final_file)
+        .map_err(|error| format!("MODEL_INSTALL_ERROR: {error}"))?;
+    write_record(&final_file, current_record(&final_file, &artifact));
+    emit_progress(&app, request_id, "ready", total, total, None);
+    crate::commands::record_runtime_log(
+        state,
+        "model.imported",
+        None,
+        Some("juniper-local"),
+        Some(catalog_id),
+    );
+    Ok(())
+}
+
+/// Hashes the bytes that end up at `destination`: the linked file itself, or
+/// each chunk as it is copied, so what is verified is what is installed.
+fn hash_into_place(
+    source: &Path,
+    destination: &Path,
+    linked: bool,
+    total: u64,
+    cancellation: &Cancellation,
+    progress: impl Fn(u64),
+) -> Result<String, String> {
+    let mut reader = File::open(if linked { destination } else { source })
+        .map_err(|_| "MODEL_IMPORT_ERROR: The selected file could not be read.".to_owned())?;
+    let mut writer = if linked {
+        None
+    } else {
+        Some(
+            OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(destination)
+                .map_err(|error| format!("MODEL_STORAGE_ERROR: {error}"))?,
+        )
+    };
+    let mut hasher = Sha256::new();
+    let mut buffer = vec![0u8; 4 * 1024 * 1024];
+    let mut completed = 0u64;
+    let mut reported = 0u64;
+    loop {
+        if cancellation.is_cancelled() {
+            return Err("MODEL_IMPORT_CANCELLED: Import cancelled.".into());
+        }
+        let bytes = reader
+            .read(&mut buffer)
+            .map_err(|_| "MODEL_IMPORT_ERROR: The selected file could not be read.".to_owned())?;
+        if bytes == 0 {
+            break;
+        }
+        hasher.update(&buffer[..bytes]);
+        if let Some(writer) = writer.as_mut() {
+            writer
+                .write_all(&buffer[..bytes])
+                .map_err(|error| format!("MODEL_STORAGE_ERROR: {error}"))?;
+        }
+        completed += bytes as u64;
+        if completed > total {
+            return Err("MODEL_CHECKSUM_MISMATCH: The selected file changed during import.".into());
+        }
+        if completed - reported >= 64 * 1024 * 1024 || completed == total {
+            reported = completed;
+            progress(completed);
+        }
+    }
+    if let Some(mut writer) = writer {
+        writer
+            .flush()
+            .and_then(|_| writer.sync_all())
+            .map_err(|error| format!("MODEL_STORAGE_ERROR: {error}"))?;
+    }
+    if completed != total {
+        return Err("MODEL_CHECKSUM_MISMATCH: The selected file changed during import.".into());
+    }
+    Ok(format!("{:x}", hasher.finalize()))
 }
 
 fn is_symlink(path: &Path) -> Result<bool, String> {
@@ -444,6 +789,8 @@ mod tests {
             quantization: Some("Q4_K_M".into()),
             size_bytes,
             sha256: Some(sha256.into()),
+            backend_profile: None,
+            capabilities: None,
             source_url: Some("https://huggingface.co/test/model".into()),
             source_revision: "main".into(),
             files: vec![crate::catalog::CatalogArtifactFile {
@@ -456,6 +803,32 @@ mod tests {
             maturity: "stable".into(),
             qualification: "qualified".into(),
         }
+    }
+
+    #[test]
+    fn a_verification_record_is_trusted_only_for_the_unchanged_file() {
+        let root =
+            std::env::temp_dir().join(format!("juniper-record-test-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&root).expect("test directory should be created");
+        let path = root.join("model.gguf");
+        fs::write(&path, b"model").expect("model written");
+        let artifact = artifact_for_test(5, &format!("{:x}", Sha256::digest(b"model")));
+        assert!(verify_file(&path, &artifact).expect("verify"));
+        assert!(verify_file(&path, &artifact).expect("repeat verify"));
+        let original_modified = fs::metadata(&path)
+            .expect("metadata should exist")
+            .modified()
+            .expect("modification time should exist");
+        fs::write(&path, b"MODEL").expect("model replaced");
+        File::options()
+            .write(true)
+            .open(&path)
+            .expect("model should open")
+            .set_times(fs::FileTimes::new().set_modified(original_modified))
+            .expect("original modification time should be restored");
+        assert!(!verify_file(&path, &artifact).expect("verify"));
+        assert!(!record_path(&path).exists());
+        fs::remove_dir_all(root).expect("cleanup");
     }
 
     #[cfg(unix)]

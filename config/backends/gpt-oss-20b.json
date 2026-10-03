@@ -1,0 +1,55 @@
+{
+  "id": "gpt-oss-20b-mxfp4-flowbox.v1",
+  "backend": "gpt-oss-harmony",
+  "qualification": "Cinqic-Research/Juniper-LM-1.1 reports/final/final-selection.json, frozen 2026-10-02",
+  "model": {
+    "name": "gpt-oss-20b",
+    "developer": "OpenAI",
+    "repository": "openai/gpt-oss-20b",
+    "revision": "6cee5e81ee83917806bbde320786a8fb61efebee",
+    "license": "Apache-2.0"
+  },
+  "artifact": {
+    "id": "gpt-oss-20b-6cee5e81ee83-mxfp4-moe",
+    "quantization": "MXFP4_MOE",
+    "sizeBytes": 12109566784,
+    "sha256": "9d7364f02d9952e158ab462629e72401bec844d2243cc3854b271bb35d33d23d"
+  },
+  "runtime": {
+    "engine": "llama.cpp",
+    "tag": "b11270",
+    "commit": "748d4225b9016b17ce4bcfa69fdc2c39f473a965",
+    "accelerator": "cuda"
+  },
+  "template": {
+    "file": "gpt-oss-harmony.v1.jinja",
+    "sha256": "f9c0f3d3324b708722c56afc83f51b7120f394b59da548ff9bc1c82550628984",
+    "servedSha256": "92b7acc090345c2dd1210a2d0c9e08da84c89fa1ed0406bdb83d22ae96a7167c"
+  },
+  "server": {
+    "ctxSize": 16384,
+    "nGpuLayers": 99,
+    "nCpuMoe": 18,
+    "flashAttn": "on",
+    "cacheTypeK": "f16",
+    "cacheTypeV": "f16",
+    "threads": 8,
+    "batchSize": 2048,
+    "ubatchSize": 512,
+    "parallel": 1,
+    "cacheRamMib": 1024
+  },
+  "lifecycle": {
+    "startupTimeoutSeconds": 600,
+    "firstTokenTimeoutSeconds": 300,
+    "warmUp": true
+  },
+  "generation": {
+    "temperature": 1.0,
+    "topP": 1.0,
+    "topK": 0,
+    "minP": 0.0,
+    "defaultMaxTokens": 4096,
+    "maxTokensCeiling": 8192
+  }
+}

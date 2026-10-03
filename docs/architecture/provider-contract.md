@@ -17,5 +17,5 @@ generic discovery remains the default.
 When a provider returns tool calls, the native adapter accumulates streamed
 fragments, normalizes them, executes only the bounded host-safe tool set, sends
 host-authored `juniper-tool-protocol-v1` results back to the provider, and
-continues for at most four rounds. User-data tools remain behind explicit
+continues for at most four generations; tools run only in the first three. User-data tools remain behind explicit
 permission work and are not enabled by the default chat request.

@@ -203,13 +203,7 @@ export interface Assistant {
 }
 
 export type MessageRole = 'system' | 'user' | 'assistant' | 'tool'
-export type MessagePartType =
-  | 'text'
-  | 'reasoning'
-  | 'attachment'
-  | 'tool-call'
-  | 'tool-result'
-  | 'error'
+export type MessagePartType = 'text' | 'attachment' | 'tool-call' | 'tool-result' | 'error'
 
 export interface MessagePart {
   id: string
@@ -230,6 +224,36 @@ export interface ChatMessage {
   providerId?: string
   isStreaming?: boolean
   usage?: GenerationUsage
+  /** What produced this answer, as reported by the native host. */
+  provenance?: Provenance
+}
+
+/** Host-reported identity of the model, runtime, and behavior behind an answer. */
+export interface Provenance {
+  backend: string
+  constitution: string
+  toolProtocol: string
+  providerKind: string
+  modelId: string
+  executionLocation: string
+  reasoningEffort?: string | null
+  runtime?: RuntimeIdentity | null
+}
+
+export interface RuntimeIdentity {
+  artifactId: string
+  artifactSha256: string
+  modelRepository?: string | null
+  modelRevision?: string | null
+  runtimeBuild?: string | null
+  templateSha256?: string | null
+  contextSize?: number | null
+}
+
+export interface LocalRuntimeStatus {
+  state: 'idle' | 'loading' | 'ready' | 'busy'
+  artifactId?: string | null
+  identity?: RuntimeIdentity | null
 }
 
 export interface Conversation {
@@ -282,6 +306,10 @@ export interface PermissionRequest {
   risk: ToolDefinition['risk']
   assistantId: string
   conversationId: string
+  /** Host-authored description of exactly what approval allows. */
+  preview?: string | null
+  /** False for persistent writes, which are approved one call at a time. */
+  standingGrantAllowed: boolean
 }
 
 export interface HostToolContext {
@@ -363,6 +391,7 @@ export interface AppData {
 export interface ChatRequest {
   requestId: string
   assistantId: string
+  assistantName: string
   conversationId: string
   privateChat: boolean
   provider: ProviderProfile
@@ -379,6 +408,8 @@ export interface ChatRequest {
     sizeBytes?: number
     contentType?: string
   }>
+  /** Curated memories chosen for this request; the host resolves them. */
+  contextMemoryIds: string[]
 }
 
 export interface DiscoveredModel {
@@ -457,14 +488,21 @@ export interface GenerationUsage {
   durationMs?: number
 }
 
+/**
+ * Host progress while no answer text is streaming. Raw model reasoning is
+ * never sent to the interface; only the fact that the model is reasoning.
+ */
+export type RuntimeActivity = 'loading-model' | 'warming-up' | 'restarting-model' | 'reasoning'
+
 export interface ChatStreamEvent {
   requestId: string
   delta?: string
-  reasoning?: string
+  activity?: RuntimeActivity | null
   toolCalls?: NormalizedToolCall[]
   toolResults?: HostToolResult[]
   permissionRequest?: PermissionRequest
   usage?: GenerationUsage
   done?: boolean
-  error?: { code: string; message: string }
+  error?: { code: string; message: string } | null
+  provenance?: Provenance | null
 }
