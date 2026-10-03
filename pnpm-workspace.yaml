@@ -1,5 +1,11 @@
 allowBuilds:
   esbuild: true
+auditConfig:
+  # GHSA-vfj7-8cjw-p6xm has no fixed release upstream as of 2026-10-03.
+  # The affected braces@3.0.3 path is dev-only through typescript-eslint.
+  # Remove this exact exception after an upstream fix is released.
+  ignoreGhsas:
+    - GHSA-vfj7-8cjw-p6xm
 overrides:
   esbuild: 0.28.1
   vite: 7.3.5

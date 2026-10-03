@@ -7,6 +7,8 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
+#[cfg(unix)]
+use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tokio::time::Duration;
@@ -369,15 +371,30 @@ pub fn is_import_only(artifact: &CatalogArtifact) -> bool {
 }
 
 /// Hashing a multi-gigabyte model takes minutes on a hard disk, so a
-/// successful verification is recorded beside the file and trusted only while
-/// the file's size and modification time are unchanged. The record is no
-/// stronger than the file it describes: both live in Juniper's data directory.
+/// successful verification is recorded beside the file and trusted on Unix
+/// only while size, modification time, and filesystem change time are stable.
+/// Other platforms rehash because the portable API exposes only a restorable
+/// modification time. The record itself is no stronger than its data file.
 #[derive(Debug, PartialEq, Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct VerificationRecord {
     sha256: String,
     size_bytes: u64,
     modified_nanos: u128,
+    #[serde(default)]
+    changed_nanos: Option<i128>,
+}
+
+#[cfg(unix)]
+fn changed_nanos(metadata: &fs::Metadata) -> Option<i128> {
+    Some(i128::from(metadata.ctime()) * 1_000_000_000 + i128::from(metadata.ctime_nsec()))
+}
+
+// The portable metadata API exposes a user-settable modification time on
+// Windows. Without a change-time signal, the verification cache is disabled.
+#[cfg(not(unix))]
+fn changed_nanos(_metadata: &fs::Metadata) -> Option<i128> {
+    None
 }
 
 fn record_path(path: &Path) -> PathBuf {
@@ -398,6 +415,7 @@ fn current_record(path: &Path, artifact: &CatalogArtifact) -> Option<Verificatio
             .duration_since(std::time::UNIX_EPOCH)
             .ok()?
             .as_nanos(),
+        changed_nanos: changed_nanos(&metadata),
     })
 }
 
@@ -422,7 +440,11 @@ fn verify_file(path: &Path, artifact: &CatalogArtifact) -> Result<bool, String> 
         .ok()
         .and_then(|text| serde_json::from_str::<VerificationRecord>(&text).ok());
     let before = current_record(path, artifact);
-    if recorded.is_some() && recorded == before {
+    if before
+        .as_ref()
+        .is_some_and(|record| record.changed_nanos.is_some())
+        && recorded == before
+    {
         return Ok(true);
     }
     let mut hasher = Sha256::new();
@@ -742,9 +764,19 @@ mod tests {
         assert!(verify_file(&path, &artifact).expect("verify"));
         assert!(record_path(&path).exists());
         assert!(verify_file(&path, &artifact).expect("cached verify"));
-        // Same size, different bytes, newer modification time: rehashed and rejected.
-        std::thread::sleep(std::time::Duration::from_millis(20));
+        // Restoring the original modification time cannot preserve Unix
+        // change time, so same-size edits are rehashed instead of trusted.
+        let original_modified = fs::metadata(&path)
+            .expect("metadata should exist")
+            .modified()
+            .expect("modification time should exist");
         fs::write(&path, b"MODEL").expect("model replaced");
+        File::options()
+            .write(true)
+            .open(&path)
+            .expect("model should open")
+            .set_times(fs::FileTimes::new().set_modified(original_modified))
+            .expect("original modification time should be restored");
         assert!(!verify_file(&path, &artifact).expect("verify"));
         assert!(!record_path(&path).exists());
         fs::remove_dir_all(root).expect("cleanup");

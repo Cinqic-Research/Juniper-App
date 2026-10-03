@@ -64,16 +64,17 @@ describe('chat stream handling', () => {
     expect(hasUncheckedReferences(text('See https://example.com/paper.'))).toBe(true)
     expect(hasUncheckedReferences(text('DOI 10.1234/abcd.5678 describes it.'))).toBe(true)
     expect(hasUncheckedReferences(text('Plain answer without references.'))).toBe(false)
-    const supplied = reply([
+    const repeatedFromAttachment = reply([
       { id: 't', type: 'text', text: 'The file mentions https://cinqic.com.' },
       {
         id: 'r',
         type: 'tool-result',
         status: 'success',
+        name: 'file.read',
         text: '{"content":"Visit https://cinqic.com for details"}',
       },
     ])
-    expect(hasUncheckedReferences(supplied)).toBe(false)
+    expect(hasUncheckedReferences(repeatedFromAttachment)).toBe(true)
   })
 
   it('notes when a reply claims a memory change no host result shows', () => {

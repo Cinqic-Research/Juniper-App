@@ -38,7 +38,8 @@ JUNIPER_EVAL_OUT=results.jsonl JUNIPER_EVAL_SEEDS=3 \
   -- --ignored --nocapture live_wrapper_evaluation
 ```
 
-`JUNIPER_EVAL_ONLY=<id prefix>` limits the run. Results append to
+`JUNIPER_EVAL_ONLY=<id prefix>` limits the run; comma-separated prefixes select
+several groups in one live server session. Results append to
 `JUNIPER_EVAL_OUT`, one line per case, seed, and condition (`wrapper` or
 `raw`), with each check's outcome and the answer text.
 

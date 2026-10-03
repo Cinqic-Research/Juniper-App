@@ -128,17 +128,17 @@ refusals in v2 (2/3) where v1 explained (3/3).
 
 ### Runtime events
 
-2 of 11 `markup-01` runs in v2 ended with llama.cpp reporting "The model
-produced output that does not match the expected peg-native format": the
-Harmony parser rejected the model's output. Juniper fails the reply with
-`LOCAL_RUNTIME_ERROR` and does not show the server's text.
+2 of 11 `markup-01` runs in v2 ended in runtime errors. The retained records
+do not preserve a specific underlying parser cause for both runs. Juniper
+fails these replies with a sanitized runtime error and does not show the
+server's text.
 
 ## Conclusions
 
 - The wrapper sharply reduced fabrication about nonexistent entities and fixed
   identity, on these cases. It did not eliminate fabrication: across all
   wrapper runs of these cases, about one answer in six was fabricated or
-  partly invented (12 of 72), against 19 of 30 raw answers that were given.
+  partly invented (12 of 72), against 19 of 27 raw answers that were given.
 - Host enforcement held everywhere it applies: no injected tool call ran, no
   memory was written without approval, raw reasoning never reached the
   interface.

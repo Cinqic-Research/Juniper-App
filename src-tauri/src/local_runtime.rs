@@ -63,6 +63,8 @@ impl Resident {
 #[derive(Clone)]
 struct Route {
     endpoint: String,
+    port: u16,
+    owner_pid: Option<u32>,
     api_key: String,
     identity: RuntimeIdentity,
     profile: Option<BackendProfile>,
@@ -359,6 +361,7 @@ pub async fn stream_chat<R: Runtime>(
             Backend::GptOss(Box::new(profile))
         }),
         loopback_key: Some(route.api_key.clone()),
+        loopback_owner: route.owner_pid.map(|pid| (pid, route.port)),
         lineage: Some(route.lineage.clone()),
     };
     let mut normalized = request;
@@ -407,6 +410,14 @@ async fn start<R: Runtime>(
             &profile.runtime.commit[..9],
             runtime_build.as_deref().unwrap_or("unidentified")
         ));
+    }
+    if let Some(profile) = &profile
+        && profile.runtime.accelerator == "cuda"
+        && !runtime_has_cuda_device(&executable).await
+    {
+        return Err(
+            "LOCAL_RUNTIME_GPU_UNAVAILABLE: The selected llama.cpp build does not report a usable CUDA device.".into(),
+        );
     }
     let runtime_dir = runtime_directory(app)?;
     let key = KeyFile::create(&runtime_dir)?;
@@ -467,11 +478,14 @@ async fn start<R: Runtime>(
             "LOCAL_RUNTIME_UNAVAILABLE: Juniper's local runtime could not be started.".to_owned()
         })?;
     let diagnostics = capture_stderr(&mut child);
+    let owner_pid = child.id();
     #[cfg(target_os = "linux")]
-    let pid = child.id();
+    let pid = owner_pid;
     *starting.lock().map_err(|_| state_error())? = Some(child);
     let route = Route {
         endpoint: format!("http://127.0.0.1:{port}"),
+        port,
+        owner_pid,
         api_key: key.secret.clone(),
         identity: RuntimeIdentity {
             artifact_id: artifact.id.clone(),
@@ -689,6 +703,39 @@ async fn runtime_build(executable: &Path) -> Option<String> {
     parse_version(&text)
 }
 
+async fn runtime_has_cuda_device(executable: &Path) -> bool {
+    let Ok(output) = timeout(
+        PROBE_TIMEOUT,
+        tokio::process::Command::new(executable)
+            .arg("--list-devices")
+            .stdin(Stdio::null())
+            .kill_on_drop(true)
+            .output(),
+    )
+    .await
+    else {
+        return false;
+    };
+    let Ok(output) = output else { return false };
+    if !output.status.success() {
+        return false;
+    }
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    has_cuda_device(&text)
+}
+
+fn has_cuda_device(text: &str) -> bool {
+    text.lines().any(|line| {
+        line.trim_start()
+            .strip_prefix("CUDA")
+            .is_some_and(|tail| tail.chars().next().is_some_and(|ch| ch.is_ascii_digit()))
+    })
+}
+
 fn parse_version(text: &str) -> Option<String> {
     let build = text.split("build ").nth(1)?.split(',').next()?.trim();
     let commit = text.split("commit ").nth(1)?.split(')').next()?.trim();
@@ -704,6 +751,7 @@ fn parse_version(text: &str) -> Option<String> {
 fn client() -> Result<reqwest::Client, String> {
     reqwest::Client::builder()
         .connect_timeout(PROBE_TIMEOUT)
+        .no_proxy()
         .build()
         .map_err(|_| "LOCAL_RUNTIME_FAILED: The runtime client could not be initialized.".into())
 }
@@ -765,7 +813,7 @@ where
 /// The port was free when Juniper chose it, but any local process, including
 /// another user's, could bind it first; the key is not sent until this holds.
 #[cfg(target_os = "linux")]
-fn listener_belongs_to(pid: u32, port: u16) -> bool {
+pub(crate) fn listener_belongs_to(pid: u32, port: u16) -> bool {
     // /proc/net/tcp prints the address as the raw in-memory u32.
     let local = format!(
         "{:08X}:{port:04X}",
@@ -805,6 +853,7 @@ fn listener_belongs_to(pid: u32, port: u16) -> bool {
 async fn fetch_props(route: &Route) -> Result<Value, String> {
     let unidentified =
         || "RUNTIME_IDENTITY_MISMATCH: The local runtime did not report its identity.".to_owned();
+    ensure_route_listener_owner(route)?;
     let response = client()?
         .get(format!("{}/props", route.endpoint))
         .bearer_auth(&route.api_key)
@@ -833,6 +882,19 @@ fn check_ownership(props: &Value, model_path: &str) -> Result<(), String> {
     }
 }
 
+fn ensure_route_listener_owner(route: &Route) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    if !route
+        .owner_pid
+        .is_some_and(|pid| listener_belongs_to(pid, route.port))
+    {
+        return Err(
+            "LOCAL_RUNTIME_UNAVAILABLE: The resident server no longer owns its local port.".into(),
+        );
+    }
+    Ok(())
+}
+
 /// Confirms the loaded server is the qualified one: build, served template
 /// (as llama.cpp rewrote it), and context size.
 fn check_props(props: &Value, profile: &BackendProfile) -> Result<(), String> {
@@ -859,6 +921,7 @@ fn check_props(props: &Value, profile: &BackendProfile) -> Result<(), String> {
 /// One throwaway request so the first real answer does not pay for faulting
 /// CPU-side experts into memory.
 async fn warm_up(route: &Route, cancellation: &Cancellation) -> Result<(), String> {
+    ensure_route_listener_owner(route)?;
     let call = client()?
         .post(format!("{}/v1/chat/completions", route.endpoint))
         .bearer_auth(&route.api_key)
@@ -1004,6 +1067,15 @@ mod tests {
     }
 
     #[test]
+    fn a_cuda_profile_requires_a_reported_cuda_device() {
+        assert!(has_cuda_device(
+            "Available devices:\n  CUDA0: NVIDIA GeForce RTX 2060 (5737 MiB)\n"
+        ));
+        assert!(!has_cuda_device("Available devices:\n  CPU: AMD Ryzen\n"));
+        assert!(!has_cuda_device("Available devices:\n  CUDA: no device\n"));
+    }
+
+    #[test]
     fn served_identity_must_match_build_template_and_context() {
         let profile = profile();
         let served = |template: &str, build: &str, context: u64| {
@@ -1143,6 +1215,8 @@ mod tests {
                 child,
                 route: Route {
                     endpoint: "http://127.0.0.1:9".into(),
+                    port: 9,
+                    owner_pid: Some(pid),
                     api_key: "key".into(),
                     identity: RuntimeIdentity::default(),
                     profile: None,
@@ -1181,6 +1255,8 @@ mod tests {
                 child,
                 route: Route {
                     endpoint: "http://127.0.0.1:9".into(),
+                    port: 9,
+                    owner_pid: None,
                     api_key: "key".into(),
                     identity: RuntimeIdentity::default(),
                     profile: None,

@@ -46,19 +46,11 @@ function formatTime(value: string): string | null {
 const MODEL_WRITTEN_REFERENCE =
   /\bhttps?:\/\/\S+|\bwww\.\S+\.\S+|\b10\.\d{4,9}\/\S+|\barXiv:\s?\d{4}\.\d{4,5}/i
 
-/**
- * Juniper has no browsing tool, so a link, DOI, or arXiv ID in an answer came
- * from the model and has not been checked. A host tool result that contains
- * the same text is the only evidence the host itself supplied it.
- */
+/** Juniper has no browsing tool, so model-written links and citations are unchecked. */
 export function hasUncheckedReferences(message: ChatMessage): boolean {
   const content = textPart(message)
-  const evidence = message.parts
-    .filter((part) => part.type === 'tool-result' && part.status === 'success')
-    .map((part) => part.text ?? '')
-    .join('\n')
   const references = content.match(new RegExp(MODEL_WRITTEN_REFERENCE.source, 'gi')) ?? []
-  return references.some((reference) => !evidence.includes(reference.replace(/[).,;]+$/, '')))
+  return references.length > 0
 }
 
 const MEMORY_WORD = /\b(memory|memories|remember(ed)?|reminder)\b/i

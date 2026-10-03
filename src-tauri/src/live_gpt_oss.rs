@@ -656,7 +656,17 @@ fn live_wrapper_evaluation() {
         .unwrap_or(seeds);
     let output_path =
         std::env::var("JUNIPER_EVAL_OUT").expect("set JUNIPER_EVAL_OUT to a results path");
-    let only = std::env::var("JUNIPER_EVAL_ONLY").ok();
+    let only = std::env::var("JUNIPER_EVAL_ONLY")
+        .ok()
+        .map(|value| {
+            value
+                .split(',')
+                .map(str::trim)
+                .filter(|prefix| !prefix.is_empty())
+                .map(str::to_owned)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
     let mut cases: Vec<(String, Case)> = CASES
         .lines()
         .filter(|line| !line.trim().is_empty())
@@ -691,8 +701,11 @@ fn live_wrapper_evaluation() {
             }
         }
     }
-    if let Some(only) = &only {
-        cases.retain(|(_, case)| case.id.starts_with(only.as_str()));
+    if !only.is_empty() {
+        cases.retain(|(_, case)| {
+            only.iter()
+                .any(|prefix| case.id.starts_with(prefix.as_str()))
+        });
     }
     let (app, state) = app_and_state();
     let _stop = StopOnDrop(state);

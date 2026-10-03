@@ -60,16 +60,22 @@ fn provider_client() -> Result<Client, ProviderError> {
 /// policy's idle limit while streaming and by this read timeout (with margin,
 /// so the idle check reports first) while waiting for the response.
 fn streaming_client(policy: &RequestPolicy) -> Result<Client, ProviderError> {
-    Client::builder()
+    let builder = Client::builder()
         .connect_timeout(CONNECT_TIMEOUT)
-        .read_timeout(policy.idle_timeout + Duration::from_secs(5))
-        .build()
-        .map_err(|_| {
-            ProviderError::new(
-                "PROVIDER_CLIENT_ERROR",
-                "The provider client could not be initialized.",
-            )
-        })
+        .read_timeout(policy.idle_timeout + Duration::from_secs(5));
+    let builder = if policy.loopback_key.is_some() {
+        // A bearer key for Juniper's private loopback server must never be
+        // forwarded to an HTTP(S) proxy from the user's environment.
+        builder.no_proxy()
+    } else {
+        builder
+    };
+    builder.build().map_err(|_| {
+        ProviderError::new(
+            "PROVIDER_CLIENT_ERROR",
+            "The provider client could not be initialized.",
+        )
+    })
 }
 
 fn provider_client_for(
@@ -514,13 +520,24 @@ impl TurnOutcome {
         }
     }
 
+    fn validate_content(&self, policy: &RequestPolicy) -> Result<(), ProviderError> {
+        backend::validate_answer(policy, &self.content)
+            .map_err(|(code, message)| ProviderError::new(code, message))?;
+        if policy.requires_stop_finish() && self.content_overflowed {
+            return Err(ProviderError::new(
+                "MODEL_OUTPUT_INVALID",
+                "The model's answer was too large to validate and was not accepted.",
+            ));
+        }
+        Ok(())
+    }
+
     /// A turn without tool calls is the answer. It is accepted only if it
     /// finished normally, is non-empty, and carries no protocol markers.
     fn accept_answer(&self, policy: &RequestPolicy) -> Result<(), ProviderError> {
         // Markers first: a truncated answer is kept as partial text, and text
         // carrying raw protocol (possibly analysis) must not be kept at all.
-        backend::validate_answer(policy, &self.content)
-            .map_err(|(code, message)| ProviderError::new(code, message))?;
+        self.validate_content(policy)?;
         if self.finish_reason.as_deref() == Some("length") {
             return Err(if self.content.trim().is_empty() {
                 ProviderError::new(
@@ -547,6 +564,20 @@ impl TurnOutcome {
             ));
         }
         Ok(())
+    }
+}
+
+fn emit_validated_content<R: Runtime>(
+    request: &ChatRequest,
+    app: &AppHandle<R>,
+    topic: &str,
+    outcome: &TurnOutcome,
+    policy: &RequestPolicy,
+) {
+    if policy.requires_stop_finish() && !outcome.content.is_empty() {
+        let mut event = ChatStreamEvent::for_request(&request.request_id);
+        event.delta = Some(outcome.content.clone());
+        let _ = app.emit(topic, event);
     }
 }
 
@@ -762,6 +793,16 @@ fn authorize<R: Runtime>(
     policy: &RequestPolicy,
 ) -> Result<reqwest::RequestBuilder, ProviderError> {
     if let Some(key) = &policy.loopback_key {
+        #[cfg(target_os = "linux")]
+        if !policy
+            .loopback_owner
+            .is_some_and(|(pid, port)| crate::local_runtime::listener_belongs_to(pid, port))
+        {
+            return Err(ProviderError::new(
+                "LOCAL_RUNTIME_UNAVAILABLE",
+                "The resident local server no longer owns its port.",
+            ));
+        }
         return Ok(call.bearer_auth(key));
     }
     add_credential_with_app(app, call, request.provider.api_key_ref.as_deref())
@@ -859,11 +900,13 @@ async fn stream_openai_compatible<R: Runtime>(
             stream_one_openai_turn(request, &endpoint, &body, app, topic, cancellation, policy)
                 .await?;
         if outcome.tool_calls.is_empty() {
-            return outcome.accept_answer(policy);
+            outcome.accept_answer(policy)?;
+            emit_validated_content(request, app, topic, &outcome, policy);
+            return Ok(());
         }
         // Text the model wrote before a tool call reaches the user too.
-        backend::validate_answer(policy, &outcome.content)
-            .map_err(|(code, message)| ProviderError::new(code, message))?;
+        outcome.validate_content(policy)?;
+        emit_validated_content(request, app, topic, &outcome, policy);
         if policy.single_tool_call() && outcome.tool_calls.len() > 1 {
             record_runtime_log(
                 state,
@@ -888,8 +931,7 @@ async fn stream_openai_compatible<R: Runtime>(
         emit_tool_turn(request, app, topic, &outcome.tool_calls, &host_results);
         let mut assistant = json!({ "role": "assistant", "content": Value::Null, "tool_calls": assistant_tool_calls });
         if policy.returns_tool_call_reasoning() && !outcome.reasoning.is_empty() {
-            assistant["reasoning_content"] =
-                json!(behavior::neutralize_control_tokens(&outcome.reasoning));
+            assistant["thinking"] = json!(behavior::neutralize_control_tokens(&outcome.reasoning));
         }
         messages.push(assistant);
         for (call, result) in outcome.tool_calls.iter().zip(host_results) {
@@ -1785,9 +1827,11 @@ async fn stream_one_openai_turn<R: Runtime>(
             .filter(|text| !text.is_empty())
         {
             outcome.push_content(delta);
-            let mut event = ChatStreamEvent::for_request(&request.request_id);
-            event.delta = Some(delta.to_owned());
-            let _ = app.emit(topic, event);
+            if !policy.requires_stop_finish() {
+                let mut event = ChatStreamEvent::for_request(&request.request_id);
+                event.delta = Some(delta.to_owned());
+                let _ = app.emit(topic, event);
+            }
         }
         if let Some(calls) = choice["delta"]["tool_calls"].as_array() {
             for (position, call) in calls.iter().enumerate() {
@@ -1824,6 +1868,23 @@ async fn stream_one_openai_turn<R: Runtime>(
     )
     .await?;
     outcome.tool_calls = finish_tool_calls(pending, &request.provider.name)?;
+    if policy.requires_stop_finish() && !stream_done {
+        return Err(ProviderError::new(
+            "GENERATION_TRUNCATED",
+            "The local model stream ended before its terminal record.",
+        ));
+    }
+    if !outcome.tool_calls.is_empty()
+        && (outcome.finish_reason.as_deref() != Some("tool_calls") || !stream_done)
+    {
+        return Err(ProviderError::new(
+            "GENERATION_TRUNCATED",
+            format!(
+                "{} ended before completing the tool-call response.",
+                request.provider.name
+            ),
+        ));
+    }
     Ok(outcome)
 }
 
@@ -1855,10 +1916,18 @@ async fn stream_ollama<R: Runtime>(
         )
         .await?;
         if outcome.tool_calls.is_empty() {
-            return outcome.accept_answer(policy);
+            outcome.accept_answer(policy)?;
+            emit_validated_content(request, app, topic, &outcome, policy);
+            return Ok(());
         }
-        backend::validate_answer(policy, &outcome.content)
-            .map_err(|(code, message)| ProviderError::new(code, message))?;
+        if outcome.finish_reason.as_deref() == Some("length") {
+            return Err(ProviderError::new(
+                "GENERATION_TRUNCATED",
+                "Ollama ended before completing the tool-call response.",
+            ));
+        }
+        outcome.validate_content(policy)?;
+        emit_validated_content(request, app, topic, &outcome, policy);
         let (_, host_results) = host_tool_turn(
             request,
             &outcome.tool_calls,
@@ -1921,6 +1990,7 @@ async fn stream_one_ollama_turn<R: Runtime>(
     let mut outcome = TurnOutcome::default();
     let mut pending: BTreeMap<u64, ToolCallAccumulator> = BTreeMap::new();
     let mut reasoning_announced = false;
+    let mut terminal_record_seen = false;
     let mut process_line = |line: &str| -> Result<(), ProviderError> {
         let value = match parse_ollama_stream_line(line)? {
             ProviderStreamRecord::Ignore | ProviderStreamRecord::Done => return Ok(()),
@@ -1933,6 +2003,7 @@ async fn stream_one_ollama_turn<R: Runtime>(
             return Err(stream_error(policy, message));
         }
         if value["done"].as_bool() == Some(true) {
+            terminal_record_seen = true;
             outcome.finish_reason = value["done_reason"].as_str().map(str::to_owned);
             if let Some(usage) = provider_usage(&value, Some("total_duration")) {
                 let mut event = ChatStreamEvent::for_request(&request.request_id);
@@ -1955,9 +2026,11 @@ async fn stream_one_ollama_turn<R: Runtime>(
             .filter(|value| !value.is_empty())
         {
             outcome.push_content(delta);
-            let mut event = ChatStreamEvent::for_request(&request.request_id);
-            event.delta = Some(delta.to_owned());
-            let _ = app.emit(topic, event);
+            if !policy.requires_stop_finish() {
+                let mut event = ChatStreamEvent::for_request(&request.request_id);
+                event.delta = Some(delta.to_owned());
+                let _ = app.emit(topic, event);
+            }
         }
         if let Some(calls) = message["tool_calls"].as_array() {
             for (index, call) in calls.iter().enumerate() {
@@ -1977,6 +2050,14 @@ async fn stream_one_ollama_turn<R: Runtime>(
     };
     read_stream(response, cancellation, policy, "Ollama", &mut process_line).await?;
     outcome.tool_calls = finish_tool_calls(pending, "Ollama")?;
+    if !outcome.tool_calls.is_empty()
+        && (!terminal_record_seen || outcome.finish_reason.as_deref() == Some("length"))
+    {
+        return Err(ProviderError::new(
+            "GENERATION_TRUNCATED",
+            "Ollama ended before completing the tool-call response.",
+        ));
+    }
     Ok(outcome)
 }
 
@@ -3407,6 +3488,7 @@ mod tests {
             r#"data: {"choices":[{"delta":{"content":"Hello 🌿"}}]}
  data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call-1","function":{"name":"unit.","arguments":"{\"value\":1,"}}]}}]}
  data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"name":"convert","arguments":"\"from\":\"km\",\"to\":\"m\"}"}}]}}]}
+data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}]}
 data: [DONE]"#,
         ]);
         let app = tauri::test::mock_app();
@@ -3943,6 +4025,7 @@ data: [DONE]"#,
             )),
             idle_timeout: STREAM_IDLE_TIMEOUT,
             loopback_key: None,
+            loopback_owner: None,
             context_window: None,
             lineage: None,
         }
@@ -3998,6 +4081,126 @@ data: [DONE]"#,
             }
         });
         (format!("http://{address}"), handle, bodies)
+    }
+
+    #[test]
+    fn loopback_bearer_requests_ignore_proxy_environment() {
+        use std::io::{Read, Write};
+        use std::net::TcpListener;
+        use std::process::Command;
+        use std::time::Instant;
+
+        fn receive_once(listener: TcpListener, wait: Duration) -> Option<String> {
+            listener
+                .set_nonblocking(true)
+                .expect("listener should become nonblocking");
+            let deadline = Instant::now() + wait;
+            let (mut socket, _) = loop {
+                match listener.accept() {
+                    Ok(connection) => break connection,
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        if Instant::now() >= deadline {
+                            return None;
+                        }
+                        std::thread::sleep(Duration::from_millis(10));
+                    }
+                    Err(error) => panic!("listener accept failed: {error}"),
+                }
+            };
+            socket
+                .set_read_timeout(Some(Duration::from_secs(1)))
+                .expect("socket should accept a read timeout");
+            let mut bytes = Vec::new();
+            let mut chunk = [0u8; 1024];
+            loop {
+                let count = socket.read(&mut chunk).expect("request should be readable");
+                if count == 0 {
+                    break;
+                }
+                bytes.extend_from_slice(&chunk[..count]);
+                if bytes.windows(4).any(|window| window == b"\r\n\r\n") {
+                    break;
+                }
+            }
+            socket
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+                .expect("server should respond");
+            Some(String::from_utf8_lossy(&bytes).into_owned())
+        }
+
+        if let Ok(target_url) = std::env::var("JUNIPER_PROXY_TEST_CHILD_URL") {
+            let runtime = tokio::runtime::Runtime::new().expect("test runtime should start");
+            let response = runtime
+                .block_on(async {
+                    streaming_client(&RequestPolicy {
+                        loopback_key: Some("local-secret".into()),
+                        ..policy()
+                    })
+                    .expect("local client should build")
+                    .get(target_url)
+                    .bearer_auth("local-secret")
+                    .send()
+                    .await
+                })
+                .expect("direct local request should succeed");
+            assert!(response.status().is_success());
+            return;
+        }
+
+        let target = TcpListener::bind("127.0.0.1:0").expect("target should bind");
+        let target_url = format!("http://{}", target.local_addr().expect("target address"));
+        let target_thread =
+            std::thread::spawn(move || receive_once(target, Duration::from_secs(3)));
+        let proxy = TcpListener::bind("127.0.0.1:0").expect("proxy should bind");
+        let proxy_url = format!("http://{}", proxy.local_addr().expect("proxy address"));
+        let proxy_thread = std::thread::spawn(move || receive_once(proxy, Duration::from_secs(1)));
+        let status = Command::new(std::env::current_exe().expect("test binary path"))
+            .args([
+                "--exact",
+                "providers::tests::loopback_bearer_requests_ignore_proxy_environment",
+            ])
+            .env("JUNIPER_PROXY_TEST_CHILD_URL", target_url)
+            .env("HTTP_PROXY", &proxy_url)
+            .env("ALL_PROXY", &proxy_url)
+            .env("http_proxy", &proxy_url)
+            .env("all_proxy", &proxy_url)
+            .env("NO_PROXY", "")
+            .env("no_proxy", "")
+            .status()
+            .expect("isolated test process should start");
+        let target_request = target_thread.join().expect("target thread should join");
+        let proxy_request = proxy_thread.join().expect("proxy thread should join");
+        assert!(status.success(), "isolated client request failed");
+        let target_request = target_request.expect("target should receive request");
+        assert!(
+            target_request
+                .to_ascii_lowercase()
+                .contains("authorization: bearer local-secret")
+        );
+        assert!(proxy_request.is_none(), "proxy saw a local bearer request");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn loopback_credentials_are_not_authorized_for_a_rebound_listener() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("listener should bind");
+        let port = listener.local_addr().expect("listener address").port();
+        let app = tauri::test::mock_app();
+        let request = request();
+        let policy = RequestPolicy {
+            loopback_key: Some("must-not-be-sent".into()),
+            loopback_owner: Some((1, port)),
+            ..policy()
+        };
+        let error = authorize(
+            app.handle(),
+            Client::new().get(format!("http://127.0.0.1:{port}/v1/chat/completions")),
+            &request,
+            &policy,
+        )
+        .expect_err("a listener owned by a different process must be refused");
+        assert_eq!(error.code, "LOCAL_RUNTIME_UNAVAILABLE");
+        assert!(!error.message.contains("must-not-be-sent"));
     }
 
     fn openai_request(base_url: &str) -> ChatRequest {
@@ -4396,6 +4599,19 @@ data: [DONE]"#,
             "GENERATION_TRUNCATED"
         );
         assert!(unfinished.accept_answer(&policy()).is_ok());
+        let unvalidated_overflow = TurnOutcome {
+            content: "bounded prefix".into(),
+            content_overflowed: true,
+            finish_reason: Some("stop".into()),
+            ..TurnOutcome::default()
+        };
+        assert_eq!(
+            unvalidated_overflow
+                .accept_answer(&gpt_oss_policy())
+                .unwrap_err()
+                .code,
+            "MODEL_OUTPUT_INVALID"
+        );
     }
 
     #[test]
@@ -4453,6 +4669,73 @@ data: [DONE]
     }
 
     #[test]
+    fn strict_backend_content_is_not_emitted_before_full_validation() {
+        for body in [
+            concat!(
+                "data: {\"choices\":[{\"delta\":{\"content\":\"<|channel|>anal\"},\"finish_reason\":null}]}\n\n",
+                "data: {\"choices\":[{\"delta\":{\"content\":\"ysis<|message|>private\"},\"finish_reason\":\"stop\"}]}\n\n",
+                "data: [DONE]\n\n"
+            ),
+            "data: {\"choices\":[{\"delta\":{\"content\":\"<|channel|>anal\"},\"finish_reason\":\"stop\"}]}\n\n",
+        ] {
+            let (base_url, server, _) = fake_recording_server(vec![body]);
+            let events = run_stream(openai_request(&base_url), gpt_oss_policy());
+            server.join().expect("fake server should stop");
+            assert!(
+                events.iter().all(|event| event["delta"].is_null()),
+                "unaccepted content reached the app: {events:?}"
+            );
+            assert!(final_error(&events).is_some());
+        }
+    }
+
+    #[test]
+    fn incomplete_tool_call_streams_never_reach_host_tool_execution() {
+        for body in [
+            r#"data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call-a","function":{"name":"calculator.evaluate","arguments":"{\"expression\":\"1+1\"}"}}]},"finish_reason":"length"}]}
+
+data: [DONE]
+"#,
+            r#"data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call-a","function":{"name":"calculator.evaluate","arguments":"{\"expression\":\"1+1\"}"}}]},"finish_reason":"tool_calls"}]}
+
+"#,
+        ] {
+            let (base_url, server, _) = fake_recording_server(vec![body]);
+            let events = run_stream(openai_request(&base_url), policy());
+            server.join().expect("fake server should stop");
+            assert_eq!(
+                final_error(&events).as_deref(),
+                Some("GENERATION_TRUNCATED")
+            );
+            assert!(events.iter().all(|event| event["toolCalls"].is_null()));
+            assert!(
+                events
+                    .iter()
+                    .all(|event| event["permissionRequest"].is_null())
+            );
+        }
+
+        let (base_url, server, _) = fake_recording_server(vec![
+            r#"{"message":{"role":"assistant","tool_calls":[{"function":{"name":"calculator.evaluate","arguments":{"expression":"1+1"}}}]},"done":false}
+"#,
+        ]);
+        let mut request = request();
+        request.provider.base_url = base_url;
+        let events = run_stream(request, policy());
+        server.join().expect("fake server should stop");
+        assert_eq!(
+            final_error(&events).as_deref(),
+            Some("GENERATION_TRUNCATED")
+        );
+        assert!(events.iter().all(|event| event["toolCalls"].is_null()));
+        assert!(
+            events
+                .iter()
+                .all(|event| event["permissionRequest"].is_null())
+        );
+    }
+
+    #[test]
     fn harmony_tool_calls_carry_their_analysis_and_one_call_per_message() {
         let (base_url, server, bodies) = fake_recording_server(vec![
             r#"data: {"choices":[{"delta":{"reasoning_content":"Need the calculator."}}]}
@@ -4484,7 +4767,8 @@ data: [DONE]
             .find(|message| message["role"] == "assistant")
             .expect("assistant tool call message");
         assert_eq!(assistant["tool_calls"].as_array().map(Vec::len), Some(1));
-        assert_eq!(assistant["reasoning_content"], "Need the calculator.");
+        assert_eq!(assistant["thinking"], "Need the calculator.");
+        assert!(assistant["reasoning_content"].is_null());
         let tool_results = follow_up
             .iter()
             .filter(|message| message["role"] == "tool")
