@@ -4025,6 +4025,7 @@ data: [DONE]"#,
             )),
             idle_timeout: STREAM_IDLE_TIMEOUT,
             loopback_key: None,
+            #[cfg(target_os = "linux")]
             loopback_owner: None,
             context_window: None,
             lineage: None,

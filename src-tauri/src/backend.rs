@@ -187,6 +187,7 @@ pub struct RequestPolicy {
     pub loopback_key: Option<String>,
     /// PID and port that must still own the private listener before sending
     /// that token. Set only for host-managed local runtime requests.
+    #[cfg(target_os = "linux")]
     pub loopback_owner: Option<(u32, u16)>,
     /// Effective context window, when the server reports a fixed one.
     pub context_window: Option<u32>,
@@ -206,6 +207,7 @@ impl RequestPolicy {
             backend: Backend::Generic,
             idle_timeout,
             loopback_key: None,
+            #[cfg(target_os = "linux")]
             loopback_owner: None,
             context_window: None,
             lineage: None,
@@ -312,6 +314,7 @@ mod tests {
             backend: Backend::GptOss(Box::new(gpt_oss_profile().expect("profile"))),
             idle_timeout: Duration::from_secs(1),
             loopback_key: None,
+            #[cfg(target_os = "linux")]
             loopback_owner: None,
             context_window: Some(16_384),
             lineage: None,

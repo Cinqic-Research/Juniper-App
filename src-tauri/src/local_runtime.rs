@@ -64,6 +64,7 @@ impl Resident {
 struct Route {
     endpoint: String,
     port: u16,
+    #[cfg(target_os = "linux")]
     owner_pid: Option<u32>,
     api_key: String,
     identity: RuntimeIdentity,
@@ -361,6 +362,7 @@ pub async fn stream_chat<R: Runtime>(
             Backend::GptOss(Box::new(profile))
         }),
         loopback_key: Some(route.api_key.clone()),
+        #[cfg(target_os = "linux")]
         loopback_owner: route.owner_pid.map(|pid| (pid, route.port)),
         lineage: Some(route.lineage.clone()),
     };
@@ -478,6 +480,7 @@ async fn start<R: Runtime>(
             "LOCAL_RUNTIME_UNAVAILABLE: Juniper's local runtime could not be started.".to_owned()
         })?;
     let diagnostics = capture_stderr(&mut child);
+    #[cfg(target_os = "linux")]
     let owner_pid = child.id();
     #[cfg(target_os = "linux")]
     let pid = owner_pid;
@@ -485,6 +488,7 @@ async fn start<R: Runtime>(
     let route = Route {
         endpoint: format!("http://127.0.0.1:{port}"),
         port,
+        #[cfg(target_os = "linux")]
         owner_pid,
         api_key: key.secret.clone(),
         identity: RuntimeIdentity {
@@ -853,6 +857,7 @@ pub(crate) fn listener_belongs_to(pid: u32, port: u16) -> bool {
 async fn fetch_props(route: &Route) -> Result<Value, String> {
     let unidentified =
         || "RUNTIME_IDENTITY_MISMATCH: The local runtime did not report its identity.".to_owned();
+    #[cfg(target_os = "linux")]
     ensure_route_listener_owner(route)?;
     let response = client()?
         .get(format!("{}/props", route.endpoint))
@@ -882,8 +887,8 @@ fn check_ownership(props: &Value, model_path: &str) -> Result<(), String> {
     }
 }
 
+#[cfg(target_os = "linux")]
 fn ensure_route_listener_owner(route: &Route) -> Result<(), String> {
-    #[cfg(target_os = "linux")]
     if !route
         .owner_pid
         .is_some_and(|pid| listener_belongs_to(pid, route.port))
@@ -921,6 +926,7 @@ fn check_props(props: &Value, profile: &BackendProfile) -> Result<(), String> {
 /// One throwaway request so the first real answer does not pay for faulting
 /// CPU-side experts into memory.
 async fn warm_up(route: &Route, cancellation: &Cancellation) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
     ensure_route_listener_owner(route)?;
     let call = client()?
         .post(format!("{}/v1/chat/completions", route.endpoint))
@@ -1216,6 +1222,7 @@ mod tests {
                 route: Route {
                     endpoint: "http://127.0.0.1:9".into(),
                     port: 9,
+                    #[cfg(target_os = "linux")]
                     owner_pid: Some(pid),
                     api_key: "key".into(),
                     identity: RuntimeIdentity::default(),
@@ -1256,6 +1263,7 @@ mod tests {
                 route: Route {
                     endpoint: "http://127.0.0.1:9".into(),
                     port: 9,
+                    #[cfg(target_os = "linux")]
                     owner_pid: None,
                     api_key: "key".into(),
                     identity: RuntimeIdentity::default(),
