@@ -12,7 +12,7 @@
 //! arrays and strings without allocating them, bounds every length, and fails closed on a
 //! malformed header.
 
-use std::io::{self, Read, Seek, SeekFrom};
+use std::io::{self, BufReader, Read, Seek, SeekFrom};
 
 const MAGIC: &[u8; 4] = b"GGUF";
 const MAX_KEY_BYTES: u64 = 1 << 16;
@@ -41,7 +41,16 @@ fn invalid(msg: &str) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, msg.to_owned())
 }
 
-fn skip<R: Seek>(r: &mut R, n: u64) -> io::Result<()> {
+fn skip<R: Read + Seek>(r: &mut R, n: u64) -> io::Result<()> {
+    if n <= 1 << 16 {
+        // Short skips read through the buffer (seeking would discard it on every token string).
+        let copied = io::copy(&mut r.by_ref().take(n), &mut io::sink())?;
+        return if copied == n {
+            Ok(())
+        } else {
+            Err(io::ErrorKind::UnexpectedEof.into())
+        };
+    }
     let n = i64::try_from(n).map_err(|_| invalid("length overflow"))?;
     r.seek(SeekFrom::Current(n)).map(|_| ())
 }
@@ -84,17 +93,26 @@ fn skip_value<R: Read + Seek>(r: &mut R, kind: u32) -> io::Result<()> {
                         .ok_or_else(|| invalid("array overflow"))?,
                 );
             }
-            if elem != 8 {
+            if elem != 8 && elem != 9 {
                 return Err(invalid("unsupported GGUF array element type"));
             }
             for _ in 0..count {
-                let len = read_u64(r)?;
-                skip(r, len)?;
+                skip_value(r, elem)?; // strings, or nested arrays
             }
             Ok(())
         }
         _ => Err(invalid("unknown GGUF value type")),
     }
+}
+
+/// "juniper-1 …", "Juniper 1", "juniper1-…" (but not "juniper12…"): older exports carried no marker.
+fn names_juniper_one(name: &str) -> bool {
+    let compact: String = name
+        .to_ascii_lowercase()
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .collect();
+    compact.starts_with("juniper1") && !compact[8..].starts_with(|c: char| c.is_ascii_digit())
 }
 
 /// Classifies a GGUF stream by its metadata. The reader is left at an unspecified position.
@@ -129,7 +147,7 @@ pub fn identify<R: Read + Seek>(r: &mut R) -> io::Result<Identity> {
         }
         if kind == 8 && (key == "juniper.io_contract" || key == "general.name") {
             let value = read_string(r)?.unwrap_or_default();
-            if key == "general.name" && value.to_ascii_lowercase().starts_with("juniper-1") {
+            if key == "general.name" && names_juniper_one(&value) {
                 juniper = true;
             }
             if key == "juniper.io_contract" {
@@ -151,7 +169,7 @@ pub fn refuse_juniper_on_text_path<R: Read + Seek>(r: &mut R) -> Result<(), Stri
     let start = r
         .stream_position()
         .map_err(|_| "The selected model file could not be read.".to_owned())?;
-    let verdict = identify(r);
+    let verdict = identify(&mut BufReader::with_capacity(1 << 16, &mut *r));
     r.seek(SeekFrom::Start(start))
         .map_err(|_| "The selected model file could not be read.".to_owned())?;
     match verdict {
@@ -217,6 +235,39 @@ mod tests {
     fn unmarked_legacy_juniper_export_is_refused_by_name() {
         let bytes = gguf(&[("general.name", "juniper-1 (experimental export)")], 8);
         assert!(refuse_juniper_on_text_path(&mut Cursor::new(bytes)).is_err());
+    }
+
+    #[test]
+    fn legacy_name_variants() {
+        for name in [
+            "juniper-1 (experimental export)",
+            "Juniper 1",
+            "juniper1-base",
+            "JUNIPER_1",
+        ] {
+            assert!(names_juniper_one(name), "{name}");
+        }
+        for name in ["juniper12b", "gpt-oss-20b", "juniper-app"] {
+            assert!(!names_juniper_one(name), "{name}");
+        }
+    }
+
+    #[test]
+    fn nested_string_arrays_are_skipped() {
+        let mut out = Vec::new();
+        out.extend(MAGIC);
+        out.extend(3u32.to_le_bytes());
+        out.extend(0u64.to_le_bytes());
+        out.extend(1u64.to_le_bytes());
+        s(&mut out, "x.nested");
+        out.extend(9u32.to_le_bytes()); // array
+        out.extend(9u32.to_le_bytes()); // of arrays
+        out.extend(1u64.to_le_bytes());
+        out.extend(8u32.to_le_bytes()); // of strings
+        out.extend(2u64.to_le_bytes());
+        s(&mut out, "a");
+        s(&mut out, "b");
+        assert_eq!(identify(&mut Cursor::new(out)).unwrap(), Identity::Other);
     }
 
     #[test]
