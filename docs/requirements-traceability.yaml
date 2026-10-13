@@ -391,3 +391,38 @@ requirements:
     tests: [src-tauri/src/backend.rs, src-tauri/src/local_runtime.rs, src-tauri/src/live_gpt_oss.rs]
     phase: 15
     status: PASS-FLOWBOX-HARDWARE-TEST
+  REQ-JUNIPER1-TOKEN-IDS:
+    statement: Juniper 1 runs only through the host-side j1tok tokenizer and juniper-chat-v1 serializer with integer token IDs to a verified llama.cpp b11270 server (artifact hash, GGUF metadata, tokenizer hash, runtime build, self-test); text endpoints are never called; answers are shown only after the turn parses; tools go through the host gate
+    implementation:
+      [
+        config/backends/juniper1-token-ids.v1.json,
+        src-tauri/src/juniper1/mod.rs,
+        src-tauri/src/juniper1/tokenizer.rs,
+        src-tauri/src/juniper1/protocol.rs,
+        src-tauri/src/juniper1/client.rs,
+        src-tauri/src/juniper1/chat.rs,
+        src-tauri/src/juniper1/profile.rs,
+        src-tauri/src/local_runtime.rs,
+      ]
+    tests:
+      [
+        src-tauri/src/juniper1/tests.rs,
+        src-tauri/src/juniper1/golden.rs,
+        src-tauri/src/live_juniper1.rs,
+        docs/qualification/juniper1-token-id-2026-10-13/live-evidence.json,
+      ]
+    phase: 16
+    status: PASS-FLOWBOX-HARDWARE-TEST-DESKTOP-LINUX
+  REQ-JUNIPER1-TEXT-GUARD:
+    statement: Every text path (Ollama import, generic desktop launch, Android JNI) refuses Juniper 1 GGUFs; Juniper 1 artifacts are absent from the public catalog; Android keeps Juniper 1 blocked
+    implementation:
+      [
+        src-tauri/src/gguf_guard.rs,
+        src-tauri/src/commands.rs,
+        src-tauri/src/local_runtime.rs,
+        src-tauri/src/android_runtime.rs,
+        scripts/check-runtime-contract.mjs,
+      ]
+    tests: [src-tauri/src/gguf_guard.rs, src-tauri/src/juniper1/profile.rs]
+    phase: 16
+    status: IMPLEMENTED-NATIVE-TESTED
