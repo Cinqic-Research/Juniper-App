@@ -397,6 +397,11 @@ async fn start<R: Runtime>(
     starting: &Mutex<Option<tokio::process::Child>>,
 ) -> Result<(tokio::process::Child, Route), String> {
     let model_path = managed_models::path_for_catalog(app, &entry.id)?;
+    // This launcher serves text-mode chat; a Juniper 1 GGUF needs the token-ID backend (A-02).
+    let mut model_file = std::fs::File::open(&model_path)
+        .map_err(|_| "The managed model file is unavailable.".to_owned())?;
+    crate::gguf_guard::refuse_juniper_on_text_path(&mut model_file)?;
+    drop(model_file);
     let executable = match &profile {
         Some(_) => accelerated_executable(app)?,
         None => runtime_executable(app)?,
