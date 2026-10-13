@@ -1,0 +1,4 @@
+# Verified false positives (generic-api-key on a key name containing "token"): the values are the
+# public SHA-256 digest of Juniper 1's tokenizer file (176a89e2...adf1), an identity hash, not a secret.
+4dee0bf0e742c676f7c7aebdc7899e7f838d6353:docs/qualification/juniper1-token-id-2026-10-13/live-evidence.json:generic-api-key:343
+4dee0bf0e742c676f7c7aebdc7899e7f838d6353:docs/qualification/juniper1-token-id-2026-10-13/live-evidence.json:generic-api-key:711
