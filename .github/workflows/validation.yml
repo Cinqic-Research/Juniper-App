@@ -59,6 +59,11 @@ jobs:
       - name: Audit JavaScript dependencies
         run: pnpm audit --audit-level high
       - run: pnpm validate
+      - name: Check the tool-trace harness against the App sources
+        run: |
+          cargo fmt --manifest-path tools/tool-trace-harness/Cargo.toml -- --check
+          cargo clippy --locked --manifest-path tools/tool-trace-harness/Cargo.toml --all-targets -- -D warnings
+          cargo test --locked --manifest-path tools/tool-trace-harness/Cargo.toml
       - name: Production frontend build
         run: pnpm build
       - name: Install Linux launch-probe tools

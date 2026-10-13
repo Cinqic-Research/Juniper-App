@@ -5,6 +5,7 @@ dist/
 .env.*
 !.env.example
 src-tauri/target/
+tools/tool-trace-harness/target/
 src-tauri/gen/
 src-tauri/plugins/**/android/.cxx/
 src-tauri/plugins/**/android/build/

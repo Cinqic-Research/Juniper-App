@@ -1,0 +1,120 @@
+{
+  "schema": "j1.host-policy.v1",
+  "policy_set": "j1-host-policy-v1",
+  "assistant_id": "fixture-assistant",
+  "policies": {
+    "deny-user-data": {
+      "description": "Every App tool except system.info is enabled; the person denies every permission prompt.",
+      "provider_kind": "juniper-local",
+      "model_tools": "supported",
+      "enabled_tools": [
+        "calculator.evaluate",
+        "datetime.current",
+        "unit.convert",
+        "memory.list",
+        "memory.save",
+        "memory.delete",
+        "chat.search",
+        "file.read",
+        "file.metadata"
+      ],
+      "decisions": {
+        "memory.list": "deny",
+        "memory.save": "deny",
+        "memory.delete": "deny",
+        "chat.search": "deny",
+        "file.read": "deny",
+        "file.metadata": "deny"
+      }
+    },
+    "attachments-allow-once": {
+      "description": "As deny-user-data, but the person allows reading attached (synthetic) files once per call.",
+      "provider_kind": "juniper-local",
+      "model_tools": "supported",
+      "enabled_tools": [
+        "calculator.evaluate",
+        "datetime.current",
+        "unit.convert",
+        "memory.list",
+        "memory.save",
+        "memory.delete",
+        "chat.search",
+        "file.read",
+        "file.metadata"
+      ],
+      "decisions": {
+        "memory.list": "deny",
+        "memory.save": "deny",
+        "memory.delete": "deny",
+        "chat.search": "deny",
+        "file.read": "allow-once",
+        "file.metadata": "allow-once"
+      }
+    },
+    "attachments-standing-grant": {
+      "description": "A chat-scoped standing grant for file.read exists; no prompt is shown for it.",
+      "provider_kind": "juniper-local",
+      "model_tools": "supported",
+      "enabled_tools": ["calculator.evaluate", "unit.convert", "file.read", "file.metadata"],
+      "decisions": { "file.metadata": "deny" },
+      "standing_grants": [
+        {
+          "id": "grant-fixture-1",
+          "tool_name": "file.read",
+          "scope": "chat",
+          "conversation_id": "$session"
+        }
+      ]
+    },
+    "permission-timeout": {
+      "description": "Every App tool except system.info is enabled; nobody answers a permission prompt.",
+      "provider_kind": "juniper-local",
+      "model_tools": "supported",
+      "enabled_tools": [
+        "calculator.evaluate",
+        "datetime.current",
+        "unit.convert",
+        "memory.list",
+        "memory.save",
+        "memory.delete",
+        "chat.search",
+        "file.read",
+        "file.metadata"
+      ],
+      "decisions": {
+        "memory.list": "timeout",
+        "memory.save": "timeout",
+        "memory.delete": "timeout",
+        "chat.search": "timeout",
+        "file.read": "timeout",
+        "file.metadata": "timeout"
+      }
+    },
+    "safe-only": {
+      "description": "Only the automatic-safe stateless tools are enabled.",
+      "provider_kind": "juniper-local",
+      "model_tools": "supported",
+      "enabled_tools": ["calculator.evaluate", "datetime.current", "unit.convert"]
+    },
+    "private-chat": {
+      "description": "A private chat: memory and chat tools are never offered, whatever is enabled.",
+      "provider_kind": "juniper-local",
+      "model_tools": "supported",
+      "private_chat": true,
+      "enabled_tools": [
+        "calculator.evaluate",
+        "unit.convert",
+        "memory.list",
+        "memory.save",
+        "chat.search"
+      ],
+      "decisions": { "memory.list": "deny", "memory.save": "deny", "chat.search": "deny" }
+    },
+    "model-without-tools": {
+      "description": "The model's tool capability is not 'supported', so the host offers no tools.",
+      "provider_kind": "juniper-local",
+      "model_tools": "unsupported",
+      "enabled_tools": ["calculator.evaluate", "unit.convert"]
+    }
+  }
+}

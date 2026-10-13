@@ -1,0 +1,24 @@
+[package]
+name = "juniper-tool-trace-harness"
+version = "0.1.0"
+description = "Non-shipping harness that records Juniper host tool decisions and results for Juniper 1 data and evaluation"
+authors = ["Cinqic"]
+edition = "2024"
+license = "Apache-2.0"
+rust-version = "1.90"
+publish = false
+
+# Not part of the Juniper application: it is never bundled, has no Tauri dependency
+# and adds no command, IPC or network surface. It compiles the App's own
+# src-tauri/src/tools.rs and functions extracted verbatim from providers.rs and
+# behavior.rs (see build.rs), so a host decision recorded here is the App's decision.
+
+[[bin]]
+name = "juniper-tool-trace"
+path = "src/main.rs"
+
+[dependencies]
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0.143"
+sha2 = "0.10.9"
+thiserror = "2.0.16"
