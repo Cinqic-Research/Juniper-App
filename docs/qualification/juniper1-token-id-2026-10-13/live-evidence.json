@@ -1,0 +1,730 @@
+{
+  "schema": "juniper-app.juniper1-token-id-qualification.v1",
+  "date": "2026-10-13",
+  "sources": {
+    "juniper_app_base": "e3e865688a29b43e73cd388a77b06d389c81c557",
+    "juniper_app_code_under_test": "3a0ea9459d665633d7e3538132a759abed586c74",
+    "juniper_1_data_reference": {
+      "revision": "f0399ed470e1f4e51f066b50fd4128e1f0b1fbd1",
+      "identical_modules_at": "b7af9634169e484538faf686d6562a6989264c08",
+      "modules": ["j1data.jtok", "j1data.protocol", "j1data.runtime_client"]
+    },
+    "llama_cpp": {
+      "tag": "b11270",
+      "commit": "748d4225b9016b17ce4bcfa69fdc2c39f473a965",
+      "binary": "CUDA build run CPU-only (CUDA_VISIBLE_DEVICES empty, -ngl 0)"
+    },
+    "tokenizer": {
+      "sha256": "176a89e2197c24d3f024fbb60ce6f346635e7cba912b3579d93b37d486c9adf1",
+      "tokenizers": "0.23.2",
+      "rust_crate": "tokenizers 0.23.2 (onig)"
+    },
+    "a02_python_record": "Juniper-1-Train docs/posttrain/a02_token_id_qualification.md (results a02_token_id_qual_base.json, a02_token_id_qual_candidate.json)"
+  },
+  "golden": {
+    "fixture": "tests/juniper1/golden.v1.json",
+    "fixture_sha256": "82198489a098a717aa1834ebd5a6c5860cacd39ad0ebc0e3c198a18b79b00745",
+    "tests": {
+      "golden_tokenizer_identity_controls_and_texts": "pass",
+      "golden_serialization": "pass",
+      "golden_budgeting_and_trimming": "pass",
+      "golden_parser_outcomes": "pass",
+      "golden_regression_documents": "pass"
+    },
+    "control_spellings": 64,
+    "texts": 48,
+    "serialization_cases": 12,
+    "budget_cases": 8,
+    "parser_cases": 31,
+    "regression_documents": {
+      "identical": 200,
+      "total": 200,
+      "texts_file_sha256": "e73e5a0dbbadce42b0c31bcdeb51e6cd4a1213215930760f2a9e529e54980dca",
+      "texts_location": "FLOWBOX research/app/a02-native-adapter/regression_docs.private.jsonl (corpus text; not in this repository)"
+    }
+  },
+  "python_parity_reference": {
+    "generator": "tests/juniper1/python_parity.py",
+    "bundle_sha256": "f96320150025d0250b5fbe7f5bc44b1f39b56ea836c8dfe842dbfc48c508eea1",
+    "selection": "split == dev, variant == chat, every 7th, first 48 (qual/a02_token_id_qual.py)",
+    "models": [
+      {
+        "gguf_sha256": "41e21fed6bda34c5ce0e99ec43201fcf8b8e3f1129e9275cfe4456c43c7b8980",
+        "runtime_build": "b11270-748d4225b",
+        "self_test": {
+          "9": "eos:[9]",
+          "10": "eos:[10]",
+          "11": "eos:[11]",
+          "1": "limit:[19023, 7333]"
+        },
+        "paths_called": ["/completion"],
+        "generations": 48
+      },
+      {
+        "gguf_sha256": "1537fde2786088a4a3e74c721a83d291050c6bc4a1c7ff56b7cb9cc4afd95175",
+        "runtime_build": "b11270-748d4225b",
+        "self_test": {
+          "9": "eos:[9]",
+          "10": "eos:[10]",
+          "11": "eos:[11]",
+          "1": "limit:[7, 363]"
+        },
+        "paths_called": ["/completion"],
+        "generations": 48
+      }
+    ],
+    "file_sha256": "309778bcfe2976350b6b31e184034c43b04e4da536b1dd25ec1596a00e2697bd"
+  },
+  "live_record_sha256": "2e9f93badc900fe81c090267b6ab0fb3357287081eac5171bfb7fc975b6b6082",
+  "live": {
+    "app_revision": "3a0ea9459d665633d7e3538132a759abed586c74",
+    "checks": [
+      {
+        "check": "text_path_guard_refuses_real_gguf",
+        "detail": {
+          "error": "Juniper 1 models need Juniper's own tokenizer and token-ID runtime; they cannot be loaded through a text-mode path."
+        },
+        "model": "juniper1-base-v1-f16",
+        "passed": true
+      },
+      {
+        "check": "text_path_guard_refuses_real_gguf",
+        "detail": {
+          "error": "Juniper 1 models need Juniper's own tokenizer and token-ID runtime; they cannot be loaded through a text-mode path."
+        },
+        "model": "juniper1-sft-pilot-v1-f16",
+        "passed": true
+      },
+      {
+        "check": "startup_refuses_wrong_runtime_build",
+        "detail": {
+          "outcome": {
+            "activities": ["loading-model"],
+            "answer": "",
+            "error": "RUNTIME_IDENTITY_MISMATCH",
+            "seconds": 6.525,
+            "tool_results": [],
+            "usage": null
+          },
+          "runtime": "/usr/lib/Juniper/runtime/llama-server"
+        },
+        "model": "juniper1-base-v1-f16",
+        "passed": true
+      },
+      {
+        "check": "startup_refuses_missing_tokenizer",
+        "detail": {
+          "activities": ["loading-model"],
+          "answer": "",
+          "error": "JUNIPER1_TOKENIZER_UNAVAILABLE",
+          "seconds": 0.007,
+          "tool_results": [],
+          "usage": null
+        },
+        "model": "juniper1-base-v1-f16",
+        "passed": true
+      },
+      {
+        "check": "startup_refuses_tampered_tokenizer",
+        "detail": {
+          "activities": ["loading-model"],
+          "answer": "",
+          "error": "JUNIPER1_TOKENIZER_MISMATCH",
+          "seconds": 0.021,
+          "tool_results": [],
+          "usage": null
+        },
+        "model": "juniper1-base-v1-f16",
+        "passed": true
+      },
+      {
+        "check": "startup_refuses_model_hash_mismatch",
+        "detail": {
+          "activities": ["loading-model"],
+          "answer": "",
+          "error": "LOCAL_MODEL_NOT_READY",
+          "seconds": 6.323,
+          "tool_results": [],
+          "usage": null
+        },
+        "model": "juniper1-base-v1-f16",
+        "passed": true
+      },
+      {
+        "check": "startup_failure_when_the_runtime_exits",
+        "detail": {
+          "outcome": {
+            "activities": ["loading-model"],
+            "answer": "",
+            "error": "LOCAL_RUNTIME_FAILED",
+            "seconds": 6.446,
+            "tool_results": [],
+            "usage": null
+          },
+          "runtime": "script that reports b11270 and exits 3 (fixture, not llama.cpp)"
+        },
+        "model": "juniper1-base-v1-f16",
+        "passed": true
+      },
+      {
+        "check": "cold_start_and_turn_through_app_path",
+        "detail": {
+          "note": "the base model is not instruction-tuned; a rejected (unshown) turn is the expected safe outcome",
+          "outcome": {
+            "activities": ["loading-model"],
+            "answer": "",
+            "error": "GENERATION_TRUNCATED",
+            "seconds": 1.479,
+            "tool_results": [],
+            "usage": null
+          },
+          "provenance": null
+        },
+        "model": "juniper1-base-v1-f16",
+        "passed": true
+      },
+      {
+        "check": "runtime_self_test",
+        "detail": {
+          "report": {
+            "Ok": ["9=eos:[9]", "10=eos:[10]", "11=eos:[11]", "1=limit:[19023, 7333]"]
+          }
+        },
+        "model": "juniper1-base-v1-f16",
+        "passed": true
+      },
+      {
+        "check": "cancellation_mid_generation",
+        "detail": {
+          "cancelled": {
+            "activities": [],
+            "answer": "",
+            "error": "REQUEST_CANCELLED",
+            "seconds": 0.402,
+            "tool_results": [],
+            "usage": null
+          },
+          "next_request": {
+            "activities": [],
+            "answer": "",
+            "error": "GENERATION_TRUNCATED",
+            "seconds": 0.723,
+            "tool_results": [],
+            "usage": null
+          }
+        },
+        "model": "juniper1-base-v1-f16",
+        "passed": true
+      },
+      {
+        "check": "request_timeout",
+        "detail": {
+          "client": "App TokenIdClient with a 50 ms timeout against the resident server",
+          "error": "LOCAL_RUNTIME_TIMEOUT: The local model did not answer in time.",
+          "next_request_ok": true
+        },
+        "model": "juniper1-base-v1-f16",
+        "passed": true
+      },
+      {
+        "check": "banned_ids_never_sampled",
+        "detail": {
+          "banned_sampled": 0,
+          "sampling": "temperature 1.5, top_k 0, top_p 1",
+          "seeds": 24,
+          "tokens": 1152
+        },
+        "model": "juniper1-base-v1-f16",
+        "passed": true
+      },
+      {
+        "check": "byte_fallback_ids_returned_intact",
+        "detail": {
+          "decoded": "🙂",
+          "forced": [304, 223, 217, 194],
+          "returned": [304, 223, 217, 194]
+        },
+        "model": "juniper1-base-v1-f16",
+        "passed": true
+      },
+      {
+        "check": "kv_cache_continuation",
+        "detail": {
+          "cases": [
+            {
+              "cached_equals_full": true,
+              "generated": 24,
+              "split_at": 11,
+              "tokens_cached": 30
+            },
+            {
+              "cached_equals_full": true,
+              "generated": 24,
+              "split_at": 11,
+              "tokens_cached": 37
+            },
+            {
+              "cached_equals_full": true,
+              "generated": 24,
+              "split_at": 11,
+              "tokens_cached": 35
+            }
+          ]
+        },
+        "model": "juniper1-base-v1-f16",
+        "passed": true
+      },
+      {
+        "check": "greedy_parity_vs_python_client",
+        "detail": {
+          "bundle_sha256": "f96320150025d0250b5fbe7f5bc44b1f39b56ea836c8dfe842dbfc48c508eea1",
+          "divergences": [],
+          "identical_sequences": 48,
+          "note": "Rust App client and Python reference client on separate llama-server b11270 processes, same GGUF, greedy, 24 tokens; a divergence is reported with the raw top-2 logprob gap to separate F16 near-ties from errors",
+          "prompt_ids_sha256": "8bff544e6d83be8933510a9bc7fd559ce26eff191c5ec4174f428db462e69c64",
+          "prompts": 48,
+          "python_paths_called": ["/completion"],
+          "python_runtime_build": "b11270-748d4225b",
+          "selection": "split == dev, variant == chat, every 7th, first 48 (qual/a02_token_id_qual.py)"
+        },
+        "model": "juniper1-base-v1-f16",
+        "passed": true
+      },
+      {
+        "check": "only_completion_endpoint_called",
+        "detail": {
+          "paths": ["/completion"]
+        },
+        "model": "juniper1-base-v1-f16",
+        "passed": true
+      },
+      {
+        "check": "model_switch_base_to_candidate",
+        "detail": {
+          "previous_pid_alive": false,
+          "servers": 1,
+          "status": "juniper1-sft-pilot-v1-f16"
+        },
+        "model": "juniper1-sft-pilot-v1-f16",
+        "passed": true
+      },
+      {
+        "check": "single_turn_answer_with_provenance",
+        "detail": {
+          "outcome": {
+            "activities": ["loading-model"],
+            "answer": "I don't know.",
+            "error": null,
+            "seconds": 7.625,
+            "tool_results": [],
+            "usage": {
+              "durationMs": 688,
+              "inputTokens": 738,
+              "outputTokens": 7,
+              "totalTokens": 745
+            }
+          },
+          "provenance": {
+            "backend": "juniper1-token-ids.v1",
+            "constitution": "juniper-constitution.v2",
+            "executionLocation": "on-device",
+            "modelId": "juniper1-sft-pilot-v1-f16",
+            "providerKind": "juniper-local",
+            "reasoningEffort": null,
+            "runtime": {
+              "artifactId": "juniper1-sft-pilot-v1-f16",
+              "artifactSha256": "1537fde2786088a4a3e74c721a83d291050c6bc4a1c7ff56b7cb9cc4afd95175",
+              "contextSize": 2048,
+              "modelRepository": null,
+              "modelRevision": "ckpt-000001226-55d13f9a",
+              "protocol": "juniper-chat-v1",
+              "runtimeBuild": "b11270-748d4225b",
+              "templateSha256": null,
+              "tokenizerSha256": "176a89e2197c24d3f024fbb60ce6f346635e7cba912b3579d93b37d486c9adf1"
+            },
+            "toolProtocol": "juniper-tool-protocol-v1"
+          }
+        },
+        "model": "juniper1-sft-pilot-v1-f16",
+        "passed": true
+      },
+      {
+        "check": "repeated_identical_request_is_deterministic",
+        "detail": {
+          "first": "I don't know.",
+          "first_seconds": 7.625239681,
+          "repeat": "I don't know.",
+          "repeat_seconds": 0.114255192
+        },
+        "model": "juniper1-sft-pilot-v1-f16",
+        "passed": true
+      },
+      {
+        "check": "multi_turn_state",
+        "detail": {
+          "note": "history carries only accepted answers; turn outcomes are the model's",
+          "turns": [
+            {
+              "activities": [],
+              "answer": "2 + 3 = 5.",
+              "error": null,
+              "seconds": 0.156,
+              "tool_results": [],
+              "usage": {
+                "durationMs": 155,
+                "inputTokens": 745,
+                "outputTokens": 10,
+                "totalTokens": 755
+              }
+            },
+            {
+              "activities": [],
+              "answer": "5",
+              "error": null,
+              "seconds": 0.063,
+              "tool_results": [],
+              "usage": {
+                "durationMs": 62,
+                "inputTokens": 766,
+                "outputTokens": 3,
+                "totalTokens": 769
+              }
+            },
+            {
+              "activities": [],
+              "answer": "2",
+              "error": null,
+              "seconds": 0.066,
+              "tool_results": [],
+              "usage": {
+                "durationMs": 64,
+                "inputTokens": 780,
+                "outputTokens": 3,
+                "totalTokens": 783
+              }
+            }
+          ]
+        },
+        "model": "juniper1-sft-pilot-v1-f16",
+        "passed": true
+      },
+      {
+        "check": "context_exhaustion_trims_whole_old_turns",
+        "detail": {
+          "history_turns": 40,
+          "outcome": {
+            "activities": [],
+            "answer": "Italy. ",
+            "error": null,
+            "seconds": 1.476,
+            "tool_results": [],
+            "usage": {
+              "durationMs": 1475,
+              "inputTokens": 1957,
+              "outputTokens": 6,
+              "totalTokens": 1963
+            }
+          },
+          "prompt_tokens": 1957
+        },
+        "model": "juniper1-sft-pilot-v1-f16",
+        "passed": true
+      },
+      {
+        "check": "current_turn_too_large_is_refused",
+        "detail": {
+          "activities": [],
+          "answer": "",
+          "error": "CONTEXT_OVERFLOW",
+          "seconds": 0.031,
+          "tool_results": [],
+          "usage": null
+        },
+        "model": "juniper1-sft-pilot-v1-f16",
+        "passed": true
+      },
+      {
+        "check": "all_64_control_spellings_stay_text",
+        "detail": {
+          "outcome": {
+            "activities": [],
+            "answer": "",
+            "error": "GENERATION_TRUNCATED",
+            "seconds": 1.575,
+            "tool_results": [],
+            "usage": null
+          },
+          "prompt_control_ids": [3, 9, 4]
+        },
+        "model": "juniper1-sft-pilot-v1-f16",
+        "passed": true
+      },
+      {
+        "check": "analysis_continuation_model_continues",
+        "detail": {
+          "analysis_text_in_events": false,
+          "forced": "analysis message only",
+          "outcome": {
+            "activities": ["reasoning"],
+            "answer": "I don't know.",
+            "error": null,
+            "seconds": 0.366,
+            "tool_results": [],
+            "usage": {
+              "durationMs": 364,
+              "inputTokens": 738,
+              "outputTokens": 22,
+              "totalTokens": 760
+            }
+          }
+        },
+        "model": "juniper1-sft-pilot-v1-f16",
+        "passed": true
+      },
+      {
+        "check": "analysis_continuation_resubmits_after_end",
+        "detail": {
+          "forced": "analysis, <|end|>, then (after the host's <|assistant|>) final",
+          "outcome": {
+            "activities": ["reasoning"],
+            "answer": "Madrid.",
+            "error": null,
+            "seconds": 0.18,
+            "tool_results": [],
+            "usage": {
+              "durationMs": 178,
+              "inputTokens": 738,
+              "outputTokens": 11,
+              "totalTokens": 749
+            }
+          }
+        },
+        "model": "juniper1-sft-pilot-v1-f16",
+        "passed": true
+      },
+      {
+        "check": "host_tool_round_trip",
+        "detail": {
+          "continuation": {
+            "activities": [],
+            "answer": "{\"name\": \"calculator.evaluate\", \"arguments\": {\"expression\": \"48173*2917\"}}",
+            "error": null,
+            "seconds": 1.146,
+            "tool_results": [
+              {
+                "callId": "call-f0a199aa609549099abd028790098ffd",
+                "error": null,
+                "name": "calculator.evaluate",
+                "protocolVersion": "juniper-tool-protocol-v1",
+                "result": {
+                  "value": 140520641.0
+                },
+                "status": "success"
+              }
+            ],
+            "usage": {
+              "durationMs": 1144,
+              "inputTokens": 1605,
+              "outputTokens": 62,
+              "totalTokens": 1667
+            }
+          },
+          "forced": "the tool call; the continuation after the host result is the model's own",
+          "tool_result": {
+            "callId": "call-f0a199aa609549099abd028790098ffd",
+            "error": null,
+            "name": "calculator.evaluate",
+            "protocolVersion": "juniper-tool-protocol-v1",
+            "result": {
+              "value": 140520641.0
+            },
+            "status": "success"
+          }
+        },
+        "model": "juniper1-sft-pilot-v1-f16",
+        "passed": true
+      },
+      {
+        "check": "unknown_tool_denied",
+        "detail": {
+          "activities": [],
+          "answer": "",
+          "error": "MODEL_OUTPUT_INVALID",
+          "seconds": 0.76,
+          "tool_results": [
+            {
+              "callId": "call-60faf0e4929b463a96ef4410f865dbdb",
+              "error": {
+                "code": "TOOL_NOT_ENABLED",
+                "message": "This tool is not enabled for this request."
+              },
+              "name": "shell.run",
+              "protocolVersion": "juniper-tool-protocol-v1",
+              "result": null,
+              "status": "denied"
+            }
+          ],
+          "usage": null
+        },
+        "model": "juniper1-sft-pilot-v1-f16",
+        "passed": true
+      },
+      {
+        "check": "permission_denial",
+        "detail": {
+          "activities": [],
+          "answer": "{\"name\": \"memory.save\", \"arguments\": {\"content\": \"The user denied this host capability.\"}}",
+          "error": null,
+          "seconds": 1.03,
+          "tool_results": [
+            {
+              "callId": "call-67e4216119964762a51c8f862ec9e45d",
+              "error": {
+                "code": "PERMISSION_DENIED",
+                "message": "The user denied this host capability."
+              },
+              "name": "memory.save",
+              "protocolVersion": "juniper-tool-protocol-v1",
+              "result": null,
+              "status": "denied"
+            }
+          ],
+          "usage": {
+            "durationMs": 1029,
+            "inputTokens": 1627,
+            "outputTokens": 50,
+            "totalTokens": 1677
+          }
+        },
+        "model": "juniper1-sft-pilot-v1-f16",
+        "passed": true
+      },
+      {
+        "check": "invalid_tool_arguments_rejected",
+        "detail": {
+          "activities": [],
+          "answer": "",
+          "error": "MODEL_OUTPUT_INVALID",
+          "seconds": 0.862,
+          "tool_results": [
+            {
+              "callId": "call-a93634464cef437dbf704d4a38ca589b",
+              "error": {
+                "code": "INVALID_TOOL_ARGUMENT",
+                "message": "invalid tool arguments"
+              },
+              "name": "calculator.evaluate",
+              "protocolVersion": "juniper-tool-protocol-v1",
+              "result": null,
+              "status": "error"
+            }
+          ],
+          "usage": null
+        },
+        "model": "juniper1-sft-pilot-v1-f16",
+        "passed": true
+      },
+      {
+        "check": "greedy_parity_vs_python_client",
+        "detail": {
+          "bundle_sha256": "f96320150025d0250b5fbe7f5bc44b1f39b56ea836c8dfe842dbfc48c508eea1",
+          "divergences": [],
+          "identical_sequences": 48,
+          "note": "Rust App client and Python reference client on separate llama-server b11270 processes, same GGUF, greedy, 24 tokens; a divergence is reported with the raw top-2 logprob gap to separate F16 near-ties from errors",
+          "prompt_ids_sha256": "8bff544e6d83be8933510a9bc7fd559ce26eff191c5ec4174f428db462e69c64",
+          "prompts": 48,
+          "python_paths_called": ["/completion"],
+          "python_runtime_build": "b11270-748d4225b",
+          "selection": "split == dev, variant == chat, every 7th, first 48 (qual/a02_token_id_qual.py)"
+        },
+        "model": "juniper1-sft-pilot-v1-f16",
+        "passed": true
+      },
+      {
+        "check": "only_completion_endpoint_called",
+        "detail": {
+          "paths": ["/completion"]
+        },
+        "model": "juniper1-sft-pilot-v1-f16",
+        "passed": true
+      },
+      {
+        "check": "crash_and_restart",
+        "detail": {
+          "killed_pid_alive": false,
+          "outcome": {
+            "activities": ["restarting-model"],
+            "answer": "{\"hello\": \"I don't know\"}",
+            "error": null,
+            "seconds": 1.311,
+            "tool_results": [],
+            "usage": {
+              "durationMs": 703,
+              "inputTokens": 736,
+              "outputTokens": 12,
+              "totalTokens": 748
+            }
+          }
+        },
+        "model": "juniper1-sft-pilot-v1-f16",
+        "passed": true
+      },
+      {
+        "check": "switch_back_without_stale_callbacks_or_leaks",
+        "detail": {
+          "events_on_finished_topic": 0,
+          "previous_pid_alive": false,
+          "servers": 1
+        },
+        "model": "juniper1-base-v1-f16",
+        "passed": true
+      },
+      {
+        "check": "unload_leaves_no_process",
+        "detail": {
+          "servers": 0
+        },
+        "model": null,
+        "passed": true
+      }
+    ],
+    "host": {
+      "accelerator": "none (CUDA_VISIBLE_DEVICES cleared, -ngl 0)",
+      "cpu": "AMD Ryzen 7 5700G with Radeon Graphics",
+      "threads": 16
+    },
+    "identity": {
+      "models": {
+        "juniper1-base-v1-f16": {
+          "sha256": "41e21fed6bda34c5ce0e99ec43201fcf8b8e3f1129e9275cfe4456c43c7b8980",
+          "size_bytes": 286188704
+        },
+        "juniper1-sft-pilot-v1-f16": {
+          "sha256": "1537fde2786088a4a3e74c721a83d291050c6bc4a1c7ff56b7cb9cc4afd95175",
+          "size_bytes": 286188704
+        }
+      },
+      "runtime_version": [
+        "version: 0.5.0-dev (build 11270, commit 748d4225b)",
+        "built with GNU 13.3.0 for Linux x86_64"
+      ],
+      "tokenizer_sha256": "176a89e2197c24d3f024fbb60ce6f346635e7cba912b3579d93b37d486c9adf1"
+    },
+    "profile": {
+      "ctx_size": 2048,
+      "id": "juniper1-token-ids.v1",
+      "protocol": "juniper-chat-v1",
+      "runtime": {
+        "accelerator": "cpu",
+        "commit": "748d4225b9016b17ce4bcfa69fdc2c39f473a965",
+        "engine": "llama.cpp",
+        "tag": "b11270"
+      }
+    },
+    "schema": "juniper-app.juniper1-token-id-live.v1",
+    "summary": {
+      "checks": 34,
+      "passed": 34
+    }
+  }
+}
