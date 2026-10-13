@@ -641,6 +641,8 @@ pub async fn import_gguf(
     if !metadata.is_file() || metadata.len() == 0 || metadata.len() > MAX_GGUF_BYTES {
         return Err("The selected GGUF file is no longer a readable regular file.".into());
     }
+    // Juniper 1 must never be served through Ollama's text tokenizer and chat template (A-02).
+    crate::gguf_guard::refuse_juniper_on_text_path(&mut source)?;
     let cache_dir = app
         .path()
         .app_cache_dir()
