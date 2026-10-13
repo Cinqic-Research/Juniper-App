@@ -18,9 +18,14 @@ use serde_json::Value;
 const GOLDEN_SHA256: &str = "82198489a098a717aa1834ebd5a6c5860cacd39ad0ebc0e3c198a18b79b00745";
 
 fn golden() -> Value {
-    let path = std::env::var("JUNIPER1_GOLDEN").expect("set JUNIPER1_GOLDEN to the private golden.v1.json");
+    let path = std::env::var("JUNIPER1_GOLDEN")
+        .expect("set JUNIPER1_GOLDEN to the private golden.v1.json");
     let bytes = std::fs::read(path).expect("golden fixture");
-    assert_eq!(sha256_hex(&bytes), GOLDEN_SHA256, "golden fixture is not the pinned one");
+    assert_eq!(
+        sha256_hex(&bytes),
+        GOLDEN_SHA256,
+        "golden fixture is not the pinned one"
+    );
     serde_json::from_slice(&bytes).expect("golden fixture")
 }
 

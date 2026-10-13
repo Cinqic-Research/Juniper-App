@@ -28,3 +28,5 @@ src-tauri/runtime/llama-server-cuda
 src-tauri/runtime/llama-server-cuda.exe
 .DS_Store
 release-artifacts/
+# private Juniper 1 golden fixture (token IDs of the private tokenizer)
+tests/juniper1/golden.v1.json

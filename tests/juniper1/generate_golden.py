@@ -1,7 +1,8 @@
 """Golden fixtures for Juniper App's Rust port of Juniper 1's tokenizer loading and protocol.
 
 Runs the reference implementation (Juniper-1-Data ``j1data.jtok`` and ``j1data.protocol``) and
-writes ``golden.v1.json`` next to this script. The Rust tests in
+writes the fixture to ``--out``, outside this public repository (it holds token IDs of the private
+tokenizer; ``golden.rs`` pins its SHA-256 and reads it from ``JUNIPER1_GOLDEN``). The Rust tests in
 ``src-tauri/src/juniper1/golden.rs`` must reproduce every value with the canonical tokenizer.
 
 The 200-document regression set (the selection ``qual/a02_token_id_qual.py`` in
@@ -36,7 +37,9 @@ def main() -> int:
     ap.add_argument("--tokenizer", type=Path, required=True)
     ap.add_argument("--shards", type=Path, required=True)
     ap.add_argument("--private-out", type=Path, required=True)
-    ap.add_argument("--out", type=Path, default=HERE / "golden.v1.json")
+    # The fixture holds token IDs of the private tokenizer: it is written outside this public repository
+    # and its SHA-256 is pinned in src-tauri/src/juniper1/golden.rs.
+    ap.add_argument("--out", type=Path, required=True)
     a = ap.parse_args()
     if HERE.parent.parent in a.private_out.resolve().parents:
         raise SystemExit("--private-out must be outside the Juniper App repository")
