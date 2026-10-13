@@ -76,7 +76,7 @@ fn is_reparse_point(_metadata: &std::fs::Metadata) -> bool {
 #[cfg(windows)]
 const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
 
-fn open_regular_file(path: &std::path::Path, unavailable: &str) -> Result<File, String> {
+pub(crate) fn open_regular_file(path: &std::path::Path, unavailable: &str) -> Result<File, String> {
     let path_metadata = std::fs::symlink_metadata(path).map_err(|_| unavailable.to_owned())?;
     if path_metadata.file_type().is_symlink()
         || is_reparse_point(&path_metadata)

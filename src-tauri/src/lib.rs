@@ -8,9 +8,13 @@ mod device;
 pub mod device_link;
 mod domain;
 mod gguf_guard;
+#[cfg(not(target_os = "android"))]
+mod juniper1;
 // Hardware tests: they stop the server with a Unix signal to test recovery.
 #[cfg(all(test, unix, not(target_os = "android")))]
 mod live_gpt_oss;
+#[cfg(all(test, target_os = "linux"))]
+mod live_juniper1;
 #[cfg(not(target_os = "android"))]
 mod local_runtime;
 mod managed_models;

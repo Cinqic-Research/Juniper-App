@@ -330,7 +330,10 @@ pub async fn download<R: Runtime>(
     fs::rename(&partial_file, &final_file)
         .map_err(|error| format!("MODEL_INSTALL_ERROR: {error}"))?;
     // Juniper wrote and hashed these bytes itself; nothing else holds the file.
-    write_record(&final_file, current_record(&final_file, artifact));
+    write_record(
+        &final_file,
+        current_record(&final_file, artifact.sha256.as_deref()),
+    );
     emit_progress(
         &app,
         request_id,
@@ -452,13 +455,13 @@ fn record_path(path: &Path) -> PathBuf {
     path.with_extension("gguf.verified")
 }
 
-fn current_record(path: &Path, artifact: &CatalogArtifact) -> Option<VerificationRecord> {
+fn current_record(path: &Path, sha256: Option<&str>) -> Option<VerificationRecord> {
     let metadata = fs::symlink_metadata(path).ok()?;
     if !metadata.file_type().is_file() {
         return None;
     }
     Some(VerificationRecord {
-        sha256: artifact.sha256.clone()?,
+        sha256: sha256?.to_owned(),
         size_bytes: metadata.len(),
         modified_nanos: metadata
             .modified()
@@ -479,18 +482,29 @@ fn write_record(path: &Path, record: Option<VerificationRecord>) {
 }
 
 fn verify_file(path: &Path, artifact: &CatalogArtifact) -> Result<bool, String> {
+    verify_against(path, artifact.size_bytes, artifact.sha256.as_deref())
+}
+
+/// Whether the regular file at `path` has exactly this size and SHA-256, with
+/// the same verification record cache as catalog models.
+#[cfg(not(target_os = "android"))]
+pub(crate) fn verify_expected(path: &Path, size_bytes: u64, sha256: &str) -> Result<bool, String> {
+    verify_against(path, size_bytes, Some(sha256))
+}
+
+fn verify_against(path: &Path, size_bytes: u64, sha256: Option<&str>) -> Result<bool, String> {
     let link_metadata = fs::symlink_metadata(path).map_err(|error| error.to_string())?;
     if link_metadata.file_type().is_symlink() || !link_metadata.file_type().is_file() {
         return Ok(false);
     }
     let metadata = fs::metadata(path).map_err(|error| error.to_string())?;
-    if metadata.len() != artifact.size_bytes {
+    if metadata.len() != size_bytes {
         return Ok(false);
     }
     let recorded = fs::read_to_string(record_path(path))
         .ok()
         .and_then(|text| serde_json::from_str::<VerificationRecord>(&text).ok());
-    let before = current_record(path, artifact);
+    let before = current_record(path, sha256);
     if before
         .as_ref()
         .is_some_and(|record| record.changed_nanos.is_some())
@@ -501,10 +515,10 @@ fn verify_file(path: &Path, artifact: &CatalogArtifact) -> Result<bool, String> 
     }
     let mut hasher = Sha256::new();
     hash_existing(path, &mut hasher)?;
-    let verified = artifact.sha256.as_deref() == Some(format!("{:x}", hasher.finalize()).as_str());
+    let verified = sha256 == Some(format!("{:x}", hasher.finalize()).as_str());
     // A file that changed while it was being hashed is not the file that was
     // hashed; it is neither trusted now nor recorded.
-    let unchanged = before.is_some() && before == current_record(path, artifact);
+    let unchanged = before.is_some() && before == current_record(path, sha256);
     if verified && unchanged && ctime_is_precise_enough(path) {
         write_record(path, before);
     } else {
@@ -576,7 +590,7 @@ pub async fn import<R: Runtime>(
             ));
         }
     }
-    let before = current_record(&partial_file, &artifact);
+    let before = current_record(&partial_file, artifact.sha256.as_deref());
     let task_source = source.to_owned();
     let task_partial = partial_file.clone();
     let task_app = app.clone();
@@ -630,13 +644,16 @@ pub async fn import<R: Runtime>(
     }
     // A hard link shares its bytes with the user's file, which can still be
     // changed under its original name; record only what was actually hashed.
-    if linked && before != current_record(&partial_file, &artifact) {
+    if linked && before != current_record(&partial_file, artifact.sha256.as_deref()) {
         let _ = fs::remove_file(&partial_file);
         return Err("MODEL_CHECKSUM_MISMATCH: The selected file changed during import.".into());
     }
     fs::rename(&partial_file, &final_file)
         .map_err(|error| format!("MODEL_INSTALL_ERROR: {error}"))?;
-    write_record(&final_file, current_record(&final_file, &artifact));
+    write_record(
+        &final_file,
+        current_record(&final_file, artifact.sha256.as_deref()),
+    );
     emit_progress(&app, request_id, "ready", total, total, None);
     crate::commands::record_runtime_log(
         state,
