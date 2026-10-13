@@ -133,6 +133,13 @@ fn tools_not_offered_are_denied_before_validation() {
         assert_eq!(trace["gate"], "not-enabled");
     }
     open(&mut h, "p", "private-chat");
+    let reply = h.handle(
+        &json!({ "op": "open_session", "session": "p2", "policy": "private-chat" }).to_string(),
+    );
+    assert_eq!(
+        reply["offered_tools"],
+        json!(["calculator.evaluate", "unit.convert"])
+    );
     let private = call(&mut h, "p", "memory.list", json!({}), 0);
     assert_eq!(private["result"]["error"]["code"], "TOOL_NOT_ENABLED");
     open(&mut h, "m", "model-without-tools");

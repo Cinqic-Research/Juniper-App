@@ -59,7 +59,8 @@ tree (`sources_match_commit`), SHA-256 of every harness source, drift checks,
 `rustc` version, OS, policy fixture digest and the catalog. Then each stdin line
 produces exactly one stdout line:
 
-- `{"op": "open_session", "session", "policy", "attachments": [...]}`
+- `{"op": "open_session", "session", "policy", "attachments": [...]}` replies with
+  `offered_tools`, the tools the App's `offered_tools` would offer under that policy.
 - `{"op": "call", "session", "name", "arguments", "round", "calls_this_round"}`
   returns a `j1.host-trace.v1` record: `trace_id`, `call_id`, `gate`,
   `permission` (asked, decision, preview), `path`, `status`, `result` (the

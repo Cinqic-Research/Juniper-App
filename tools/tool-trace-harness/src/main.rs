@@ -228,12 +228,7 @@ impl Harness {
                 let request =
                     self.policies
                         .request(&policy, &session, &self.catalog, attachments(files)?)?;
-                let offered: Vec<String> = request
-                    .tools
-                    .iter()
-                    .filter(|tool| tool.enabled && tools::host_risk(&tool.name).is_some())
-                    .map(|tool| tool.name.clone())
-                    .collect();
+                let offered = app::offered_names(&request);
                 self.sessions.insert(
                     session.clone(),
                     Session {
@@ -246,7 +241,7 @@ impl Harness {
                 );
                 Ok(json!({
                     "ok": true, "op": "open_session", "session": session, "policy": policy,
-                    "enabled_tools": offered, "env_id": self.env_id,
+                    "offered_tools": offered, "env_id": self.env_id,
                 }))
             }
             Input::CloseSession { session } => {

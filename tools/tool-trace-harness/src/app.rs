@@ -356,6 +356,14 @@ pub fn tool_message(result: &Value) -> String {
     neutralize_control_tokens(&result.to_string()).into_owned()
 }
 
+/// The tools the host offers this request, in catalog order (`offered_tools`).
+pub fn offered_names(request: &ChatRequest) -> Vec<String> {
+    offered_tools(request)
+        .into_iter()
+        .map(|tool| tool.name.clone())
+        .collect()
+}
+
 /// The App's user-role attachments message for `attachments`.
 pub fn render_attachments(attachments: &[AttachmentContext]) -> Option<Value> {
     attachments_message(attachments)
