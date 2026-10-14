@@ -330,7 +330,10 @@ pub async fn download<R: Runtime>(
     fs::rename(&partial_file, &final_file)
         .map_err(|error| format!("MODEL_INSTALL_ERROR: {error}"))?;
     // Juniper wrote and hashed these bytes itself; nothing else holds the file.
-    write_record(&final_file, current_record(&final_file, artifact));
+    write_record(
+        &final_file,
+        current_record(&final_file, artifact.sha256.as_deref()),
+    );
     emit_progress(
         &app,
         request_id,
@@ -452,13 +455,13 @@ fn record_path(path: &Path) -> PathBuf {
     path.with_extension("gguf.verified")
 }
 
-fn current_record(path: &Path, artifact: &CatalogArtifact) -> Option<VerificationRecord> {
+fn current_record(path: &Path, sha256: Option<&str>) -> Option<VerificationRecord> {
     let metadata = fs::symlink_metadata(path).ok()?;
     if !metadata.file_type().is_file() {
         return None;
     }
     Some(VerificationRecord {
-        sha256: artifact.sha256.clone()?,
+        sha256: sha256?.to_owned(),
         size_bytes: metadata.len(),
         modified_nanos: metadata
             .modified()
@@ -479,21 +482,39 @@ fn write_record(path: &Path, record: Option<VerificationRecord>) {
 }
 
 fn verify_file(path: &Path, artifact: &CatalogArtifact) -> Result<bool, String> {
+    verify_against(path, artifact.size_bytes, artifact.sha256.as_deref(), true)
+}
+
+/// Whether the regular file at `path` has exactly this size and SHA-256.
+/// Qualified native artifacts are always hashed: a neighboring verification
+/// record is writable data, so it cannot establish their pinned identity.
+#[cfg(not(target_os = "android"))]
+pub(crate) fn verify_expected(path: &Path, size_bytes: u64, sha256: &str) -> Result<bool, String> {
+    verify_against(path, size_bytes, Some(sha256), false)
+}
+
+fn verify_against(
+    path: &Path,
+    size_bytes: u64,
+    sha256: Option<&str>,
+    use_cache: bool,
+) -> Result<bool, String> {
     let link_metadata = fs::symlink_metadata(path).map_err(|error| error.to_string())?;
     if link_metadata.file_type().is_symlink() || !link_metadata.file_type().is_file() {
         return Ok(false);
     }
     let metadata = fs::metadata(path).map_err(|error| error.to_string())?;
-    if metadata.len() != artifact.size_bytes {
+    if metadata.len() != size_bytes {
         return Ok(false);
     }
     let recorded = fs::read_to_string(record_path(path))
         .ok()
         .and_then(|text| serde_json::from_str::<VerificationRecord>(&text).ok());
-    let before = current_record(path, artifact);
-    if before
-        .as_ref()
-        .is_some_and(|record| record.changed_nanos.is_some())
+    let before = current_record(path, sha256);
+    if use_cache
+        && before
+            .as_ref()
+            .is_some_and(|record| record.changed_nanos.is_some())
         && recorded == before
         && ctime_is_precise_enough(path)
     {
@@ -501,11 +522,11 @@ fn verify_file(path: &Path, artifact: &CatalogArtifact) -> Result<bool, String> 
     }
     let mut hasher = Sha256::new();
     hash_existing(path, &mut hasher)?;
-    let verified = artifact.sha256.as_deref() == Some(format!("{:x}", hasher.finalize()).as_str());
+    let verified = sha256 == Some(format!("{:x}", hasher.finalize()).as_str());
     // A file that changed while it was being hashed is not the file that was
     // hashed; it is neither trusted now nor recorded.
-    let unchanged = before.is_some() && before == current_record(path, artifact);
-    if verified && unchanged && ctime_is_precise_enough(path) {
+    let unchanged = before.is_some() && before == current_record(path, sha256);
+    if use_cache && verified && unchanged && ctime_is_precise_enough(path) {
         write_record(path, before);
     } else {
         let _ = fs::remove_file(record_path(path));
@@ -576,7 +597,7 @@ pub async fn import<R: Runtime>(
             ));
         }
     }
-    let before = current_record(&partial_file, &artifact);
+    let before = current_record(&partial_file, artifact.sha256.as_deref());
     let task_source = source.to_owned();
     let task_partial = partial_file.clone();
     let task_app = app.clone();
@@ -630,13 +651,16 @@ pub async fn import<R: Runtime>(
     }
     // A hard link shares its bytes with the user's file, which can still be
     // changed under its original name; record only what was actually hashed.
-    if linked && before != current_record(&partial_file, &artifact) {
+    if linked && before != current_record(&partial_file, artifact.sha256.as_deref()) {
         let _ = fs::remove_file(&partial_file);
         return Err("MODEL_CHECKSUM_MISMATCH: The selected file changed during import.".into());
     }
     fs::rename(&partial_file, &final_file)
         .map_err(|error| format!("MODEL_INSTALL_ERROR: {error}"))?;
-    write_record(&final_file, current_record(&final_file, &artifact));
+    write_record(
+        &final_file,
+        current_record(&final_file, artifact.sha256.as_deref()),
+    );
     emit_progress(&app, request_id, "ready", total, total, None);
     crate::commands::record_runtime_log(
         state,
@@ -828,6 +852,24 @@ mod tests {
             .expect("original modification time should be restored");
         assert!(!verify_file(&path, &artifact).expect("verify"));
         assert!(!record_path(&path).exists());
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[cfg(not(target_os = "android"))]
+    #[test]
+    fn qualified_native_hashes_ignore_forged_verification_records() {
+        let root =
+            std::env::temp_dir().join(format!("juniper-forged-record-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&root).expect("directory");
+        let path = root.join("model.gguf");
+        fs::write(&path, b"WRONG_MODEL").expect("model");
+        let expected = format!("{:x}", Sha256::digest(b"RIGHT_MODEL"));
+        // A distributor can write a receipt with the expected digest and the
+        // wrong file's real timestamps. Those timestamps do not prove hashing.
+        write_record(&path, current_record(&path, Some(&expected)));
+        assert!(!verify_expected(&path, 11, &expected).expect("verify"));
+        fs::write(&path, b"RIGHT_MODEL").expect("correct model");
+        assert!(verify_expected(&path, 11, &expected).expect("verify correct bytes"));
         fs::remove_dir_all(root).expect("cleanup");
     }
 

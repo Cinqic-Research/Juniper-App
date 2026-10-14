@@ -520,6 +520,8 @@ export function ChatScreen({
               !(privateMode && (tool.name.startsWith('memory.') || tool.name === 'chat.search')),
           )
         : []
+    const nativeTokenIds =
+      provider.kind === 'juniper-local' && model.runtimeId === 'juniper1-token-ids'
     const context = buildContext(
       assistant,
       data.memories,
@@ -528,7 +530,13 @@ export function ChatScreen({
       model.contextLength,
       content,
       requestAttachments,
-      { privateChat: privateMode, reservedOutputTokens: assistant.generation.maxOutput },
+      {
+        privateChat: privateMode,
+        reservedOutputTokens: nativeTokenIds
+          ? Math.min(assistant.generation.maxOutput ?? 256, 512)
+          : assistant.generation.maxOutput,
+        nativeTokenIds,
+      },
     )
     setLastContext(context)
     if (context.overflow) {

@@ -128,6 +128,40 @@ The checks are regular expressions with the same known blind spots as the
 qualification's; results are read, not just counted. Recorded results are in
 [../qualification/gpt-oss-wrapper-evaluation-2026-10-02.md](../qualification/gpt-oss-wrapper-evaluation-2026-10-02.md).
 
+### Juniper 1 token-ID backend
+
+Deterministic tests (`src-tauri/src/juniper1/`) run in `cargo test` against
+fake loopback servers and a structural stand-in tokenizer: integer-only
+requests and bans, response validation (malformed JSON, non-integer or
+out-of-range IDs, excess tokens, prompt-length mismatch, HTTP errors), refused
+redirects with an untouched redirect target, literal-loopback URL rules,
+listener ownership, timeout and cancellation, analysis resubmission and turn
+bounds, the self-test, environment proxies ignored (a child test process with
+`HTTP_PROXY` and friends set, plus a control client that does use the proxy),
+model metadata and tokenizer verification, and the chat path: one answer only
+after the turn parses, analysis never emitted, malformed/truncated/marked
+output never shown, forged roles in user, profile, memory, attachment, and
+history text kept as text, tool calls through the host gate (unknown,
+disabled, invalid, denied, approved), the tool-loop bound, context overflow,
+and whole-turn trimming.
+
+Golden tests (`juniper1::golden`, ignored without the canonical tokenizer,
+which is not in this repository) compare the port with fixtures the Python
+reference writes (`tests/juniper1/generate_golden.py`): all 64 control
+spellings, Unicode and whitespace texts, serialization, budgeting, parser
+outcomes, and the 200-document regression set (hashes only; the texts stay
+outside the repository):
+
+```bash
+JUNIPER1_TOKENIZER=<tokenizer.json> JUNIPER1_GOLDEN_DOCS=<regression_docs.private.jsonl> \
+  cargo test --manifest-path src-tauri/Cargo.toml --lib -- --ignored juniper1::golden
+```
+
+`live_juniper1` drives both real F16 exports through the App request path on
+llama.cpp b11270 (setup in the module header) and writes a JSON evidence
+record; see
+[../qualification/juniper1-token-id-2026-10-13.md](../qualification/juniper1-token-id-2026-10-13.md).
+
 ## Platform validation
 
 Linux bundles are built once on Ubuntu 22.04 and smoked on Ubuntu 22.04 and

@@ -162,6 +162,12 @@ pub struct RuntimeIdentity {
     pub runtime_build: Option<String>,
     pub template_sha256: Option<String>,
     pub context_size: Option<u32>,
+    /// SHA-256 of the host-side tokenizer, for a backend that tokenizes on the host.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tokenizer_sha256: Option<String>,
+    /// The conversation protocol the host serialized, for such a backend.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub protocol: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]

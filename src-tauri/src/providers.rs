@@ -378,10 +378,49 @@ pub async fn stream<R: Runtime>(
     } else {
         stream_openai_compatible(&request, &app, &topic, &cancellation, state, &policy).await
     };
+    finish_request(
+        &request,
+        &app,
+        state,
+        result,
+        Finished {
+            cancelled: cancellation.is_cancelled(),
+            started,
+            backend: policy.id(),
+            reasoning_effort: policy
+                .reasoning_effort(request.generation.thinking.as_deref())
+                .map(str::to_owned),
+            runtime,
+            tokens: None,
+        },
+    );
+}
+
+/// What a finished request reports with its provenance.
+pub(crate) struct Finished<'a> {
+    pub(crate) cancelled: bool,
+    pub(crate) started: Instant,
+    pub(crate) backend: &'a str,
+    pub(crate) reasoning_effort: Option<String>,
+    pub(crate) runtime: Option<RuntimeIdentity>,
+    /// Prompt and generated token counts, when the backend counted them.
+    pub(crate) tokens: Option<(u64, u64)>,
+}
+
+/// Ends a chat request with its single `done` event, carrying either an
+/// error or the answer's provenance.
+pub(crate) fn finish_request<R: Runtime>(
+    request: &ChatRequest,
+    app: &AppHandle<R>,
+    state: &AppState,
+    result: Result<(), ProviderError>,
+    finished: Finished<'_>,
+) {
+    let topic = format!("juniper://chat/{}", request.request_id);
     let mut event = ChatStreamEvent::for_request(&request.request_id);
     event.done = Some(true);
     match result {
-        Ok(()) if cancellation.is_cancelled() => {
+        Ok(()) if finished.cancelled => {
             record_runtime_log(
                 state,
                 "request.cancelled",
@@ -403,22 +442,20 @@ pub async fn stream<R: Runtime>(
                 Some(&request.model.model_id),
             );
             event.usage = Some(Usage {
-                input_tokens: None,
-                output_tokens: None,
-                total_tokens: None,
-                duration_ms: Some(started.elapsed().as_millis() as u64),
+                input_tokens: finished.tokens.map(|(input, _)| input),
+                output_tokens: finished.tokens.map(|(_, output)| output),
+                total_tokens: finished.tokens.map(|(input, output)| input + output),
+                duration_ms: Some(finished.started.elapsed().as_millis() as u64),
             });
             event.provenance = Some(Provenance {
-                backend: policy.id().to_owned(),
+                backend: finished.backend.to_owned(),
                 constitution: behavior::constitution_id(),
                 tool_protocol: tools::PROTOCOL_VERSION.to_owned(),
                 provider_kind: request.provider.kind.clone(),
                 model_id: request.model.model_id.clone(),
                 execution_location: request.model.execution_location.clone(),
-                reasoning_effort: policy
-                    .reasoning_effort(request.generation.thinking.as_deref())
-                    .map(str::to_owned),
-                runtime,
+                reasoning_effort: finished.reasoning_effort,
+                runtime: finished.runtime,
             });
         }
         Err(error) => {
@@ -439,13 +476,13 @@ pub async fn stream<R: Runtime>(
 }
 
 #[derive(Debug)]
-struct ProviderError {
-    code: String,
-    message: String,
+pub(crate) struct ProviderError {
+    pub(crate) code: String,
+    pub(crate) message: String,
 }
 
 impl ProviderError {
-    fn new(code: &str, message: impl Into<String>) -> Self {
+    pub(crate) fn new(code: &str, message: impl Into<String>) -> Self {
         Self {
             code: code.into(),
             message: message.into(),
@@ -632,7 +669,7 @@ fn parse_ollama_stream_line(line: &str) -> Result<ProviderStreamRecord, Provider
 /// The tools this request may use. A private chat is isolated: it neither
 /// reads nor writes memories and cannot search other chats. Device Link
 /// peers get only stateless tools.
-fn offered_tools(request: &ChatRequest) -> Vec<&ToolDefinition> {
+pub(crate) fn offered_tools(request: &ChatRequest) -> Vec<&ToolDefinition> {
     if request.model.capabilities.tools != "supported" {
         return Vec::new();
     }
@@ -668,7 +705,7 @@ fn tool_payload(request: &ChatRequest) -> Vec<Value> {
 }
 
 /// Host context the tool loop may read or change for this request.
-fn scoped_host_context(request: &ChatRequest) -> HostToolContext {
+pub(crate) fn scoped_host_context(request: &ChatRequest) -> HostToolContext {
     let mut host_context = request.host_context.clone();
     if request.private_chat || request.provider.kind == "juniper-network" {
         // Device Link carries only the explicitly submitted chat messages and
@@ -681,7 +718,10 @@ fn scoped_host_context(request: &ChatRequest) -> HostToolContext {
 
 /// Memories selected for context, resolved against host data so a request
 /// cannot smuggle in disabled memories or another assistant's.
-fn context_memories(request: &ChatRequest, host_context: &HostToolContext) -> Vec<String> {
+pub(crate) fn context_memories(
+    request: &ChatRequest,
+    host_context: &HostToolContext,
+) -> Vec<String> {
     request
         .context_memory_ids
         .iter()
@@ -696,11 +736,7 @@ fn context_memories(request: &ChatRequest, host_context: &HostToolContext) -> Ve
         .collect()
 }
 
-fn request_messages(
-    request: &ChatRequest,
-    policy: &RequestPolicy,
-    host_context: &HostToolContext,
-) -> Result<Vec<Value>, ProviderError> {
+pub(crate) fn check_attachment_limits(request: &ChatRequest) -> Result<(), ProviderError> {
     if request.attachments.len() > MAX_ATTACHMENT_COUNT
         || request
             .attachments
@@ -718,6 +754,15 @@ fn request_messages(
             "Attachments exceed the native runtime limits.",
         ));
     }
+    Ok(())
+}
+
+fn request_messages(
+    request: &ChatRequest,
+    policy: &RequestPolicy,
+    host_context: &HostToolContext,
+) -> Result<Vec<Value>, ProviderError> {
+    check_attachment_limits(request)?;
     let profile = request
         .messages
         .first()
@@ -727,7 +772,10 @@ fn request_messages(
     let lineage = policy
         .lineage
         .clone()
-        .map(|description| behavior::Lineage { description })
+        .map(|description| behavior::Lineage {
+            description,
+            trained_by_cinqic: false,
+        })
         .unwrap_or_else(|| behavior::Lineage::for_request(request));
     let instructions = behavior::instructions(request, &lineage, &offered_tools(request), profile)
         .map_err(|error| ProviderError::new("CONSTITUTION_INVALID", error))?;
@@ -949,14 +997,14 @@ async fn stream_openai_compatible<R: Runtime>(
 }
 
 /// Mutable host state for one request's tool loop.
-struct ToolSession {
-    host_context: HostToolContext,
+pub(crate) struct ToolSession {
+    pub(crate) host_context: HostToolContext,
     grants: HashSet<String>,
     call_ids: HashSet<String>,
 }
 
 impl ToolSession {
-    fn new(host_context: HostToolContext) -> Self {
+    pub(crate) fn new(host_context: HostToolContext) -> Self {
         Self {
             host_context,
             grants: HashSet::new(),
@@ -1093,7 +1141,7 @@ fn denied(call: &NormalizedToolCall, code: &str, message: &str) -> Value {
 // This boundary intentionally carries the request, UI event sink, cancellation, and
 // mutable host session together so every tool decision stays in one auditable loop.
 #[allow(clippy::too_many_arguments)]
-async fn host_tool_turn<R: Runtime>(
+pub(crate) async fn host_tool_turn<R: Runtime>(
     request: &ChatRequest,
     calls: &[NormalizedToolCall],
     round: u32,
@@ -1488,7 +1536,7 @@ fn neutralized_arguments(arguments: &Value) -> Value {
         .unwrap_or_else(|| arguments.clone())
 }
 
-fn emit_tool_turn<R: Runtime>(
+pub(crate) fn emit_tool_turn<R: Runtime>(
     request: &ChatRequest,
     app: &AppHandle<R>,
     topic: &str,
@@ -1501,7 +1549,11 @@ fn emit_tool_turn<R: Runtime>(
     let _ = app.emit(topic, event);
 }
 
-fn emit_reasoning_activity<R: Runtime>(request: &ChatRequest, app: &AppHandle<R>, topic: &str) {
+pub(crate) fn emit_reasoning_activity<R: Runtime>(
+    request: &ChatRequest,
+    app: &AppHandle<R>,
+    topic: &str,
+) {
     let mut event = ChatStreamEvent::for_request(&request.request_id);
     event.activity = Some("reasoning".into());
     let _ = app.emit(topic, event);
