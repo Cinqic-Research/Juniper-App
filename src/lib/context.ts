@@ -38,6 +38,11 @@ export interface ContextOptions {
 }
 
 const DEFAULT_CONTEXT_LIMIT = 8192
+/** Native token-ID routes: at most this many history messages (host cap is 256). */
+const NATIVE_HISTORY_MESSAGES = 64
+/** The longest j1tok-24k token is 65 characters, so this many characters per
+ * context token always cover a full window of history. */
+const NATIVE_CHARS_PER_TOKEN_BOUND = 65
 // The identity sentence and runtime section (model, location, tools) are
 // composed natively; these are generous estimates. The host measures the real
 // prompt with the model's tokenizer before sending it where it can.
@@ -197,25 +202,34 @@ export function buildContext(
     attachmentTokens +
     reservedOutputTokens
   let available = contextLimit - fixedTokens
-  const keptMemories: Memory[] = options.nativeTokenIds ? [...selectedMemories] : []
+  // Memories go into the current turn, which the native host never drops, so
+  // every route keeps them within the estimated budget (fail-soft, newest first).
+  const keptMemories: Memory[] = []
   for (let index = selectedMemories.length - 1; index >= 0; index -= 1) {
-    if (options.nativeTokenIds) break
     const memory = selectedMemories[index]!
     const size = estimateTokens(memory.content) + 4
     if (size > available) break
     keptMemories.unshift(memory)
     available -= size
   }
-  const kept: ContextMessage[] = options.nativeTokenIds ? [...candidates] : []
-  let used = options.nativeTokenIds
-    ? candidates.reduce((sum, item) => sum + estimateTokens(item.content) + 4, 0)
-    : 0
+  const kept: ContextMessage[] = []
+  let used = 0
+  let keptChars = 0
   const groups = exchanges(candidates)
   for (let index = groups.length - 1; index >= 0; index -= 1) {
-    if (options.nativeTokenIds) break
     const group = groups[index]!
     const size = group.reduce((sum, item) => sum + estimateTokens(item.content) + 4, 0)
-    if (used + size > available) break
+    if (options.nativeTokenIds) {
+      // The host fits whole turns with the canonical tokenizer; send only a
+      // bounded newest window that is certainly enough to fill the context.
+      const chars = group.reduce((sum, item) => sum + item.content.length, 0)
+      if (
+        kept.length + group.length > NATIVE_HISTORY_MESSAGES ||
+        keptChars + chars > contextLimit * NATIVE_CHARS_PER_TOKEN_BOUND
+      )
+        break
+      keptChars += chars
+    } else if (used + size > available) break
     kept.unshift(...group)
     used += size
   }

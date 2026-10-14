@@ -33,6 +33,30 @@ describe('context builder', () => {
       }).overflow,
     ).toBe(true)
   })
+  it('bounds native token-ID history and keeps memories within the budget', () => {
+    const messages = Array.from({ length: 300 }, (_, index) => ({
+      id: `m${index}`,
+      conversationId: 'c',
+      role: (index % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+      parts: [{ id: `p${index}`, type: 'text' as const, text: `turn ${index}` }],
+      createdAt: '',
+    }))
+    const memories = Array.from({ length: 64 }, (_, index) => ({
+      id: `mem${index}`,
+      content: 'remembered detail '.repeat(40),
+      createdAt: '',
+      updatedAt: '',
+    }))
+    const result = buildContext(defaultAssistant, memories as never, messages, [], 2048, 'hi', [], {
+      reservedOutputTokens: 512,
+      nativeTokenIds: true,
+    })
+    expect(result.overflow).toBe(false)
+    expect(result.conversation.length).toBeLessThanOrEqual(64)
+    expect(result.conversation.at(-1)?.content).toBe('turn 299')
+    expect(result.memory.length).toBeLessThan(memories.length)
+    expect(result.truncated).toBe(true)
+  })
   it('sends the profile, selected memories, and newest conversation; the host adds the rules', () => {
     const result = buildContext(
       defaultAssistant,
