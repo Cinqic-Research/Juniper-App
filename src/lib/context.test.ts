@@ -4,6 +4,35 @@ import constitution from '../../config/behavior/constitution.v2.json'
 import { buildContext, compilePersonality } from './context'
 
 describe('context builder', () => {
+  it('delegates canonical budgeting without rejecting hi or losing history on native token IDs', () => {
+    const hi = buildContext(defaultAssistant, [], [], [], 2048, 'hi', [], {
+      reservedOutputTokens: 512,
+      nativeTokenIds: true,
+    })
+    expect(hi.overflow).toBe(false)
+    expect(hi.reservedOutputTokens).toBe(512)
+    const message = {
+      id: 'old',
+      conversationId: 'c',
+      role: 'user' as const,
+      parts: [{ id: 'part-old', type: 'text' as const, text: 'history '.repeat(2000) }],
+      createdAt: '',
+    }
+    const retained = buildContext(defaultAssistant, [], [message], [], 2048, ' '.repeat(6000), [], {
+      reservedOutputTokens: 512,
+      nativeTokenIds: true,
+    })
+    expect(retained.overflow).toBe(false)
+    expect(retained.conversation).toHaveLength(1)
+    expect(retained.currentUserMessage).toBe(' '.repeat(6000))
+    expect(retained.truncated).toBe(false)
+    // Text backends retain their existing approximate rejection and trimming.
+    expect(
+      buildContext(defaultAssistant, [], [], [], 2048, ' '.repeat(6000), [], {
+        reservedOutputTokens: 512,
+      }).overflow,
+    ).toBe(true)
+  })
   it('sends the profile, selected memories, and newest conversation; the host adds the rules', () => {
     const result = buildContext(
       defaultAssistant,

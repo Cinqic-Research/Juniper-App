@@ -187,6 +187,40 @@ export async function getManagedModels(): Promise<import('../types').ManagedMode
   return invoke<import('../types').ManagedModel[]>('managed_models')
 }
 
+export interface NativeJuniper1Model {
+  id: string
+  displayName: string
+  checkpoint: string
+  stage: string
+  contextSize: number
+  maxOutput: number
+  installed: boolean
+}
+
+export async function getNativeJuniper1Models(): Promise<NativeJuniper1Model[]> {
+  if (!runningInTauri || runningOnAndroid) return []
+  return invoke<NativeJuniper1Model[]>('juniper1_models')
+}
+
+/** Both files are chosen in host-owned native pickers; paths never enter JS. */
+export async function importNativeJuniper1Model(
+  artifactId: string,
+  signal: AbortSignal,
+): Promise<boolean> {
+  if (!runningInTauri) throw new Error('Local research import requires the Juniper desktop app.')
+  if (signal.aborted) throw abortError()
+  const requestId = `juniper1-import-${randomUuid()}`
+  const cancel = () => void cancelChat(requestId)
+  signal.addEventListener('abort', cancel, { once: true })
+  try {
+    const installed = await invoke<boolean>('import_juniper1_model', { artifactId, requestId })
+    if (signal.aborted) throw abortError()
+    return installed
+  } finally {
+    signal.removeEventListener('abort', cancel)
+  }
+}
+
 export async function downloadManagedModel(
   catalogId: string,
   onProgress: (progress: ModelPullProgress) => void,

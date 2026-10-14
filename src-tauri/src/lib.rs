@@ -59,6 +59,8 @@ pub fn run() {
             commands::download_managed_model,
             commands::cancel_managed_model,
             commands::import_managed_model,
+            commands::juniper1_models,
+            commands::import_juniper1_model,
             commands::local_runtime_status,
             commands::unload_local_runtime,
             commands::delete_managed_model,

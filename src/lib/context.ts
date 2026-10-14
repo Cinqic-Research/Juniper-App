@@ -33,6 +33,8 @@ export interface ContextSummary {
 export interface ContextOptions {
   privateChat?: boolean
   reservedOutputTokens?: number
+  /** Native token-ID routes fit the complete prompt with the canonical tokenizer. */
+  nativeTokenIds?: boolean
 }
 
 const DEFAULT_CONTEXT_LIMIT = 8192
@@ -195,18 +197,22 @@ export function buildContext(
     attachmentTokens +
     reservedOutputTokens
   let available = contextLimit - fixedTokens
-  const keptMemories: Memory[] = []
+  const keptMemories: Memory[] = options.nativeTokenIds ? [...selectedMemories] : []
   for (let index = selectedMemories.length - 1; index >= 0; index -= 1) {
+    if (options.nativeTokenIds) break
     const memory = selectedMemories[index]!
     const size = estimateTokens(memory.content) + 4
     if (size > available) break
     keptMemories.unshift(memory)
     available -= size
   }
-  const kept: ContextMessage[] = []
-  let used = 0
+  const kept: ContextMessage[] = options.nativeTokenIds ? [...candidates] : []
+  let used = options.nativeTokenIds
+    ? candidates.reduce((sum, item) => sum + estimateTokens(item.content) + 4, 0)
+    : 0
   const groups = exchanges(candidates)
   for (let index = groups.length - 1; index >= 0; index -= 1) {
+    if (options.nativeTokenIds) break
     const group = groups[index]!
     const size = group.reduce((sum, item) => sum + estimateTokens(item.content) + 4, 0)
     if (used + size > available) break
@@ -232,6 +238,8 @@ export function buildContext(
     contextLimit,
     contextLimitAssumed,
     truncated: kept.length < candidates.length || keptMemories.length < selectedMemories.length,
-    overflow: fixedTokens > contextLimit,
+    // Estimates remain visible, but must not reject canonically valid text or
+    // destroy history before the native host can count and trim whole turns.
+    overflow: !options.nativeTokenIds && fixedTokens > contextLimit,
   }
 }
