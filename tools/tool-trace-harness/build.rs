@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 const PROVIDER_ITEMS: &[&str] = &[
-    "fn offered_tools(",
+    "pub(crate) fn offered_tools(",
     "enum ToolGate<'a>",
     "fn requires_per_call_approval(",
     "fn tool_gate<'a>(",
@@ -30,6 +30,7 @@ const PROVIDER_ITEMS: &[&str] = &[
 const BEHAVIOR_ITEMS: &[&str] = &[
     "pub fn neutralize_control_tokens(",
     "fn strip_tags(",
+    "pub fn attachments_text(",
     "pub fn attachments_message(",
 ];
 const BOUND_SOURCES: &[&str] = &[
