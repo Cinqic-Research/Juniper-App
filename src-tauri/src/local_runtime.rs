@@ -5,11 +5,15 @@
 //! takes minutes to load cannot be started per request. A model with a
 //! qualified backend profile is started only with that profile's exact flags,
 //! template, and runtime build, and its identity is checked after load.
+//! Juniper 1 is started only through its token-ID profile (`crate::juniper1`)
+//! and is then served by the host tokenizer and protocol, never by
+//! llama-server's text endpoints.
 
 use crate::backend::{self, Backend, BackendProfile, RequestPolicy};
 use crate::catalog::{self, CatalogArtifact, CatalogEntry};
 use crate::commands::{AppState, Cancellation, record_runtime_log};
 use crate::domain::{ChatRequest, ChatStreamEvent, RuntimeError, RuntimeIdentity};
+use crate::juniper1::{self, chat::TokenIdRuntime};
 use crate::managed_models;
 use crate::providers;
 use serde::Serialize;
@@ -70,7 +74,21 @@ struct Route {
     api_key: String,
     identity: RuntimeIdentity,
     profile: Option<BackendProfile>,
+    /// Set for a Juniper 1 server: requests go through the token-ID backend.
+    token_ids: Option<Arc<TokenIdRuntime>>,
     lineage: String,
+}
+
+/// What `acquire` starts for a request.
+enum Launch {
+    Text(Box<TextLaunch>),
+    TokenIds,
+}
+
+struct TextLaunch {
+    entry: CatalogEntry,
+    artifact: CatalogArtifact,
+    profile: Option<BackendProfile>,
 }
 
 /// Marks the resident server as in use; switching models or unloading waits
@@ -175,18 +193,33 @@ impl LocalRuntime {
             .catalog_id
             .clone()
             .unwrap_or_else(|| request.model.model_id.clone());
-        let entry = catalog::find(&catalog_id)?;
-        let artifact = entry.artifacts.first().cloned().ok_or_else(|| {
-            "LOCAL_MODEL_NOT_READY: This catalog entry has no artifact.".to_owned()
-        })?;
-        let profile = qualified_profile(&artifact)?;
+        // Juniper 1 artifacts are named only by the token-ID profile, never by
+        // the public catalog, and run only through that backend.
+        let (artifact_id, launch) = match juniper1::profile::find(&catalog_id) {
+            Some((_, artifact)) => (artifact.id, Launch::TokenIds),
+            None => {
+                let entry = catalog::find(&catalog_id)?;
+                let artifact = entry.artifacts.first().cloned().ok_or_else(|| {
+                    "LOCAL_MODEL_NOT_READY: This catalog entry has no artifact.".to_owned()
+                })?;
+                let profile = qualified_profile(&artifact)?;
+                (
+                    artifact.id.clone(),
+                    Launch::Text(Box::new(TextLaunch {
+                        entry,
+                        artifact,
+                        profile,
+                    })),
+                )
+            }
+        };
 
         let _lifecycle = self.lifecycle.lock().await;
         let reusable = {
             let mut resident = self.resident.lock().map_err(|_| state_error())?;
             resident
                 .as_mut()
-                .filter(|server| server.artifact_id == artifact.id)
+                .filter(|server| server.artifact_id == artifact_id)
                 .and_then(|server| server.alive().then_some(server))
                 .map(|server| {
                     server.leases.fetch_add(1, Ordering::AcqRel);
@@ -205,7 +238,7 @@ impl LocalRuntime {
         let (previous, restarting) = {
             let mut resident = self.resident.lock().map_err(|_| state_error())?;
             let in_use_by_another_chat = resident.as_mut().is_some_and(|server| {
-                server.artifact_id == artifact.id
+                server.artifact_id == artifact_id
                     && server.alive()
                     && server.leases.load(Ordering::Acquire) > 0
             });
@@ -213,7 +246,7 @@ impl LocalRuntime {
                 return Err("LOCAL_RUNTIME_BUSY: The local model is not responding while another chat is using it. Wait for that reply or stop it, then try again.".into());
             }
             match resident.as_ref() {
-                Some(server) if server.artifact_id == artifact.id => {
+                Some(server) if server.artifact_id == artifact_id => {
                     record_runtime_log(
                         state,
                         "local_runtime.lost",
@@ -243,7 +276,7 @@ impl LocalRuntime {
             },
         );
         if let Ok(mut loading) = self.loading.lock() {
-            *loading = Some(artifact.id.clone());
+            *loading = Some(artifact_id.clone());
         }
         record_runtime_log(
             state,
@@ -252,16 +285,23 @@ impl LocalRuntime {
             Some("juniper-local"),
             Some(&catalog_id),
         );
-        let started = start(
-            app,
-            request,
-            &entry,
-            &artifact,
-            profile,
-            cancellation,
-            &self.starting,
-        )
-        .await;
+        let started = match launch {
+            Launch::Text(text) => {
+                start(
+                    app,
+                    request,
+                    &text.entry,
+                    &text.artifact,
+                    text.profile,
+                    cancellation,
+                    &self.starting,
+                )
+                .await
+            }
+            Launch::TokenIds => {
+                start_token_ids(app, &artifact_id, cancellation, &self.starting).await
+            }
+        };
         if let Ok(mut loading) = self.loading.lock() {
             *loading = None;
         }
@@ -284,7 +324,7 @@ impl LocalRuntime {
         let leases = Arc::new(AtomicUsize::new(1));
         let lease = Lease(leases.clone());
         *self.resident.lock().map_err(|_| state_error())? = Some(Resident {
-            artifact_id: artifact.id,
+            artifact_id,
             child,
             route: route.clone(),
             leases,
@@ -304,6 +344,15 @@ impl LocalRuntime {
             server.route.api_key.clone(),
             server.child.id()?,
         ))
+    }
+}
+
+#[cfg(all(test, target_os = "linux"))]
+impl LocalRuntime {
+    /// The resident Juniper 1 runtime, for hardware tests that drive its client directly.
+    pub(crate) fn token_ids_for_tests(&self) -> Option<Arc<TokenIdRuntime>> {
+        let resident = self.resident.lock().ok()?;
+        resident.as_ref()?.route.token_ids.clone()
     }
 }
 
@@ -348,6 +397,19 @@ pub async fn stream_chat<R: Runtime>(
         .local_runtime
         .acquire(&app, &request, &cancellation, state)
         .await?;
+    if let Some(runtime) = &route.token_ids {
+        juniper1::chat::stream_chat(
+            &app,
+            &request,
+            &cancellation,
+            state,
+            runtime,
+            route.identity.clone(),
+        )
+        .await;
+        drop(lease);
+        return Ok(());
+    }
     let policy = RequestPolicy {
         idle_timeout: route
             .profile
@@ -464,33 +526,13 @@ async fn start<R: Runtime>(
         }
         None => args.extend(["--cache-ram".into(), GENERIC_CACHE_RAM_MIB.into()]),
     }
-    // If Juniper itself is killed, no exit handler runs; the kernel stops the
-    // server instead of leaving a multi-gigabyte process behind.
+    let (child_pid, diagnostics) = spawn(command, &args, starting)?;
     #[cfg(target_os = "linux")]
-    unsafe {
-        command.pre_exec(|| {
-            if libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGTERM) == -1 {
-                return Err(std::io::Error::last_os_error());
-            }
-            Ok(())
-        });
-    }
-    let mut child = command
-        .args(&args)
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true)
-        .spawn()
-        .map_err(|_| {
-            "LOCAL_RUNTIME_UNAVAILABLE: Juniper's local runtime could not be started.".to_owned()
-        })?;
-    let diagnostics = capture_stderr(&mut child);
-    #[cfg(target_os = "linux")]
-    let owner_pid = child.id();
+    let owner_pid = child_pid;
     #[cfg(target_os = "linux")]
     let pid = owner_pid;
-    *starting.lock().map_err(|_| state_error())? = Some(child);
+    #[cfg(not(target_os = "linux"))]
+    let _ = child_pid;
     let route = Route {
         endpoint: format!("http://127.0.0.1:{port}"),
         #[cfg(target_os = "linux")]
@@ -512,7 +554,10 @@ async fn start<R: Runtime>(
                 .as_ref()
                 .map(|profile| profile.template.sha256.clone()),
             context_size: profile.as_ref().map(|profile| profile.server.ctx_size),
+            tokenizer_sha256: None,
+            protocol: None,
         },
+        token_ids: None,
         lineage: match &profile {
             Some(profile) => format!(
                 "{} by {} ({} license), unmodified weights ({} quantization) served on this device by {} {}",
@@ -576,6 +621,225 @@ async fn start<R: Runtime>(
     }
 }
 
+/// Spawns the server and parks it in `starting` so exit cleanup can reach it
+/// while it loads. Returns its PID and the stderr tail used to classify a
+/// failed start.
+fn spawn(
+    mut command: tokio::process::Command,
+    args: &[String],
+    starting: &Mutex<Option<tokio::process::Child>>,
+) -> Result<(Option<u32>, StderrTail), String> {
+    // If Juniper itself is killed, no exit handler runs; the kernel stops the
+    // server instead of leaving a multi-gigabyte process behind.
+    #[cfg(target_os = "linux")]
+    unsafe {
+        command.pre_exec(|| {
+            if libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGTERM) == -1 {
+                return Err(std::io::Error::last_os_error());
+            }
+            Ok(())
+        });
+    }
+    let mut child = command
+        .args(args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true)
+        .spawn()
+        .map_err(|_| {
+            "LOCAL_RUNTIME_UNAVAILABLE: Juniper's local runtime could not be started.".to_owned()
+        })?;
+    let diagnostics = capture_stderr(&mut child);
+    let pid = child.id();
+    *starting.lock().map_err(|_| state_error())? = Some(child);
+    Ok((pid, diagnostics))
+}
+
+/// Starts a Juniper 1 server for the token-ID backend. Model file, GGUF
+/// metadata, tokenizer, and runtime build are verified before launch; the
+/// served build, model path, and context, and the token-ID self-test, after.
+async fn start_token_ids<R: Runtime>(
+    app: &AppHandle<R>,
+    artifact_id: &str,
+    cancellation: &Cancellation,
+    starting: &Mutex<Option<tokio::process::Child>>,
+) -> Result<(tokio::process::Child, Route), String> {
+    ensure_token_id_platform()?;
+    let verified =
+        juniper1::verify_installed(&managed_models::models_directory(app)?, artifact_id)?;
+    let profile = &verified.profile;
+    let executable = token_id_executable(app)?;
+    let runtime_build = runtime_build(&executable).await;
+    if !runtime_build
+        .as_deref()
+        .is_some_and(|build| build_matches(build, &profile.runtime.commit))
+    {
+        return Err(format!(
+            "RUNTIME_IDENTITY_MISMATCH: Juniper 1 is qualified only on llama.cpp {} ({}). The available runtime is {}.",
+            profile.runtime.tag,
+            &profile.runtime.commit[..9],
+            runtime_build.as_deref().unwrap_or("unidentified")
+        ));
+    }
+    let runtime_dir = runtime_directory(app)?;
+    let key = KeyFile::create(&runtime_dir)?;
+    let port = reserve_port()?;
+    let model_path_text = verified.model_path.to_string_lossy().into_owned();
+    let server = &profile.server;
+    let args: Vec<String> = [
+        "--host",
+        "127.0.0.1",
+        "--port",
+        &port.to_string(),
+        "--model",
+        &model_path_text,
+        "--alias",
+        &verified.artifact.id,
+        "--api-key-file",
+        &key.path.to_string_lossy(),
+        "--no-webui",
+        "--no-slots",
+        "--offline",
+        "--no-mmproj",
+        "--no-context-shift",
+        "--fit",
+        "off",
+        "-c",
+        &server.ctx_size.to_string(),
+        "-np",
+        &server.parallel.to_string(),
+        "-ngl",
+        &server.n_gpu_layers.to_string(),
+        "-b",
+        &server.batch_size.to_string(),
+        "--cache-ram",
+        &server.cache_ram_mib.to_string(),
+    ]
+    .into_iter()
+    .map(str::to_owned)
+    .collect();
+    let mut command = tokio::process::Command::new(&executable);
+    if profile.runtime.accelerator == "cpu" {
+        // The qualified configuration is CPU-only; a CUDA build must not
+        // claim a GPU it will not use.
+        command.env("CUDA_VISIBLE_DEVICES", "");
+    }
+    let (child_pid, diagnostics) = spawn(command, &args, starting)?;
+    let endpoint = format!("http://127.0.0.1:{port}");
+    let client = juniper1::client::TokenIdClient::new(
+        &endpoint,
+        verified.tokenizer.vocab_size(),
+        Some(key.secret.clone()),
+        Duration::from_secs(profile.lifecycle.request_timeout_seconds),
+        child_pid.map(|pid| (pid, port)),
+    )?;
+    let identity = RuntimeIdentity {
+        artifact_id: verified.artifact.id.clone(),
+        artifact_sha256: verified.artifact.sha256.clone(),
+        model_repository: None,
+        model_revision: Some(verified.artifact.source_checkpoint.clone()),
+        runtime_build,
+        template_sha256: None,
+        context_size: Some(server.ctx_size),
+        tokenizer_sha256: Some(verified.tokenizer.sha256().to_owned()),
+        protocol: Some(profile.protocol.clone()),
+    };
+    let lineage = verified.artifact.lineage(profile);
+    let runtime = Arc::new(TokenIdRuntime {
+        profile: verified.profile.clone(),
+        artifact: verified.artifact.clone(),
+        tokenizer: verified.tokenizer.clone(),
+        client,
+    });
+    let route = Route {
+        endpoint,
+        #[cfg(target_os = "linux")]
+        port,
+        #[cfg(target_os = "linux")]
+        owner_pid: child_pid,
+        api_key: key.secret.clone(),
+        identity,
+        profile: None,
+        token_ids: Some(runtime.clone()),
+        lineage,
+    };
+    let startup_timeout = Duration::from_secs(profile.lifecycle.startup_timeout_seconds);
+    // Bound the complete startup, including props and every self-test request;
+    // separate health polling limits cannot bound a stalled self-test.
+    let ready = tokio::select! {
+        result = timeout(startup_timeout, async {
+        #[cfg(target_os = "linux")]
+        {
+            wait_until(starting, startup_timeout, cancellation, || async {
+                child_pid.is_some_and(|pid| listener_belongs_to(pid, port))
+            })
+            .await?;
+            drop(key);
+        }
+        wait_until(starting, startup_timeout, cancellation, || healthy(&route)).await?;
+        #[cfg(not(target_os = "linux"))]
+        drop(key);
+        let props = fetch_props(&route).await?;
+        check_ownership(&props, &model_path_text)?;
+        check_token_id_props(&props, profile)?;
+        runtime
+            .client
+            .self_test(&runtime.tokenizer, cancellation)
+            .await?;
+        Ok::<(), String>(())
+        }) => result.unwrap_or_else(|_| Err("LOCAL_RUNTIME_TIMEOUT: The local model took too long to start.".into())),
+        _ = cancellation.wait() => Err("REQUEST_CANCELLED: Generation cancelled.".into()),
+    };
+    let child = starting.lock().ok().and_then(|mut slot| slot.take());
+    match (ready, child) {
+        (Ok(()), Some(child)) => Ok((child, route)),
+        (Ok(()), None) => {
+            Err("LOCAL_RUNTIME_FAILED: The local runtime was stopped while it was starting.".into())
+        }
+        (Err(error), child) => {
+            if let Some(mut child) = child {
+                let _ = child.kill().await;
+            }
+            Err(classify_failure(error, &diagnostics))
+        }
+    }
+}
+
+/// Native Juniper 1 activation requires proof of listener ownership before
+/// credentials are sent. Other desktop platforms need their own ownership
+/// implementation and live qualification before this route can activate.
+fn ensure_token_id_platform() -> Result<(), String> {
+    if cfg!(target_os = "linux") {
+        Ok(())
+    } else {
+        Err("JUNIPER1_PLATFORM_NOT_QUALIFIED: Native Juniper 1 activation is qualified only on Linux with verified runtime listener ownership.".into())
+    }
+}
+
+/// The served build and context must be the qualified ones.
+fn check_token_id_props(
+    props: &Value,
+    profile: &juniper1::profile::TokenIdProfile,
+) -> Result<(), String> {
+    if !build_matches(
+        props["build_info"].as_str().unwrap_or_default(),
+        &profile.runtime.commit,
+    ) {
+        return Err(
+            "RUNTIME_IDENTITY_MISMATCH: The loaded runtime is not the qualified build.".into(),
+        );
+    }
+    if props["default_generation_settings"]["n_ctx"].as_u64()
+        != Some(u64::from(profile.server.ctx_size))
+    {
+        return Err(
+            "RUNTIME_IDENTITY_MISMATCH: The loaded context size is not the qualified one.".into(),
+        );
+    }
+    Ok(())
+}
+
 /// The loopback API key, written owner-only and removed once the server has
 /// read it, so it never appears in a process listing.
 struct KeyFile {
@@ -630,7 +894,9 @@ fn runtime_directory<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> 
 /// Keeps the last few stderr lines in memory to classify a failed start.
 /// They are never logged or shown: llama-server output can describe the model
 /// path and hardware, and in verbose builds, prompt text.
-fn capture_stderr(child: &mut tokio::process::Child) -> Arc<Mutex<VecDeque<String>>> {
+type StderrTail = Arc<Mutex<VecDeque<String>>>;
+
+fn capture_stderr(child: &mut tokio::process::Child) -> StderrTail {
     let tail = Arc::new(Mutex::new(VecDeque::with_capacity(STDERR_TAIL_LINES)));
     if let Some(stderr) = child.stderr.take() {
         let sink = tail.clone();
@@ -763,6 +1029,7 @@ fn client() -> Result<reqwest::Client, String> {
     reqwest::Client::builder()
         .connect_timeout(PROBE_TIMEOUT)
         .no_proxy()
+        .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(|_| "LOCAL_RUNTIME_FAILED: The runtime client could not be initialized.".into())
 }
@@ -1013,6 +1280,21 @@ pub(crate) fn runtime_executable<R: Runtime>(app: &AppHandle<R>) -> Result<PathB
     resolve_executable(app, "JUNIPER_LLAMA_SERVER", "llama-server")
 }
 
+/// The llama.cpp build Juniper 1 is qualified on (b11270). A dedicated
+/// override comes first; otherwise the bundled CUDA runtime, which is that
+/// build. Either way its reported version must match before it starts.
+fn token_id_executable<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
+    if let Ok(value) = std::env::var("JUNIPER_LLAMA_SERVER_JUNIPER1") {
+        let path = PathBuf::from(value);
+        if path.is_file() {
+            return Ok(path);
+        }
+    }
+    accelerated_executable(app).map_err(|_| {
+        "LOCAL_RUNTIME_UNAVAILABLE: Juniper 1 needs llama.cpp b11270, which is not installed in this build.".into()
+    })
+}
+
 /// The CUDA build qualified models need. It is never substituted with the
 /// CPU runtime: a different build is a different, unqualified configuration.
 fn accelerated_executable<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
@@ -1040,6 +1322,73 @@ fn reserve_port() -> Result<u16, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn native_activation_requires_a_qualified_listener_ownership_platform() {
+        assert_eq!(
+            ensure_token_id_platform().is_ok(),
+            cfg!(target_os = "linux")
+        );
+    }
+
+    #[test]
+    fn runtime_identity_redirects_are_not_followed() {
+        use std::io::{Read, Write};
+        let listener =
+            std::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0)).expect("listener");
+        let port = listener.local_addr().expect("address").port();
+        let requests = Arc::new(AtomicUsize::new(0));
+        let captured = requests.clone();
+        let serving = std::thread::spawn(move || {
+            listener.set_nonblocking(true).expect("nonblocking");
+            let deadline = std::time::Instant::now() + Duration::from_millis(500);
+            while std::time::Instant::now() < deadline {
+                match listener.accept() {
+                    Ok((mut stream, _)) => {
+                        stream
+                            .set_read_timeout(Some(Duration::from_secs(1)))
+                            .expect("read timeout");
+                        let mut request = [0u8; 4096];
+                        let count = stream.read(&mut request).expect("request");
+                        captured.fetch_add(1, Ordering::AcqRel);
+                        assert!(
+                            std::str::from_utf8(&request[..count])
+                                .expect("HTTP")
+                                .starts_with("GET /props ")
+                        );
+                        // Same origin: reqwest would retain Authorization if it
+                        // followed this redirect. Never send it to another path.
+                        stream.write_all(b"HTTP/1.1 302 Found\r\nLocation: /unexpected\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").expect("reply");
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        std::thread::sleep(Duration::from_millis(5))
+                    }
+                    Err(error) => panic!("accept: {error}"),
+                }
+            }
+        });
+        let route = Route {
+            endpoint: format!("http://127.0.0.1:{port}"),
+            #[cfg(target_os = "linux")]
+            port,
+            #[cfg(target_os = "linux")]
+            owner_pid: Some(std::process::id()),
+            api_key: "synthetic-test-key".into(),
+            identity: RuntimeIdentity::default(),
+            profile: None,
+            token_ids: None,
+            lineage: String::new(),
+        };
+        let runtime = tokio::runtime::Runtime::new().expect("runtime");
+        assert!(
+            runtime
+                .block_on(fetch_props(&route))
+                .unwrap_err()
+                .starts_with("RUNTIME_IDENTITY_MISMATCH")
+        );
+        serving.join().expect("server");
+        assert_eq!(requests.load(Ordering::Acquire), 1);
+    }
 
     fn profile() -> BackendProfile {
         backend::profile("gpt-oss-20b-mxfp4-flowbox.v1").expect("bundled profile")
@@ -1235,6 +1584,7 @@ mod tests {
                     api_key: "key".into(),
                     identity: RuntimeIdentity::default(),
                     profile: None,
+                    token_ids: None,
                     lineage: String::new(),
                 },
                 leases: Arc::new(AtomicUsize::new(0)),
@@ -1277,6 +1627,7 @@ mod tests {
                     api_key: "key".into(),
                     identity: RuntimeIdentity::default(),
                     profile: None,
+                    token_ids: None,
                     lineage: String::new(),
                 },
                 leases: leases.clone(),

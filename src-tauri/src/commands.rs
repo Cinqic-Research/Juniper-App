@@ -76,7 +76,7 @@ fn is_reparse_point(_metadata: &std::fs::Metadata) -> bool {
 #[cfg(windows)]
 const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
 
-fn open_regular_file(path: &std::path::Path, unavailable: &str) -> Result<File, String> {
+pub(crate) fn open_regular_file(path: &std::path::Path, unavailable: &str) -> Result<File, String> {
     let path_metadata = std::fs::symlink_metadata(path).map_err(|_| unavailable.to_owned())?;
     if path_metadata.file_type().is_symlink()
         || is_reparse_point(&path_metadata)
@@ -401,6 +401,113 @@ pub async fn import_managed_model(
         .map_err(|_| "Cancellation state unavailable.")?
         .remove(&request_id);
     result
+}
+
+/// Local research profiles are separate from the public download catalog.
+#[tauri::command]
+pub async fn juniper1_models(app: AppHandle) -> Result<Value, String> {
+    #[cfg(not(target_os = "android"))]
+    {
+        let directory = managed_models::models_directory(&app)?;
+        let models =
+            tokio::task::spawn_blocking(move || crate::juniper1::install::list(&directory))
+                .await
+                .map_err(|_| {
+                    "JUNIPER1_INSPECTION_FAILED: Local models could not be inspected.".to_owned()
+                })??;
+        serde_json::to_value(models)
+            .map_err(|_| "JUNIPER1_INSPECTION_FAILED: Local profiles could not be encoded.".into())
+    }
+    #[cfg(target_os = "android")]
+    {
+        let _ = app;
+        Ok(serde_json::json!([]))
+    }
+}
+
+/// Paths originate exclusively in these native pickers. The renderer may
+/// choose only a bundled profile identity, never a path or a new profile.
+#[tauri::command]
+pub async fn import_juniper1_model(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    artifact_id: String,
+    request_id: String,
+) -> Result<bool, String> {
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (app, state, artifact_id, request_id);
+        Err("JUNIPER1_PLATFORM_NOT_QUALIFIED: Native Juniper 1 activation is qualified only on Linux.".into())
+    }
+    #[cfg(target_os = "linux")]
+    {
+        crate::juniper1::profile::find(&artifact_id).ok_or_else(|| {
+            "BACKEND_PROFILE_UNKNOWN: Select a bundled Juniper 1 research profile.".to_owned()
+        })?;
+        let Some(_guard) = PickerGuard::acquire(&state.picker_in_progress) else {
+            return Err("PICKER_BUSY: Finish the current file selection before importing.".into());
+        };
+        let cancellation = begin_cancellable_operation(state.inner(), &request_id)?;
+        let result = async {
+            let (tx, rx) = oneshot::channel();
+            app.dialog()
+                .file()
+                .set_title("Select the qualified Juniper 1 GGUF")
+                .add_filter("GGUF models", &["gguf"])
+                .pick_file(move |selected| {
+                    let _ = tx.send(selected);
+                });
+            let Some(model) = rx.await.map_err(|_| {
+                "JUNIPER1_IMPORT_FAILED: The model picker closed unexpectedly.".to_owned()
+            })?
+            else {
+                return Ok(false);
+            };
+            if cancellation.is_cancelled() {
+                return Err("REQUEST_CANCELLED: Import cancelled.".into());
+            }
+            let (tx, rx) = oneshot::channel();
+            app.dialog()
+                .file()
+                .set_title("Select the canonical j1tok tokenizer JSON")
+                .add_filter("Tokenizer JSON", &["json"])
+                .pick_file(move |selected| {
+                    let _ = tx.send(selected);
+                });
+            let Some(tokenizer) = rx.await.map_err(|_| {
+                "JUNIPER1_IMPORT_FAILED: The tokenizer picker closed unexpectedly.".to_owned()
+            })?
+            else {
+                return Ok(false);
+            };
+            let model = model.into_path().map_err(|_| {
+                "JUNIPER1_IMPORT_FAILED: Select a regular local model file.".to_owned()
+            })?;
+            let tokenizer = tokenizer.into_path().map_err(|_| {
+                "JUNIPER1_IMPORT_FAILED: Select a regular local tokenizer file.".to_owned()
+            })?;
+            let directory = managed_models::models_directory(&app)?;
+            tokio::task::spawn_blocking(move || {
+                crate::juniper1::install::import(
+                    &directory,
+                    &artifact_id,
+                    &model,
+                    &tokenizer,
+                    &cancellation,
+                )
+            })
+            .await
+            .map_err(|_| "JUNIPER1_IMPORT_FAILED: The import was interrupted.".to_owned())??;
+            Ok(true)
+        }
+        .await;
+        state
+            .cancellations
+            .lock()
+            .map_err(|_| "Cancellation state unavailable.".to_owned())?
+            .remove(&request_id);
+        result
+    }
 }
 
 /// The desktop resident server's state. Android's in-process engine reports

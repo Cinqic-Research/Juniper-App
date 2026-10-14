@@ -1,0 +1,66 @@
+{
+  "id": "juniper1-token-ids.v1",
+  "backend": "juniper-chat-v1-token-ids",
+  "ioContract": "token-ids-only",
+  "protocol": "juniper-chat-v1",
+  "qualification": "Cinqic-Research/Juniper-1-Train docs/posttrain/a02_token_id_qualification.md (results/a02_token_id_qual_base.json, results/a02_token_id_qual_candidate.json); Juniper App live record docs/qualification/juniper1-token-id-2026-10-13/live-evidence.json",
+  "tokenizer": {
+    "id": "j1tok-24k",
+    "file": "juniper1-j1tok-24k.tokenizer.json",
+    "sha256": "176a89e2197c24d3f024fbb60ce6f346635e7cba912b3579d93b37d486c9adf1",
+    "vocabSize": 24576,
+    "library": "tokenizers 0.23.2"
+  },
+  "runtime": {
+    "engine": "llama.cpp",
+    "tag": "b11270",
+    "commit": "748d4225b9016b17ce4bcfa69fdc2c39f473a965",
+    "accelerator": "cpu"
+  },
+  "server": {
+    "ctxSize": 2048,
+    "nGpuLayers": 0,
+    "parallel": 1,
+    "cacheRamMib": 256,
+    "batchSize": 512
+  },
+  "lifecycle": {
+    "startupTimeoutSeconds": 120,
+    "requestTimeoutSeconds": 300
+  },
+  "generation": {
+    "temperature": 0.0,
+    "topK": 1,
+    "topP": 1.0,
+    "defaultMaxTokens": 256,
+    "maxTokensCeiling": 512,
+    "maxSegments": 8,
+    "maxToolResultTokens": 512
+  },
+  "artifacts": [
+    {
+      "id": "juniper1-base-v1-f16",
+      "displayName": "Juniper 1 base v1 (research base, not instruction-tuned)",
+      "stage": "base",
+      "release": "research-only",
+      "sourceCheckpoint": "ckpt-000052034-336e5967",
+      "sourceManifestSha256": "a2f616c714bbad26a2dade682e71e80493ca70d6a4531430c64fdaedf5932e74",
+      "architecture": "qwen3",
+      "quantization": "F16",
+      "sizeBytes": 286188704,
+      "sha256": "41e21fed6bda34c5ce0e99ec43201fcf8b8e3f1129e9275cfe4456c43c7b8980"
+    },
+    {
+      "id": "juniper1-sft-pilot-v1-f16",
+      "displayName": "Juniper 1 SFT pilot v1 (qualified pilot candidate, not a production model)",
+      "stage": "sft-candidate",
+      "release": "qualified-non-production",
+      "sourceCheckpoint": "ckpt-000001226-55d13f9a",
+      "sourceManifestSha256": "dc0bbbb0cd655cc5114c1ee73ac777634985fca8a713a9f149f7686b08a110ce",
+      "architecture": "qwen3",
+      "quantization": "F16",
+      "sizeBytes": 286188704,
+      "sha256": "1537fde2786088a4a3e74c721a83d291050c6bc4a1c7ff56b7cb9cc4afd95175"
+    }
+  ]
+}

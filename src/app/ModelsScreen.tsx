@@ -14,12 +14,15 @@ import {
   getDeviceCapabilities,
   getLocalRuntimeStatus,
   getManagedModels,
+  getNativeJuniper1Models,
   getModelCatalog,
   importManagedModel,
+  importNativeJuniper1Model,
   pickGguf,
   runningInTauri,
   runningOnAndroid,
   unloadLocalRuntime,
+  type NativeJuniper1Model,
 } from '../lib/runtime'
 import {
   MODEL_CATALOG,
@@ -121,20 +124,23 @@ export function ModelsScreen({
   const [progress, setProgress] = useState<{ completed: number; total: number } | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [runtimeStatus, setRuntimeStatus] = useState<LocalRuntimeStatus>({ state: 'idle' })
+  const [nativeModels, setNativeModels] = useState<NativeJuniper1Model[]>([])
   const controller = useRef<AbortController | null>(null)
   const external = useExternalModels(data, update)
   const defaultAssistant = defaultAssistantFor(data)
 
   const refresh = useCallback(async () => {
     try {
-      const [nextCatalog, nextDevice, nextInstalled] = await Promise.all([
+      const [nextCatalog, nextDevice, nextInstalled, nextNative] = await Promise.all([
         getModelCatalog(),
         getDeviceCapabilities(),
         getManagedModels(),
+        getNativeJuniper1Models(),
       ])
       setCatalog(nextCatalog)
       setDevice(nextDevice)
       setInstalled(nextInstalled)
+      setNativeModels(nextNative)
       if (!runningOnAndroid) setRuntimeStatus(await getLocalRuntimeStatus())
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not inspect this device.')
@@ -320,6 +326,75 @@ export function ModelsScreen({
     }
   }
 
+  function registerNativeModel(entry: NativeJuniper1Model, makeDefault: boolean) {
+    const provider = data.providers.find((item) => item.kind === 'juniper-local') ?? defaultProvider
+    const profile = modelProfileFromDiscovery(provider, entry.id, {
+      catalogId: entry.id,
+      artifactId: entry.id,
+      runtimeId: 'juniper1-token-ids',
+      runtimeBinding: {
+        runtimeId: 'juniper1-token-ids',
+        artifactId: entry.id,
+        selection: 'explicit',
+      },
+      displayName: entry.displayName,
+      contextLength: entry.contextSize,
+      status: 'ready',
+      compatibilityStatus: 'chat-compatible',
+      description: 'Local research experiment. Conversational usefulness has not been qualified.',
+      capabilities: {
+        ...provider.capabilities,
+        chat: 'supported',
+        text: 'unsupported',
+        streaming: 'unsupported',
+        tools: 'unsupported',
+        thinking: 'unsupported',
+        generationParameters: ['maxOutput'],
+      },
+    })
+    update((current) => {
+      const next = {
+        ...current,
+        providers: current.providers.some((item) => item.kind === 'juniper-local')
+          ? current.providers
+          : [...current.providers, defaultProvider],
+        models: [...current.models.filter((item) => item.id !== profile.id), profile],
+      }
+      return makeDefault ? setAssistantModel(next, defaultAssistantFor(current), profile.id) : next
+    })
+    setMessage(
+      makeDefault
+        ? `${entry.displayName} is selected for this local experiment. It loads and verifies on the first chat.`
+        : `${entry.displayName} and its canonical tokenizer are imported. Select it explicitly to try a local conversation.`,
+    )
+  }
+
+  async function importNative(entry: NativeJuniper1Model) {
+    const next = new AbortController()
+    controller.current = next
+    setActiveDownload(entry.id)
+    setMessage(
+      'Choose the qualified model GGUF, then its canonical tokenizer JSON. Both identities are verified locally.',
+    )
+    try {
+      if (await importNativeJuniper1Model(entry.id, next.signal)) {
+        setNativeModels(await getNativeJuniper1Models())
+        registerNativeModel(entry, false)
+      }
+    } catch (error) {
+      setMessage(
+        next.signal.aborted
+          ? 'Import cancelled.'
+          : error instanceof Error
+            ? error.message
+            : 'Local research import failed.',
+      )
+    } finally {
+      if (controller.current === next) controller.current = null
+      setActiveDownload(null)
+    }
+  }
+
   async function remove(entry: CatalogModel) {
     const confirmed = await dialogs.confirm({
       title: `Remove ${entry.displayName}?`,
@@ -430,6 +505,55 @@ export function ModelsScreen({
         <p className="muted small">
           No models installed yet. Download a recommended model to begin.
         </p>
+      )}
+
+      {nativeModels.length > 0 && (
+        <section className="models-section" aria-labelledby="local-research-title">
+          <h2 id="local-research-title">Local Juniper 1 research</h2>
+          <p className="muted">
+            Import files already on this device. These research models are not production
+            assistants; everyday conversation and tool competence are unqualified. Linux only, CPU,
+            2,048-token context, answers up to 512 tokens. Answers arrive whole.
+          </p>
+          <div className="model-grid">
+            {nativeModels.map((entry) => (
+              <article className="model-card" key={entry.id}>
+                <h3>{entry.displayName}</h3>
+                <p className="muted">Checkpoint: {entry.checkpoint}</p>
+                <p>
+                  {entry.installed
+                    ? 'Model and tokenizer verified on this device.'
+                    : 'Requires a matching GGUF and canonical tokenizer.'}
+                </p>
+                <div className="button-row">
+                  <button
+                    className="button secondary"
+                    disabled={activeDownload !== null}
+                    onClick={() => void importNative(entry)}
+                  >
+                    {activeDownload === entry.id
+                      ? 'Verifying import…'
+                      : 'Import model and tokenizer'}
+                  </button>
+                  {entry.installed && (
+                    <button
+                      className="button secondary"
+                      disabled={activeDownload !== null}
+                      onClick={() => registerNativeModel(entry, true)}
+                    >
+                      Use for local experiment
+                    </button>
+                  )}
+                  {activeDownload === entry.id && (
+                    <button className="button ghost" onClick={() => controller.current?.abort()}>
+                      Cancel
+                    </button>
+                  )}
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
       )}
 
       <section className="models-section" aria-labelledby="connected-models-title">

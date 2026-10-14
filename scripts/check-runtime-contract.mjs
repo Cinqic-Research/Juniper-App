@@ -14,6 +14,7 @@ const [
   release,
   gptOssText,
   catalogText,
+  juniper1Text,
 ] = await Promise.all([
   read('config/llama-cpp.json'),
   read('src-tauri/src/runtime_registry.rs'),
@@ -25,6 +26,7 @@ const [
   read('.github/workflows/release.yml'),
   read('config/backends/gpt-oss-20b.json'),
   read('config/models/catalog.json'),
+  read('config/backends/juniper1-token-ids.v1.json'),
 ])
 const config = JSON.parse(configText)
 const expectedPins = new Map([
@@ -90,6 +92,24 @@ if (
   profiled[0].sizeBytes !== gptOss.artifact.sizeBytes
 ) {
   throw new Error('The GPT-OSS backend profile and its catalog artifact disagree.')
+}
+
+// Juniper 1 runs only on the b11270 build its token-ID qualification used, and
+// its artifacts never enter the public catalog.
+const juniper1 = JSON.parse(juniper1Text)
+if (
+  juniper1.runtime.commit !== config.desktopCuda?.commit ||
+  juniper1.runtime.tag !== config.desktopCuda?.tag
+) {
+  throw new Error('The Juniper 1 token-ID profile does not pin the b11270 runtime build.')
+}
+const catalogArtifacts = JSON.parse(catalogText).models.flatMap((model) => model.artifacts)
+for (const artifact of juniper1.artifacts) {
+  if (
+    catalogArtifacts.some((entry) => entry.id === artifact.id || entry.sha256 === artifact.sha256)
+  ) {
+    throw new Error(`Juniper 1 artifact ${artifact.id} must not appear in the public catalog.`)
+  }
 }
 
 console.log(
