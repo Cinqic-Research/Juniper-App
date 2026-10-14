@@ -665,6 +665,7 @@ async fn start_token_ids<R: Runtime>(
     cancellation: &Cancellation,
     starting: &Mutex<Option<tokio::process::Child>>,
 ) -> Result<(tokio::process::Child, Route), String> {
+    ensure_token_id_platform()?;
     let verified =
         juniper1::verify_installed(&managed_models::models_directory(app)?, artifact_id)?;
     let profile = &verified.profile;
@@ -764,7 +765,10 @@ async fn start_token_ids<R: Runtime>(
         lineage,
     };
     let startup_timeout = Duration::from_secs(profile.lifecycle.startup_timeout_seconds);
-    let ready = async {
+    // Bound the complete startup, including props and every self-test request;
+    // separate health polling limits cannot bound a stalled self-test.
+    let ready = tokio::select! {
+        result = timeout(startup_timeout, async {
         #[cfg(target_os = "linux")]
         {
             wait_until(starting, startup_timeout, cancellation, || async {
@@ -784,8 +788,9 @@ async fn start_token_ids<R: Runtime>(
             .self_test(&runtime.tokenizer, cancellation)
             .await?;
         Ok::<(), String>(())
-    }
-    .await;
+        }) => result.unwrap_or_else(|_| Err("LOCAL_RUNTIME_TIMEOUT: The local model took too long to start.".into())),
+        _ = cancellation.wait() => Err("REQUEST_CANCELLED: Generation cancelled.".into()),
+    };
     let child = starting.lock().ok().and_then(|mut slot| slot.take());
     match (ready, child) {
         (Ok(()), Some(child)) => Ok((child, route)),
@@ -798,6 +803,17 @@ async fn start_token_ids<R: Runtime>(
             }
             Err(classify_failure(error, &diagnostics))
         }
+    }
+}
+
+/// Native Juniper 1 activation requires proof of listener ownership before
+/// credentials are sent. Other desktop platforms need their own ownership
+/// implementation and live qualification before this route can activate.
+fn ensure_token_id_platform() -> Result<(), String> {
+    if cfg!(target_os = "linux") {
+        Ok(())
+    } else {
+        Err("JUNIPER1_PLATFORM_NOT_QUALIFIED: Native Juniper 1 activation is qualified only on Linux with verified runtime listener ownership.".into())
     }
 }
 
@@ -1013,6 +1029,7 @@ fn client() -> Result<reqwest::Client, String> {
     reqwest::Client::builder()
         .connect_timeout(PROBE_TIMEOUT)
         .no_proxy()
+        .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(|_| "LOCAL_RUNTIME_FAILED: The runtime client could not be initialized.".into())
 }
@@ -1305,6 +1322,73 @@ fn reserve_port() -> Result<u16, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn native_activation_requires_a_qualified_listener_ownership_platform() {
+        assert_eq!(
+            ensure_token_id_platform().is_ok(),
+            cfg!(target_os = "linux")
+        );
+    }
+
+    #[test]
+    fn runtime_identity_redirects_are_not_followed() {
+        use std::io::{Read, Write};
+        let listener =
+            std::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0)).expect("listener");
+        let port = listener.local_addr().expect("address").port();
+        let requests = Arc::new(AtomicUsize::new(0));
+        let captured = requests.clone();
+        let serving = std::thread::spawn(move || {
+            listener.set_nonblocking(true).expect("nonblocking");
+            let deadline = std::time::Instant::now() + Duration::from_millis(500);
+            while std::time::Instant::now() < deadline {
+                match listener.accept() {
+                    Ok((mut stream, _)) => {
+                        stream
+                            .set_read_timeout(Some(Duration::from_secs(1)))
+                            .expect("read timeout");
+                        let mut request = [0u8; 4096];
+                        let count = stream.read(&mut request).expect("request");
+                        captured.fetch_add(1, Ordering::AcqRel);
+                        assert!(
+                            std::str::from_utf8(&request[..count])
+                                .expect("HTTP")
+                                .starts_with("GET /props ")
+                        );
+                        // Same origin: reqwest would retain Authorization if it
+                        // followed this redirect. Never send it to another path.
+                        stream.write_all(b"HTTP/1.1 302 Found\r\nLocation: /unexpected\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").expect("reply");
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        std::thread::sleep(Duration::from_millis(5))
+                    }
+                    Err(error) => panic!("accept: {error}"),
+                }
+            }
+        });
+        let route = Route {
+            endpoint: format!("http://127.0.0.1:{port}"),
+            #[cfg(target_os = "linux")]
+            port,
+            #[cfg(target_os = "linux")]
+            owner_pid: Some(std::process::id()),
+            api_key: "synthetic-test-key".into(),
+            identity: RuntimeIdentity::default(),
+            profile: None,
+            token_ids: None,
+            lineage: String::new(),
+        };
+        let runtime = tokio::runtime::Runtime::new().expect("runtime");
+        assert!(
+            runtime
+                .block_on(fetch_props(&route))
+                .unwrap_err()
+                .starts_with("RUNTIME_IDENTITY_MISMATCH")
+        );
+        serving.join().expect("server");
+        assert_eq!(requests.load(Ordering::Acquire), 1);
+    }
 
     fn profile() -> BackendProfile {
         backend::profile("gpt-oss-20b-mxfp4-flowbox.v1").expect("bundled profile")

@@ -373,7 +373,11 @@ pub fn fit_to_budget(
             let raw = py_dumps(object.get("result").unwrap_or(&Value::Null));
             let raw_tokens = text_ids(tok, &raw)?.len().max(1);
             // `raw` is ASCII (ensure_ascii), so bytes and characters agree.
-            let keep = (raw.len() * max_tool_tokens / raw_tokens).saturating_sub(64);
+            // Python slices clamp their upper bound. Metadata may exceed the
+            // cap even when result is short (or null), so clamp here too.
+            let keep = (raw.len() * max_tool_tokens / raw_tokens)
+                .saturating_sub(64)
+                .min(raw.len());
             let truncated = format!(
                 "{{\"truncated\": true, \"original_chars\": {}, \"prefix\": {}}}",
                 raw.len(),
@@ -792,6 +796,21 @@ mod tests {
             tool.content
                 .contains("{\"truncated\": true, \"original_chars\": ")
         );
+    }
+
+    #[test]
+    fn oversized_tool_metadata_with_null_result_cannot_panic() {
+        let tok = testing::tokenizer();
+        let content = serde_json::to_string(&json!({
+            "protocolVersion": RESULT_PROTOCOL,
+            "result": null,
+            "error": { "message": "x".repeat(1000) }
+        }))
+        .expect("json");
+        let tool = message(Role::Tool, &content, None, 1);
+        let fitted = fit_to_budget(&tok, &[tool], 4096, 512, 512).expect("fit");
+        let object: Value = serde_json::from_str(&fitted[0].content).expect("result");
+        assert_eq!(object["result"]["prefix"], "null");
     }
 
     #[test]
