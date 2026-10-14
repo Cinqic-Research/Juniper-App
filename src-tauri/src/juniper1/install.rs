@@ -1,6 +1,9 @@
 //! Local, explicitly chosen research artifacts. No download source or public
 //! catalog entry is created; the bundled profile owns every accepted identity.
 
+// Only the Linux native route imports; other desktop builds compile the listing alone.
+#![cfg_attr(not(target_os = "linux"), allow(dead_code))]
+
 use super::{profile, tokenizer};
 use crate::commands::{Cancellation, open_regular_file};
 use serde::Serialize;
