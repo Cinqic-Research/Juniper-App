@@ -8,6 +8,9 @@ pub struct CatalogArtifactFile {
     pub path: String,
     pub size_bytes: u64,
     pub sha256: String,
+    // Optional fields are omitted, never `null`: the frontend catalog validator
+    // accepts absent fields but rejects null, which failed the Models refresh.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
 }
 
@@ -26,7 +29,7 @@ pub struct CatalogArtifact {
     pub runtime_id: String,
     /// A qualified backend profile (`config/backends`) this artifact must run
     /// with. Absent for models served by the generic local backend.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub backend_profile: Option<String>,
     /// Capabilities established by qualification. Absent means unknown, and
     /// unknown is never treated as supported.
@@ -35,12 +38,16 @@ pub struct CatalogArtifact {
     pub format: String,
     pub platforms: Vec<String>,
     pub architectures: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub quantization: Option<String>,
     pub size_bytes: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sha256: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_url: Option<String>,
     pub source_revision: String,
     pub files: Vec<CatalogArtifactFile>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub minimum_runtime_version: Option<String>,
     pub maturity: String,
     pub qualification: String,
@@ -60,6 +67,7 @@ pub struct CatalogEntry {
     pub architecture: String,
     pub source_repository: String,
     pub source_revision: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub original_model: Option<String>,
     pub license: String,
     pub license_url: String,
@@ -240,5 +248,16 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn absent_optional_fields_are_omitted_not_null() {
+        // The frontend validator (src/lib/model-catalog.ts) accepts absent optional
+        // fields but rejects null ones (url, sourceUrl, sha256, ...).
+        let json = serde_json::to_string(&entries().expect("catalog")).expect("serialize");
+        assert!(
+            !json.contains(":null"),
+            "catalog serializes a null optional field"
+        );
     }
 }
