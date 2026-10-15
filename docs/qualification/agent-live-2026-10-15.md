@@ -120,3 +120,22 @@ led to a fix before the run above.
 | Documents, run 2  | Completed without a document: `project.search` found nothing because the project had never been indexed, and the model gave up. | `project.search` refreshes the index first (`7db539e`).                              |
 | Delegation, run 1 | Failed with HTTP 400: llama.cpp could not build a grammar from the tool schema's `maxLength` bounds.                            | Schemas shown to the model drop `maxLength`; the host still enforces it (`1100ea1`). |
 | Delegation, run 2 | Helpers were told to read file names as document ids, and they gave up.                                                         | Only existing document ids are passed on (`c069c22`).                                |
+
+## Rendered app (real interface, debug build)
+
+The debug build of this branch was run on FLOWBOX (X11) against a fresh data
+folder, and driven through its own windows by synthetic mouse and keyboard
+input. Screenshots are kept with the review package, not in the repository.
+
+| Step       | Observed                                                                                                                                                                                                                                                                               |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| First run  | Onboarding offered Light, Dark, and System themes and introduced Agent (Beta).                                                                                                                                                                                                         |
+| Navigation | Chat, Agent (Beta), Models, Settings.                                                                                                                                                                                                                                                  |
+| Models     | The popular view and search listed the new catalog entries with their quantizations.                                                                                                                                                                                                   |
+| Transfer   | Qwen2.5 1.5B Instruct downloaded with progress and a time estimate, was paused, survived an app restart while paused, resumed, verified, and survived another restart installed.                                                                                                       |
+| Chat       | A chat with the downloaded model answered on device.                                                                                                                                                                                                                                   |
+| Agent task | With "Try this model anyway" on (the model is not qualified for tools), the goal "Use the calculator to compute 847291 times 19347, then tell me the result." finished as **Completed**. Activity: Queued, Running, Used Calculator, Completed. Answer: 16392538977, which is correct. |
+
+This shows the interface, the on-device agent route, and a host-run tool working
+together in the shipped shell. It is one task on one small model, not a
+qualification of that model for agent work.
