@@ -27,7 +27,10 @@ Juniper’s desktop bundle owns its loopback `llama-server` process, so ordinary
 
 ## What Juniper does
 
-- A chat-first interface: Chats, Models, and Settings are the only primary destinations. Conversation actions live in an overflow menu, the model is a compact picker that shows where each model runs, and reasoning, tool activity, and usage are one tap away instead of always on screen. See [docs/product/interface.md](docs/product/interface.md).
+Features marked **(source)** are in this source tree but not in the published `0.3.0-rc.33` installers.
+
+- **Agent (Beta) (source).** A personal agent beside Chat. Give it a goal and it works through it with the tools and folders you allow: project folders (read, search, diff-previewed writes), web search and page reading with source-linked citations, documents it saves, skills, optional MCP plugins, sandboxed Python on Linux, bounded helper subtasks, and schedules that run while Juniper is open. It asks before changing anything, shows a plan and every action, and can be paused, steered, cancelled, or stopped entirely. See [docs/architecture/agent-runtime.md](docs/architecture/agent-runtime.md).
+- A chat-first interface: Chat, Agent (Beta), Models, and Settings are the primary destinations (rc.33: Chats, Models, Settings). Conversation actions live in an overflow menu, the model is a compact picker that shows where each model runs, and reasoning, tool activity, and usage are one tap away instead of always on screen. See [docs/product/interface.md](docs/product/interface.md).
 - A chat workspace with onboarding, streaming, markdown, export, private chats, and phone layouts with a history drawer and Android back-gesture support.
 - Validated appearance settings: System, Light, or Dark; standard or high contrast; curated, neutral, or custom accent colors with computed WCAG-safe text shades; bundled Inter, Atkinson Hyperlegible Next, and OpenDyslexic fonts; interface size, chat text size, line spacing, density, conversation width, sidebar behavior, message style, timestamps, and motion.
 - Assistant profiles with personality controls, model selection, tool policy, memory policy, import, and export.
@@ -35,7 +38,7 @@ Juniper’s desktop bundle owns its loopback `llama-server` process, so ordinary
 - A generic runtime registry with explicit maturity and qualification state for llama.cpp, LiteRT-LM, ExecuTorch, MLC LLM, and ONNX Runtime GenAI. Optional runtimes are not presented as installed without a compatible artifact.
 - Artifact-centric model metadata: each model points to concrete runtime artifacts and file manifests, so a model is never treated as universally compatible.
 - A non-networked Device Link protocol/policy preview. Pairing, discovery, peer connections, remote control, and Juniper Network transport are disabled until a persistent TLS identity and end-to-end transport are implemented and qualified.
-- A curated catalog of four instruction-tuned GGUF models below 1B parameters, with source revision, license, size, and SHA-256 shown before download.
+- A curated catalog of downloadable instruction-tuned GGUF models (source: 27 downloadable releases across Qwen, Llama, Gemma, DeepSeek-R1 distills, Mistral, Phi, SmolLM, Granite, MiniCPM, and Nemotron, plus import-only gpt-oss-20b; rc.33: four models below 1B). Each download is pinned to a repository revision, size, and SHA-256, can be resumed, and can be a multi-file bundle; you choose the quantization. "Popular on Hugging Face" labels come from a dated download snapshot with the method in [docs/research/model-catalog-2026-10-15](docs/research/model-catalog-2026-10-15/popularity-snapshot.md); popularity is not a quality rating.
 - Optional Ollama, OpenAI-compatible, and llama.cpp-compatible provider connections for advanced users and existing setups.
 - A deterministic context builder that keeps the system prompt, curated memories, enabled tool definitions, and recent conversation within a context budget.
 - A host-authored tool boundary with bounded calculator, unit conversion, datetime, attachment, memory, search, and system-info contracts. A tool the request did not enable is denied, never executed.
@@ -47,7 +50,9 @@ These are deliberate exclusions in this release, not oversights:
 
 - **No Ollama dependency.** Ollama remains an optional external provider and legacy import path; it is not probed or used as a fallback by the Juniper local provider.
 - **Desktop runtime provenance.** The release workflow builds the pinned `llama.cpp` server from source and places it in the Tauri resource slot. A source checkout needs CMake and uses `scripts/build-llama-runtime.sh` before a local bundle can run the native provider.
-- **No MCP client.** Settings › Advanced lists it as unavailable.
+- **MCP is limited (source, Beta).** Agent can use tools from MCP servers you add (2026-07-28 and 2025-11-25 servers, stdio and Streamable HTTP, bearer tokens). Resources, prompts, sampling, elicitation, roots, OAuth sign-in, and server apps are not supported; local servers are not sandboxed. Chat does not use MCP. rc.33 has no MCP client.
+- **No background agent service.** Scheduled agent work runs only while Juniper is running; a run missed while it was closed runs once at the next launch, or is skipped.
+- **No sandbox on Windows or Android.** Sandboxed code runs on Linux only (bubblewrap); elsewhere it is unavailable.
 - **No arbitrary themes.** Appearance is limited to validated settings; Juniper never loads user CSS, scripts, or remote fonts.
 - **Android provider secrets use Android Keystore.** Juniper refuses to fall back to plaintext or SQLite storage; the instrumentation test exercises encrypt, decrypt, and deletion on an Android target.
 - **Android native local inference is Beta.** The candidate packages an in-process llama.cpp bridge for the managed, SHA-256-verified GGUF path on `arm64-v8a` (with `x86_64` reserved for emulator tests). The owner reports successful local model loading and inference on a physical Android phone. Build identity, device details, and the full lifecycle test record were not captured, so Beta promotion remains pending.
@@ -56,7 +61,7 @@ These are deliberate exclusions in this release, not oversights:
 
 ## Privacy and security
 
-- Telemetry is off and there is no analytics or crash-reporting code. Juniper makes network requests only to provider endpoints you configure and, when you choose to download a model in Models, to the pinned HTTPS Hugging Face URLs listed in `config/models/catalog.json`. At startup it contacts only an enabled Ollama provider you added, to refresh its model list.
+- Telemetry is off and there is no analytics or crash-reporting code. Juniper makes network requests only to provider endpoints you configure and, when you choose to download a model in Models, to the pinned HTTPS Hugging Face URLs listed in `config/models/catalog.json`. At startup it contacts only an enabled Ollama provider you added, to refresh its model list. Agent web tools and MCP servers make requests only when you enable and allow them (see [docs/privacy/network-policy.md](docs/privacy/network-policy.md)).
 - Juniper labels every route as ON DEVICE, LOCAL NETWORK, REMOTE, or UNKNOWN, and never treats UNKNOWN as safe.
 - Desktop provider credentials are stored in the OS keychain; Android provider credentials use Android Keystore. Both are referenced only by an opaque identifier. Secrets are never written to the SQLite state and are stripped from exports.
 - Device Link is a protocol/policy preview only in this candidate. No listener, usable pairing flow, discovery, peer connection, remote-control path, or Juniper Network provider is enabled.

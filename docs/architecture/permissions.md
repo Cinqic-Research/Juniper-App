@@ -26,3 +26,23 @@ from Settings › Tools & permissions.
 An assistant template, attachment, model output, MCP result, or provider
 metadata cannot change this policy. A future shell/sidecar runtime must add a
 dedicated capability and a separate review; it must not broaden `default.json`.
+
+## Agent capabilities (Beta)
+
+Agent tasks use one host decision point (`src-tauri/src/agent/policy.rs`):
+
+| Risk          | Examples                                                               | Default                                                                        |
+| ------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| Safe          | calculator, date and time, plan, ask the user, create a document       | Runs                                                                           |
+| Project read  | list, read, search granted folders; project search; read own documents | Runs (the folder grant is the consent)                                         |
+| Project write | write a file in a read-write folder                                    | Asks with a diff, unless the user allowed it for that agent and project        |
+| Network       | web search, read a web page                                            | Asks, unless allowed; the "Within projects" preset allows it for project tasks |
+| Process       | sandboxed Python, project checks                                       | Asks, unless allowed                                                           |
+| Plugin        | MCP server tools                                                       | Asks, unless allowed; grants bind to the server's tool-set digest              |
+| Memory write  | save a memory                                                          | Asks every time; standing grants never apply                                   |
+
+Presets (`Ask first`, `Within projects`, `Custom`) are described in the
+interface before they are chosen. Standing permissions are listed under Agent ›
+Permissions, where each can be revoked; revocation pauses that agent's running
+tasks. Folder grants are added and removed only under Agent › Projects through
+the native folder picker.

@@ -1,6 +1,7 @@
 # ADR-0010: MCP integration
 
-Status: accepted
+Status: accepted. Implemented by [ADR 0027](0027-mcp-client.md) (2026-10-15, draft PR #49); the
+"future work" note below is historical.
 
 ## Decision
 

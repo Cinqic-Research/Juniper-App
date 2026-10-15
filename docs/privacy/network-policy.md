@@ -24,3 +24,25 @@ discovery, usable pairing flow, peer connection, or remote-control route. A
 future implementation must exchange the exact TLS certificate or SPKI pin used
 by transport, store the private key in a platform secure facility, and validate
 resolved destinations as private or link-local before any network I/O.
+
+## Agent (Beta) network use (draft PR #49)
+
+Agent tasks make no network request unless a tool that uses the network is
+enabled for that agent and then allowed:
+
+- **Web search** sends the query to one provider the user chose: Wikipedia
+  (the default, no account), Brave Search (the user's key), or the user's own
+  SearXNG instance. Nothing is sent to Cinqic.
+- **Web pages** are fetched directly from public addresses only (see the threat
+  model). Fetched text is stored as a task source.
+- **Remote MCP servers** receive the tool arguments the user approves. Local
+  MCP servers are programs on this computer; they can use the network
+  themselves, which the interface states.
+- **Remote models** used by an agent receive the task's prompts, tool results,
+  and file passages, as in chat; the model's execution location is shown in
+  the task.
+
+A task run with a local model and only local tools stays on the device.
+Choosing a local model does not make web or plugin tools offline. Model
+downloads go only to the pinned Hugging Face URLs in the catalog; there is no
+automatic catalog refresh.
