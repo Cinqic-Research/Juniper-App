@@ -848,6 +848,7 @@ pub fn project_save(
 pub fn project_delete(state: State<'_, AppState>, project_id: String) -> Result<(), String> {
     valid_id(&project_id)?;
     let connection = state.agent.connection()?;
+    pause_project_tasks(&state.agent, &connection, &project_id);
     super::retrieval::forget_project(&connection, &project_id)?;
     connection
         .execute("DELETE FROM projects WHERE id = ?1", [&project_id])
@@ -932,11 +933,26 @@ pub async fn project_add_root<R: Runtime>(
     }
 }
 
+/// Pauses running tasks of a project whose folder access is changing, so
+/// nothing in flight keeps using the old access.
+fn pause_project_tasks(agent: &AgentState, connection: &Connection, project_id: &str) {
+    for id in agent.active_ids() {
+        if store::load_task(connection, &id)
+            .is_ok_and(|task| task.project_id.as_deref() == Some(project_id))
+        {
+            agent.signal(&id, Intent::Pause);
+        }
+    }
+}
+
 /// Revokes a folder grant and removes everything indexed from it.
 #[tauri::command]
 pub fn project_remove_root(state: State<'_, AppState>, root_id: String) -> Result<(), String> {
     valid_id(&root_id)?;
     let connection = state.agent.connection()?;
+    if let Ok(root) = store::root(&connection, &root_id) {
+        pause_project_tasks(&state.agent, &connection, &root.project_id);
+    }
     super::retrieval::forget_root(&connection, &root_id)?;
     connection
         .execute(

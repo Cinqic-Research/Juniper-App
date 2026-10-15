@@ -46,3 +46,7 @@ interface before they are chosen. Standing permissions are listed under Agent â€
 Permissions, where each can be revoked; revocation pauses that agent's running
 tasks. Folder grants are added and removed only under Agent â€º Projects through
 the native folder picker.
+
+A standing permission names one tool: allowing web searches does not allow page
+fetches. An approval shows everything it covers; a call whose arguments or diff
+are too long to show in full is refused rather than shortened.

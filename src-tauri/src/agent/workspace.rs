@@ -19,6 +19,35 @@ const MAX_SEARCH_FILE_BYTES: u64 = 1024 * 1024;
 const MAX_SEARCH_MATCHES: usize = 50;
 const SKIPPED_FOLDERS: &[&str] = &[".git", "node_modules", "target", ".venv", "__pycache__"];
 pub const ABSENT: &str = "absent";
+const MAX_DIFF_CHARS: usize = 200_000;
+/// Folders and files whose contents other programs execute (version
+/// control hooks and config, editor tasks, environment loaders, CI). An
+/// agent cannot write them, because that would run code outside the sandbox.
+const PROTECTED: &[&str] = &[
+    ".git",
+    ".hg",
+    ".svn",
+    ".vscode",
+    ".idea",
+    ".husky",
+    ".github",
+    ".gitlab",
+    ".circleci",
+    ".devcontainer",
+    ".direnv",
+    ".envrc",
+    ".gitmodules",
+    ".gitattributes",
+    ".gitlab-ci.yml",
+    ".pre-commit-config.yaml",
+];
+
+fn protected(path: &Path) -> bool {
+    path.components().any(|component| {
+        let name = component.as_os_str().to_string_lossy().to_ascii_lowercase();
+        PROTECTED.contains(&name.as_str())
+    })
+}
 
 pub type WorkspaceResult<T> = Result<T, (String, String)>;
 
@@ -341,6 +370,12 @@ pub fn preview_write(
     if relative.as_os_str().is_empty() {
         return Err(error("PATH_REJECTED", "Name a file to write."));
     }
+    if protected(&relative) {
+        return Err(error(
+            "PROTECTED_PATH",
+            "Agents cannot change version-control, editor, or CI configuration, which other programs run outside the sandbox.",
+        ));
+    }
     if content.len() > MAX_WRITE_BYTES {
         return Err(error("CONTENT_TOO_LARGE", "Writes are limited to 1 MB."));
     }
@@ -372,12 +407,15 @@ pub fn preview_write(
             &format!("b/{name}"),
         )
         .to_string();
-    let bounded: String = diff.chars().take(20_000).collect();
-    let preview = if bounded.len() < diff.len() {
-        format!("{bounded}\n… diff shortened for display")
-    } else {
-        bounded
-    };
+    // An approval covers exactly what it shows, so a diff is never
+    // shortened; one too long to review is refused instead.
+    if diff.chars().count() > MAX_DIFF_CHARS {
+        return Err(error(
+            "CHANGE_TOO_LARGE_TO_REVIEW",
+            "This change is too large to show for approval. Write the file in smaller parts.",
+        ));
+    }
+    let preview = diff;
     Ok((current, preview))
 }
 
@@ -390,7 +428,7 @@ pub fn commit_write(
     expected_version: &str,
 ) -> WorkspaceResult<Value> {
     let relative = relative_path(path)?;
-    if relative.as_os_str().is_empty() || content.len() > MAX_WRITE_BYTES {
+    if relative.as_os_str().is_empty() || content.len() > MAX_WRITE_BYTES || protected(&relative) {
         return Err(error("PATH_REJECTED", "That write is not allowed."));
     }
     if let Some(parent) = relative
@@ -525,6 +563,27 @@ mod tests {
         let found = search(&dir, "secret", "").expect("search");
         assert!(found["matches"].as_array().unwrap().is_empty());
         std::fs::remove_file(outside).ok();
+        std::fs::remove_dir_all(path).ok();
+    }
+
+    #[test]
+    fn configuration_that_runs_code_outside_the_sandbox_cannot_be_written() {
+        let (path, dir) = root();
+        for target in [
+            ".git/config",
+            ".vscode/tasks.json",
+            ".envrc",
+            "src/.husky/pre-commit",
+            ".GitHub/workflows/x.yml",
+        ] {
+            assert_eq!(
+                preview_write(&dir, target, "x", ABSENT).unwrap_err().0,
+                "PROTECTED_PATH",
+                "{target}"
+            );
+            assert!(commit_write(&dir, target, "x", ABSENT).is_err(), "{target}");
+        }
+        assert!(preview_write(&dir, "docs/git-notes.md", "x", ABSENT).is_ok());
         std::fs::remove_dir_all(path).ok();
     }
 

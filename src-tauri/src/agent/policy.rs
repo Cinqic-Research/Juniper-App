@@ -319,7 +319,7 @@ pub fn builtin_tools() -> Vec<ToolSpec> {
             Risk::Process,
             object(
                 json!({
-                    "code": { "type": "string", "maxLength": 100000 },
+                    "code": { "type": "string", "maxLength": 20000 },
                     "projectRootId": { "type": "string", "maxLength": 128, "description": "Optional: mount this granted folder read-only at /project" }
                 }),
                 &["code"],
@@ -472,8 +472,12 @@ pub fn decide(risk: Risk, capability: &str, context: &DecisionContext<'_>) -> De
             if granted(context, capability) {
                 return Decision::Allow;
             }
+            // "Within projects" lets writes inside the task's own granted
+            // folders proceed; every write is still shown in the activity
+            // with its diff. Network, code, and plugins always ask, so data
+            // read from a project cannot leave the device unseen.
             let preset_allows = context.profile.autonomy == "project"
-                && matches!(risk, Risk::Network)
+                && matches!(risk, Risk::ProjectWrite)
                 && context.project_id.is_some();
             if preset_allows {
                 Decision::Allow
@@ -488,7 +492,7 @@ pub fn decide(risk: Risk, capability: &str, context: &DecisionContext<'_>) -> De
 pub fn preset_description(preset: &str) -> &'static str {
     match preset {
         "project" => {
-            "Reads granted project folders, searches the web, and reads web pages without asking. Asks before writing files, running code, using plugins, or saving memories."
+            "Reads and changes files in the task’s granted read-write project folders without asking (each change is listed with its diff). Asks before any web request, code run, plugin call, or memory change."
         }
         "custom" => {
             "Uses only the standing permissions you granted. Asks before anything else that writes, runs code, uses the network, or uses a plugin."
@@ -496,6 +500,23 @@ pub fn preset_description(preset: &str) -> &'static str {
         _ => {
             "Reads granted project folders and uses safe local tools. Asks before every file change, web request, code run, plugin call, or memory change."
         }
+    }
+}
+
+/// The schema the model sees: the host's own, without string length
+/// bounds. llama.cpp turns `maxLength` into a grammar repetition and refuses
+/// large ones ("failed to parse grammar"); the host still enforces every
+/// bound when it checks the arguments.
+pub fn model_schema(schema: &Value) -> Value {
+    match schema {
+        Value::Object(map) => Value::Object(
+            map.iter()
+                .filter(|(key, _)| key.as_str() != "maxLength")
+                .map(|(key, value)| (key.clone(), model_schema(value)))
+                .collect(),
+        ),
+        Value::Array(items) => Value::Array(items.iter().map(model_schema).collect()),
+        other => other.clone(),
     }
 }
 
@@ -669,6 +690,50 @@ mod tests {
         assert_eq!(a, reordered);
         assert_ne!(a, changed_target);
         assert_ne!(a, changed_args);
+    }
+
+    #[test]
+    fn the_project_preset_allows_project_writes_but_never_the_network() {
+        let mut profile = AgentProfile::default_for("agent-1");
+        profile.autonomy = "project".into();
+        let ctx = context(&profile, &[], json!({}));
+        assert_eq!(
+            decide(Risk::ProjectWrite, "workspace.write", &ctx),
+            Decision::Allow
+        );
+        assert_eq!(
+            decide(Risk::Network, "web.fetch", &ctx),
+            Decision::Ask { standing: true }
+        );
+        assert_eq!(
+            decide(Risk::Process, "code.python", &ctx),
+            Decision::Ask { standing: true }
+        );
+        assert_eq!(
+            decide(Risk::Automation, "schedule.create", &ctx),
+            Decision::Ask { standing: false }
+        );
+        let mut outside = context(&profile, &[], json!({}));
+        outside.project_id = None;
+        assert_eq!(
+            decide(Risk::ProjectWrite, "workspace.write", &outside),
+            Decision::Ask { standing: true }
+        );
+    }
+
+    #[test]
+    fn the_model_sees_schemas_without_length_bounds_but_otherwise_unchanged() {
+        let spec = builtin_tools()
+            .into_iter()
+            .find(|tool| tool.name == "agent.delegate")
+            .unwrap();
+        let shown = model_schema(&spec.schema);
+        assert!(!shown.to_string().contains("maxLength"));
+        assert_eq!(
+            shown["properties"]["role"]["enum"],
+            spec.schema["properties"]["role"]["enum"]
+        );
+        assert_eq!(shown["required"], spec.schema["required"]);
     }
 
     #[test]

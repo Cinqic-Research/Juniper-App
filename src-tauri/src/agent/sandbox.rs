@@ -17,6 +17,37 @@ const MAX_STREAM_BYTES: usize = 64 * 1024;
 #[cfg(target_os = "linux")]
 const MAX_OUTPUT_FILES: usize = 5;
 #[cfg(target_os = "linux")]
+const WORK_QUOTA_BYTES: u64 = 64 * 1024 * 1024;
+
+/// Bytes under a folder, counting at most `limit` entries (more entries
+/// count as over any quota).
+#[cfg(target_os = "linux")]
+fn folder_bytes(folder: &std::path::Path, limit: usize) -> u64 {
+    let mut total = 0u64;
+    let mut seen = 0usize;
+    let mut stack = vec![folder.to_path_buf()];
+    while let Some(current) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&current) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            seen += 1;
+            if seen > limit {
+                return u64::MAX;
+            }
+            let Ok(metadata) = std::fs::symlink_metadata(entry.path()) else {
+                continue;
+            };
+            if metadata.is_dir() {
+                stack.push(entry.path());
+            } else {
+                total = total.saturating_add(metadata.len());
+            }
+        }
+    }
+    total
+}
+#[cfg(target_os = "linux")]
 const MAX_OUTPUT_FILE_BYTES: u64 = 1024 * 1024;
 
 fn fail(code: &str, message: impl Into<String>) -> ToolError {
@@ -190,6 +221,8 @@ pub async fn run(
         "/proc",
         "--dev",
         "/dev",
+        "--size",
+        "67108864",
         "--tmpfs",
         "/tmp",
     ]
@@ -281,8 +314,24 @@ pub async fn run(
             }
         }
     };
+    // The work folder is on the host disk; a watcher stops the run once it
+    // holds more than its quota, so a script cannot fill the disk.
+    let quota_folder = work.to_path_buf();
+    let over_quota = async move {
+        loop {
+            tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+            if folder_bytes(&quota_folder, 4_096) > WORK_QUOTA_BYTES {
+                return;
+            }
+        }
+    };
     let (status, timed_out, cancelled) = tokio::select! {
         status = child.wait() => (status.ok(), false, false),
+        _ = over_quota => {
+            kill_group(process_group);
+            let _ = child.kill().await;
+            (None, true, false)
+        }
         _ = tokio::time::sleep(WALL_TIMEOUT) => {
             kill_group(process_group);
             let _ = child.kill().await;
@@ -337,11 +386,14 @@ async fn run_tool_linux(
     std::fs::create_dir_all(&work)
         .map_err(|_| fail("SANDBOX_FAILED", "The sandbox folder could not be created."))?;
     let root_for = |id: &str| -> Result<std::path::PathBuf, ToolError> {
-        let root = execution
+        let project = execution
             .run
             .project
             .as_ref()
-            .and_then(|project| project.roots.iter().find(|root| root.id == id))
+            .ok_or_else(|| fail("ROOT_NOT_GRANTED", "This task has no project."))?;
+        let root = crate::agent::store::root(&execution.db(), id)
+            .ok()
+            .filter(|root| root.project_id == project.id)
             .ok_or_else(|| {
                 fail(
                     "ROOT_NOT_GRANTED",
@@ -548,6 +600,30 @@ open("result.txt", "w").write("ok")
         assert!(ran.stdout.contains("env-keys []"), "{}", ran.stdout);
         assert!(ran.stdout.contains("usr-writable False"));
         assert!(ran.stdout.contains("network False"));
+    }
+
+    #[tokio::test]
+    async fn a_script_cannot_fill_the_disk_or_memory_with_files() {
+        if availability().is_err() {
+            return;
+        }
+        let started = std::time::Instant::now();
+        let ran = python(
+            "import os\nblock = b'x' * (1 << 20)\nfor i in range(400):\n    open(f'f{i}', 'wb').write(block * 4)\nprint('done')\n",
+            None,
+        )
+        .await;
+        assert!(
+            !ran.stdout.contains("done"),
+            "the run was stopped at its work-folder quota"
+        );
+        assert!(started.elapsed() < std::time::Duration::from_secs(30));
+        let tmp = python(
+            "open('/tmp/big', 'wb').write(b'x' * (100 << 20))\nprint('wrote')\n",
+            None,
+        )
+        .await;
+        assert!(!tmp.stdout.contains("wrote"), "/tmp is size-limited");
     }
 
     #[tokio::test]

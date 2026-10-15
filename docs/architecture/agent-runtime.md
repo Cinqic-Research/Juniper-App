@@ -68,7 +68,9 @@ For each call the host does the following:
    a unified diff of a file write).
 3. **Decide** it with `policy::decide`. The tool's risk comes from the host's
    registry, never from the model, a skill, or a plugin.
-   - Safe tools and reads in granted folders run without asking.
+   - Safe tools and reads in granted folders run without asking. The folder
+     grant is checked in the database at each call, so removing a folder stops
+     a running task from using it.
    - Writes, network use, sandboxed code, and plugin calls ask unless a matching
      standing grant exists.
    - Memory changes always ask, one call at a time.

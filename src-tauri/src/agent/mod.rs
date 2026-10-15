@@ -154,6 +154,7 @@ pub fn notify<R: Runtime>(app: &AppHandle<R>, task_id: Option<&str>, kind: &str)
 /// Called once from setup: records paths, recovers state left by an earlier
 /// run, restores the global stop, and starts the worker.
 pub fn start<R: Runtime>(app: AppHandle<R>, state: &AgentState, database: PathBuf, data: PathBuf) {
+    mcp::set_plugin_root(&data);
     if state.paths.set(Paths { database, data }).is_err() {
         return;
     }

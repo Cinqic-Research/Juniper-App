@@ -242,16 +242,22 @@ fn argument<'a>(call: &'a TranscriptToolCall, name: &str) -> &'a str {
     call.arguments[name].as_str().unwrap_or_default()
 }
 
+/// A folder granted to this task's project, checked against the stored
+/// grant at the moment of use: a folder removed while the task runs stops
+/// working at once.
 fn project_root(
+    connection: &Connection,
     run: &RunContext,
     root_id: &str,
     needs_write: bool,
 ) -> Result<ProjectRoot, ToolError> {
-    let root = run
+    let project = run
         .project
         .as_ref()
-        .and_then(|project| project.roots.iter().find(|root| root.id == root_id))
-        .cloned()
+        .ok_or_else(|| fail("ROOT_NOT_GRANTED", "This task has no project."))?;
+    let root = store::root(connection, root_id)
+        .ok()
+        .filter(|root| root.project_id == project.id)
         .ok_or_else(|| {
             fail(
                 "ROOT_NOT_GRANTED",
@@ -264,12 +270,10 @@ fn project_root(
     Ok(root)
 }
 
+/// A standing grant names one tool: allowing searches never allows page
+/// fetches, and allowing a check run never allows arbitrary Python.
 pub fn capability_for(name: &str) -> String {
-    match name {
-        "web.search" | "web.fetch" => "web".into(),
-        "code.python" | "code.run" => "code".into(),
-        other => other.into(),
-    }
+    name.into()
 }
 
 pub fn prepare(
@@ -304,7 +308,7 @@ pub fn prepare(
     };
     match call.name.as_str() {
         "workspace.write" => {
-            let root = project_root(run, argument(call, "rootId"), true)?;
+            let root = project_root(connection, run, argument(call, "rootId"), true)?;
             let dir = workspace::open_root(&root.path)?;
             let (version, diff) = workspace::preview_write(
                 &dir,
@@ -326,10 +330,10 @@ pub fn prepare(
             );
         }
         "workspace.list" | "workspace.read" | "workspace.search" => {
-            project_root(run, argument(call, "rootId"), false)?;
+            project_root(connection, run, argument(call, "rootId"), false)?;
         }
         "code.run" => {
-            let root = project_root(run, argument(call, "rootId"), false)?;
+            let root = project_root(connection, run, argument(call, "rootId"), false)?;
             prepared.preview = format!(
                 "Run `{} {}` in the sandbox with “{}” mounted read-only, no network.",
                 argument(call, "program"),
@@ -345,7 +349,7 @@ pub fn prepare(
         }
         "code.python" => {
             if let Some(root_id) = call.arguments["projectRootId"].as_str() {
-                project_root(run, root_id, false)?;
+                project_root(connection, run, root_id, false)?;
             }
             let code = argument(call, "code");
             prepared.preview = format!(
@@ -355,7 +359,7 @@ pub fn prepare(
                 } else {
                     ""
                 },
-                code.chars().take(4000).collect::<String>()
+                code
             );
         }
         "web.search" => {
@@ -711,7 +715,7 @@ async fn execute_inner(
             ))
         }
         "workspace.list" => {
-            let root = project_root(run, argument(call, "rootId"), false)?;
+            let root = project_root(&execution.db(), run, argument(call, "rootId"), false)?;
             let dir = workspace::open_root(&root.path)?;
             let result = workspace::list(&dir, call.arguments["path"].as_str().unwrap_or(""))?;
             Ok(Outcome::success(
@@ -720,7 +724,7 @@ async fn execute_inner(
             ))
         }
         "workspace.read" => {
-            let root = project_root(run, argument(call, "rootId"), false)?;
+            let root = project_root(&execution.db(), run, argument(call, "rootId"), false)?;
             let dir = workspace::open_root(&root.path)?;
             let offset = call.arguments["offset"].as_u64().unwrap_or(0) as usize;
             let limit = call.arguments["limit"]
@@ -752,7 +756,7 @@ async fn execute_inner(
             ))
         }
         "workspace.search" => {
-            let root = project_root(run, argument(call, "rootId"), false)?;
+            let root = project_root(&execution.db(), run, argument(call, "rootId"), false)?;
             let dir = workspace::open_root(&root.path)?;
             let result = workspace::search(
                 &dir,
@@ -765,7 +769,7 @@ async fn execute_inner(
             ))
         }
         "workspace.write" => {
-            let root = project_root(run, argument(call, "rootId"), true)?;
+            let root = project_root(&execution.db(), run, argument(call, "rootId"), true)?;
             let dir = workspace::open_root(&root.path)?;
             let result = workspace::commit_write(
                 &dir,
@@ -779,10 +783,15 @@ async fn execute_inner(
             ))
         }
         "project.search" => {
-            let project = run
+            let project_id = run
                 .project
                 .as_ref()
+                .map(|project| project.id.clone())
                 .ok_or_else(|| fail("NO_PROJECT", "This task has no project."))?;
+            // The project as stored now: a folder removed during the task is
+            // neither searched nor indexed again.
+            let project = &store::project(&execution.db(), &project_id)
+                .map_err(|message| fail("NO_PROJECT", message))?;
             // The index is refreshed first (unchanged files are skipped), so
             // a search always reflects the folders as they are now.
             let indexed = super::retrieval::index_project(&execution.db(), project)

@@ -33,6 +33,7 @@ const MAX_PAGES: usize = 8;
 const MAX_SCHEMA_BYTES: usize = 64 * 1024;
 const MAX_RESULT_CHARS: usize = 32_000;
 const MAX_MESSAGE_BYTES: usize = 4 * 1024 * 1024;
+const MAX_PREVIEW_CHARS: usize = 20_000;
 
 fn fail(code: &str, message: impl Into<String>) -> ToolError {
     (code.to_owned(), message.into())
@@ -453,14 +454,19 @@ pub fn prepare(
     let (plugin, tool) = resolve(connection, &call.name)?;
     let scope = json!({ "toolsDigest": plugin.state.tools_digest, "server": plugin.id });
     let arguments = serde_json::to_string_pretty(&call.arguments).unwrap_or_default();
+    // An approval covers exactly what it shows: arguments too long to show
+    // in full cannot be approved.
+    if arguments.chars().count() > MAX_PREVIEW_CHARS {
+        return Err(fail(
+            "ARGUMENTS_TOO_LARGE_TO_REVIEW",
+            "This plugin call's arguments are too long to show for approval, so it was not sent.",
+        ));
+    }
     Ok((
         scope,
         format!(
-            "Call “{}” on {} ({}) with:\n{}",
-            tool.name,
-            plugin.name,
-            plugin.location,
-            arguments.chars().take(4000).collect::<String>()
+            "Call “{}” on {} ({}) with:\n{arguments}",
+            tool.name, plugin.name, plugin.location
         ),
     ))
 }
@@ -525,19 +531,52 @@ pub fn disconnect_all() {
     }
 }
 
-fn plugin_directory(plugin_id: &str) -> std::path::PathBuf {
-    std::env::temp_dir().join("juniper-plugins").join(plugin_id)
+static PLUGIN_ROOT: OnceLock<std::path::PathBuf> = OnceLock::new();
+
+/// Sets where local servers get their private working folders (the app's
+/// data folder). Called once at startup.
+pub fn set_plugin_root(data: &std::path::Path) {
+    let _ = PLUGIN_ROOT.set(data.join("agent").join("plugins"));
 }
 
-async fn spawn_stdio(plugin: &Plugin) -> Result<Arc<StdioSession>, ToolError> {
-    let command = plugin.config.command.as_deref().unwrap_or_default();
-    let directory = plugin_directory(&plugin.id);
-    std::fs::create_dir_all(&directory).map_err(|_| {
+/// A private (owner-only) folder per local server, never in a shared temp
+/// directory another account could prepare.
+fn plugin_directory(plugin_id: &str) -> Result<std::path::PathBuf, ToolError> {
+    let root = PLUGIN_ROOT.get().cloned().unwrap_or_else(|| {
+        std::env::temp_dir().join(format!("juniper-plugins-{}", std::process::id()))
+    });
+    let folder = root.join(plugin_id);
+    std::fs::create_dir_all(&folder).map_err(|_| {
         fail(
             "PLUGIN_START_FAILED",
             "The server folder could not be created.",
         )
     })?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        for path in [&root, &folder] {
+            let metadata = std::fs::symlink_metadata(path)
+                .map_err(|_| fail("PLUGIN_START_FAILED", "The server folder is unavailable."))?;
+            if metadata.file_type().is_symlink() {
+                return Err(fail("PLUGIN_START_FAILED", "The server folder is a link."));
+            }
+            std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700)).map_err(
+                |_| {
+                    fail(
+                        "PLUGIN_START_FAILED",
+                        "The server folder could not be made private.",
+                    )
+                },
+            )?;
+        }
+    }
+    Ok(folder)
+}
+
+async fn spawn_stdio(plugin: &Plugin) -> Result<Arc<StdioSession>, ToolError> {
+    let command = plugin.config.command.as_deref().unwrap_or_default();
+    let directory = plugin_directory(&plugin.id)?;
     let mut process = tokio::process::Command::new(command);
     process
         .args(&plugin.config.args)
@@ -1233,6 +1272,18 @@ pub async fn test_connection(
             let result = rpc(&connected, "tools/list", params, None, &none).await?;
             for tool in result["tools"].as_array().into_iter().flatten() {
                 match accept_tool(tool, plugin.kind == "mcp-http") {
+                    // Two names that map to the same exposed name would share
+                    // one identity and one grant, so the later one is dropped.
+                    Ok(tool)
+                        if tools.iter().any(|existing: &RemoteTool| {
+                            tool_slug(&existing.name) == tool_slug(&tool.name)
+                        }) =>
+                    {
+                        rejected.push(format!(
+                            "“{}”: its name collides with another tool",
+                            tool.name
+                        ));
+                    }
                     Ok(tool) if tools.len() < MAX_TOOLS => tools.push(tool),
                     Ok(_) => rejected.push("more than 128 tools".to_owned()),
                     Err(reason) => rejected.push(reason),

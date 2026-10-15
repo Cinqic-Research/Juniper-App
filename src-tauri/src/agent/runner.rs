@@ -548,7 +548,7 @@ impl<R: Runtime> Run<'_, R> {
             .map(|tool| {
                 json!({
                     "type": "function",
-                    "function": { "name": tool.name, "description": tool.description, "parameters": tool.schema }
+                    "function": { "name": tool.name, "description": tool.description, "parameters": policy::model_schema(&tool.schema) }
                 })
             })
             .collect();
@@ -627,13 +627,29 @@ impl<R: Runtime> Run<'_, R> {
         if turn.tool_calls.is_empty() {
             return self.finish(turn.content);
         }
+        // Call ids are the model's; a repeated one (in this turn or earlier
+        // in the task) is replaced so every action has its own record.
+        let used: std::collections::HashSet<String> =
+            store::actions(&lock(&self.connection), &self.task.id)?
+                .into_iter()
+                .map(|action| action.call_id)
+                .collect();
+        let mut seen = std::collections::HashSet::new();
         let mut calls: Vec<TranscriptToolCall> = turn
             .tool_calls
             .into_iter()
-            .map(|call| TranscriptToolCall {
-                id: call.id,
-                name: call.name,
-                arguments: call.arguments,
+            .map(|call| {
+                let id = if used.contains(&call.id) || !seen.insert(call.id.clone()) {
+                    format!("host-{}", uuid::Uuid::new_v4().simple())
+                } else {
+                    call.id
+                };
+                seen.insert(id.clone());
+                TranscriptToolCall {
+                    id,
+                    name: call.name,
+                    arguments: call.arguments,
+                }
             })
             .collect();
         let extra = calls.len().saturating_sub(MAX_CALLS_PER_TURN);
@@ -859,9 +875,19 @@ impl<R: Runtime> Run<'_, R> {
         });
         let action = store::action_for_call(&lock(&self.connection), &self.task.id, &call.id)?;
         if let Some(action) = action {
+            // A plugin or code call stopped by a cancel or timeout may have
+            // acted already; it is uncertain, not failed, so nothing retries it.
+            let interrupted = outcome.error.as_ref().is_some_and(|(code, _)| {
+                matches!(
+                    code.as_str(),
+                    "REQUEST_CANCELLED" | "PLUGIN_TIMEOUT" | "PLUGIN_DISCONNECTED"
+                )
+            }) && (call.name.starts_with("mcp.")
+                || call.name.starts_with("code."));
             let status = match outcome.status {
                 "success" => "succeeded",
                 "denied" => "denied",
+                _ if interrupted => "uncertain",
                 _ => "failed",
             };
             store::set_action(&lock(&self.connection), &action.id, status, Some(&result))?;

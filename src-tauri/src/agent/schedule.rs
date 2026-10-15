@@ -606,7 +606,7 @@ pub fn finish_run(connection: &Connection, run_id: &str, status: TaskStatus) {
     }
     let changed_something: bool = connection
         .query_row(
-            "SELECT EXISTS(SELECT 1 FROM task_actions WHERE task_id = ?1 AND status IN ('succeeded', 'uncertain', 'started') AND (tool IN ('workspace.write', 'memory.save', 'code.python', 'code.run') OR tool LIKE 'mcp.%'))",
+            "SELECT EXISTS(SELECT 1 FROM task_actions a JOIN tasks t ON t.id = a.task_id WHERE t.root_id = ?1 AND a.status IN ('succeeded', 'uncertain', 'started') AND (a.tool IN ('workspace.write', 'memory.save', 'code.python', 'code.run', 'schedule.create') OR a.tool LIKE 'mcp.%'))",
             [task_id.unwrap_or_default()],
             |row| row.get(0),
         )

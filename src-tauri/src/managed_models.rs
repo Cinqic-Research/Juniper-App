@@ -474,7 +474,9 @@ async fn download_file<R: Runtime>(
         .url
         .as_deref()
         .ok_or_else(|| "MODEL_DOWNLOAD_ERROR: This file has no download source.".to_owned())?;
-    if is_symlink(partial)? {
+    // A partial file that is a link, or a hard link shared with another
+    // file, is never written into: a restart would truncate the other file.
+    if is_symlink(partial)? || shared_inode(partial) {
         fs::remove_file(partial).map_err(|error| format!("MODEL_STORAGE_ERROR: {error}"))?;
     }
     let mut offset = bytes_on_disk(partial);
@@ -1036,12 +1038,14 @@ pub async fn import<R: Runtime>(
     }
     let directory = models_directory(&app)?;
     let Layout::Single {
-        file: final_file,
-        partial: partial_file,
+        file: final_file, ..
     } = layout(&directory, &artifact)?
     else {
         unreachable!("single-file artifacts use the single layout");
     };
+    // Imports stage under their own name: a hard link to the user's file
+    // must never be picked up as a download's partial file.
+    let partial_file = safe_path(&directory, &format!("{}.gguf.import", artifact.id))?;
     if final_file.is_file() && verify_file(&final_file, &artifact)? {
         emit_progress(
             &app,
@@ -1198,6 +1202,16 @@ fn hash_into_place(
         return Err("MODEL_CHECKSUM_MISMATCH: The selected file changed during import.".into());
     }
     Ok(format!("{:x}", hasher.finalize()))
+}
+
+#[cfg(unix)]
+fn shared_inode(path: &Path) -> bool {
+    fs::symlink_metadata(path).is_ok_and(|metadata| metadata.nlink() > 1)
+}
+
+#[cfg(not(unix))]
+fn shared_inode(_path: &Path) -> bool {
+    false
 }
 
 fn is_symlink(path: &Path) -> Result<bool, String> {
@@ -1660,6 +1674,26 @@ mod transfer_tests {
             ranges.lock().unwrap()[0],
             None,
             "a partial from another revision is not resumed"
+        );
+        fs::remove_dir_all(directory).ok();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_hard_linked_partial_file_is_replaced_not_written_into() {
+        let bytes = model_bytes(60_000, 7);
+        let (base, ranges) = server(vec![("model.gguf", bytes.clone())], Behaviour::IgnoreRange);
+        let directory = folder();
+        let users_file = directory.join("users-own.gguf");
+        fs::write(&users_file, b"the user's own data").unwrap();
+        fs::hard_link(&users_file, directory.join("fixture-i.gguf.part")).unwrap();
+        let artifact = artifact("fixture-i", &base, &[("model.gguf", &bytes)]);
+        run(&directory, &artifact).expect("download");
+        assert_eq!(fs::read(&users_file).unwrap(), b"the user's own data");
+        assert_eq!(
+            ranges.lock().unwrap()[0],
+            None,
+            "the shared file was not resumed"
         );
         fs::remove_dir_all(directory).ok();
     }
