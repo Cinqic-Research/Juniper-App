@@ -332,6 +332,34 @@ pub fn attachments_message(attachments: &[AttachmentContext]) -> Option<Value> {
         .map(|content| json!({ "role": "user", "content": content }))
 }
 
+/// The attachments block with each file's host-issued id, for requests that
+/// offer `file.read` or `file.metadata`: those tools take the id, and a model
+/// that cannot see it cannot call them. Ids are opaque grant handles, not paths.
+pub fn attachments_message_with_ids(attachments: &[AttachmentContext]) -> Option<Value> {
+    let ids: Vec<(String, String)> = attachments
+        .iter()
+        .map(|attachment| {
+            (
+                attachment.name.replace(['<', '>', '"'], "_"),
+                attachment.id.replace(['<', '>', '"'], "_"),
+            )
+        })
+        .collect();
+    attachments_text(attachments, neutralize_control_tokens).map(|mut content| {
+        for (name, id) in ids {
+            content = content.replacen(
+                &format!("<attachment name=\"{name}\">"),
+                &format!(
+                    "<attachment name=\"{name}\" id=\"{}\">",
+                    neutralize_control_tokens(&id)
+                ),
+                1,
+            );
+        }
+        json!({ "role": "user", "content": content })
+    })
+}
+
 /// The framed attachments block; `guard` as in `memory_text`.
 pub fn attachments_text(
     attachments: &[AttachmentContext],

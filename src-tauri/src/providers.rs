@@ -817,7 +817,15 @@ fn request_messages(
                 })
             }),
     );
-    if let Some(attachments) = behavior::attachments_message(&request.attachments) {
+    let offers_attachment_tools = offered_tools(request)
+        .iter()
+        .any(|tool| tool.name == "file.read" || tool.name == "file.metadata");
+    let attachments = if offers_attachment_tools {
+        behavior::attachments_message_with_ids(&request.attachments)
+    } else {
+        behavior::attachments_message(&request.attachments)
+    };
+    if let Some(attachments) = attachments {
         let insertion = messages
             .iter()
             .rposition(|message| message["role"] == "user")
@@ -2982,6 +2990,39 @@ mod tests {
         assert_eq!(
             validate_chat_request(&unscoped).unwrap_err().code,
             "INVALID_PERMISSION_GRANTS"
+        );
+    }
+
+    #[test]
+    fn attachment_ids_are_shown_only_when_attachment_tools_are_offered() {
+        let mut request = request();
+        request.attachments = serde_json::from_value(json!([{
+            "id": "attachment-7f3",
+            "name": "notes.txt",
+            "content": "quarterly notes"
+        }]))
+        .expect("attachments should deserialize");
+        let policy = RequestPolicy::generic(STREAM_IDLE_TIMEOUT);
+        let host = scoped_host_context(&request);
+        let without = request_messages(&request, &policy, &host).expect("messages");
+        assert!(
+            !serde_json::to_string(&without)
+                .unwrap()
+                .contains("attachment-7f3")
+        );
+        request.tools = serde_json::from_value(json!([{
+            "name": "file.read",
+            "description": "Read an attachment",
+            "risk": "filesystem-read",
+            "enabled": true,
+            "schema": { "type": "object" }
+        }]))
+        .expect("tools should deserialize");
+        let with = request_messages(&request, &policy, &host).expect("messages");
+        let text = serde_json::to_string(&with).unwrap();
+        assert!(
+            text.contains(r#"name=\"notes.txt\" id=\"attachment-7f3\""#),
+            "{text}"
         );
     }
 
