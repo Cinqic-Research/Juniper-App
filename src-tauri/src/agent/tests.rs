@@ -674,3 +674,52 @@ fn a_plugin_tool_needs_approval_a_standing_grant_binds_to_its_tool_set_and_disab
     assert_eq!(blocked.result.unwrap()["error"]["code"], "TOOL_NOT_ENABLED");
     mcp::disconnect(&plugin_id);
 }
+
+#[test]
+fn a_schedule_proposed_in_conversation_is_created_only_after_approval_with_concrete_runs() {
+    let script = vec![
+        sse_tool_calls(&[(
+            "s1",
+            "schedule.create",
+            json!({ "title": "Morning brief", "prompt": "Summarize my notes.", "kind": "weekly", "days": [1, 3, 5], "time": "08:30" }),
+        )]),
+        sse_answer("Scheduled."),
+    ];
+    let fixture = new_fixture(script);
+    store::set_agent_settings(
+        &fixture.connection(),
+        &json!({ "timezone": "America/New_York" }),
+    )
+    .unwrap();
+    let id = fixture.start(
+        "Every Monday, Wednesday, and Friday at 8:30 in the morning, summarize my notes.",
+        false,
+    );
+    let task = fixture.run(&id);
+    assert_eq!(task.status, TaskStatus::WaitingApproval);
+    assert!(
+        super::schedule::list(&fixture.connection())
+            .unwrap()
+            .is_empty(),
+        "nothing is scheduled before approval"
+    );
+    let approval = store::approvals_for_task(&fixture.connection(), &id)
+        .unwrap()
+        .remove(0);
+    assert!(
+        !approval.standing_allowed,
+        "schedules are approved one at a time"
+    );
+    assert!(
+        approval.preview.contains("Next runs:") && approval.preview.contains("8:30 AM"),
+        "{}",
+        approval.preview
+    );
+    fixture.approve(&task, "allow-once");
+    let task = fixture.run(&id);
+    assert_eq!(task.status, TaskStatus::Completed);
+    let schedules = super::schedule::list(&fixture.connection()).unwrap();
+    assert_eq!(schedules.len(), 1);
+    assert_eq!(schedules[0].spec.timezone, "America/New_York");
+    assert_eq!(schedules[0].spec.assistant_id, "agent-1");
+}

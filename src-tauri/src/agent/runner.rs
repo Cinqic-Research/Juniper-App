@@ -22,6 +22,10 @@ const MAX_CALLS_PER_TURN: usize = 8;
 const MAX_RESULT_CHARS: usize = 24_000;
 /// Older tool results are shortened once the transcript grows past this.
 const TRANSCRIPT_SOFT_LIMIT_CHARS: usize = 60_000;
+/// How long a model may stay silent within one agent turn. Agent prompts
+/// carry tool results and documents, so prefill on a local CPU can take
+/// much longer than a chat reply's first token.
+const MODEL_IDLE_TIMEOUT: Duration = Duration::from_secs(120);
 /// Approval requests expire; an unanswered request never becomes an allow.
 const APPROVAL_LIFETIME_HOURS: i64 = 72;
 
@@ -582,8 +586,7 @@ impl<R: Runtime> Run<'_, R> {
         } else {
             match providers::validate_chat_request(&request) {
                 Ok(()) => {
-                    let policy =
-                        crate::backend::RequestPolicy::generic(providers::STREAM_IDLE_TIMEOUT);
+                    let policy = crate::backend::RequestPolicy::generic(MODEL_IDLE_TIMEOUT);
                     providers::agent_turn(
                         &request,
                         &messages,

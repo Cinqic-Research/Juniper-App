@@ -789,12 +789,6 @@ pub fn agent_settings_set(state: State<'_, AppState>, changes: Value) -> Result<
                     .map_err(|_| "INVALID_INPUT: Unknown time zone.".to_owned())?;
                 settings["timezone"] = json!(zone);
             }
-            "quietHours" => {
-                settings["quietHours"] = value.clone();
-            }
-            "notifications" => {
-                settings["notifications"] = json!(value.as_bool().unwrap_or(false));
-            }
             "web" => {
                 settings["web"] = super::web::validated_settings(value)?;
             }

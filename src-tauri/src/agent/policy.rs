@@ -19,6 +19,9 @@ pub enum Risk {
     ProjectWrite,
     /// Saved memory changes: approved one call at a time, always.
     MemoryWrite,
+    /// Creates future automation (a schedule): approved one call at a time,
+    /// with the concrete next run times shown.
+    Automation,
     /// Sends a query or URL to the network.
     Network,
     /// Runs code in the sandbox.
@@ -56,6 +59,7 @@ pub const DEFAULT_TOOLS: &[&str] = &[
     "project.search",
     "skill.load",
     "memory.list",
+    "schedule.create",
 ];
 
 /// Tools only the host adds; they are part of how a task works rather than
@@ -270,6 +274,25 @@ pub fn builtin_tools() -> Vec<ToolSpec> {
             ),
         ),
         spec(
+            "schedule.create",
+            "Create a schedule",
+            "Propose a one-time or recurring schedule for this agent. The user sees the exact next run times and approves it. Times are local to the time zone in your instructions.",
+            Risk::Automation,
+            object(
+                json!({
+                    "title": { "type": "string", "maxLength": 100 },
+                    "prompt": { "type": "string", "maxLength": 4000, "description": "What the agent should do at each run" },
+                    "kind": { "type": "string", "enum": ["once", "daily", "weekly", "monthly", "interval"] },
+                    "at": { "type": "string", "maxLength": 16, "description": "For once: local date and time, YYYY-MM-DDTHH:MM" },
+                    "time": { "type": "string", "maxLength": 5, "description": "For daily, weekly, monthly: local HH:MM (24-hour)" },
+                    "days": { "type": "array", "items": { "type": "integer", "minimum": 1, "maximum": 7 }, "maxItems": 7, "description": "For weekly: 1 = Monday … 7 = Sunday" },
+                    "day": { "type": "integer", "minimum": 1, "maximum": 31, "description": "For monthly" },
+                    "minutes": { "type": "integer", "minimum": 15, "maximum": 10080, "description": "For interval" }
+                }),
+                &["title", "prompt", "kind"],
+            ),
+        ),
+        spec(
             "web.search",
             "Web search",
             "Search the web. Results are short snippets with source ids; use web.fetch to read a page before relying on it.",
@@ -444,7 +467,7 @@ pub fn decide(risk: Risk, capability: &str, context: &DecisionContext<'_>) -> De
     match risk {
         Risk::Safe | Risk::ProjectRead => Decision::Allow,
         // Saved memory is approved one call at a time, exactly as in chat.
-        Risk::MemoryWrite => Decision::Ask { standing: false },
+        Risk::MemoryWrite | Risk::Automation => Decision::Ask { standing: false },
         Risk::ProjectWrite | Risk::Network | Risk::Process | Risk::Plugin => {
             if granted(context, capability) {
                 return Decision::Allow;

@@ -25,6 +25,7 @@ const RISK_LABEL: Record<string, string> = {
   'project-read': 'Reads granted folders',
   'project-write': 'Changes files (asks first)',
   'memory-write': 'Saves memories (asks each time)',
+  automation: 'Creates schedules (asks each time)',
   network: 'Uses the network',
   process: 'Runs code in a sandbox',
   plugin: 'Third-party plugin',
@@ -101,6 +102,21 @@ export function AgentSettingsDialog({
     }
   }
 
+  async function importProfile(file: File) {
+    try {
+      const document: unknown = JSON.parse(await file.text())
+      const next = await agentApi.importProfile(assistant.id, document)
+      const stored = await agentApi.profile(assistant.id)
+      setProfile(stored.profile)
+      setRevision(next)
+      void dialogs.notify(
+        'Imported. Imported settings start with “Ask first”, local tools only, and no project or model; review them before saving.',
+      )
+    } catch (error) {
+      void dialogs.notify(errorText(error), 'The settings could not be imported')
+    }
+  }
+
   async function exportProfile() {
     const document = await agentApi.exportProfile(assistant.id)
     download(`${assistant.name}-agent.json`, JSON.stringify(document, null, 2), 'application/json')
@@ -115,6 +131,19 @@ export function AgentSettingsDialog({
       variant="sheet"
       footer={
         <div className="button-row">
+          <label className="button ghost">
+            Import
+            <input
+              type="file"
+              accept="application/json"
+              className="visually-hidden"
+              onChange={(event) => {
+                const file = event.target.files?.[0]
+                if (file) void importProfile(file)
+                event.target.value = ''
+              }}
+            />
+          </label>
           <button className="button ghost" onClick={() => void exportProfile()}>
             Export
           </button>
