@@ -92,6 +92,12 @@ fn model_server(script: Vec<String>, requests: Arc<Mutex<Vec<Value>>>) -> String
 }
 
 fn new_fixture(script: Vec<String>) -> Fixture {
+    new_fixture_with(move |_| script)
+}
+
+/// A fixture whose model script is written after `setup` has prepared the
+/// database (for example, to name a plugin's generated id).
+fn new_fixture_with(setup: impl FnOnce(&std::path::Path) -> Vec<String>) -> Fixture {
     let root = std::env::temp_dir().join(format!("juniper-agent-e2e-{}", uuid::Uuid::new_v4()));
     let folder = root.join("project");
     std::fs::create_dir_all(&folder).unwrap();
@@ -103,6 +109,7 @@ fn new_fixture(script: Vec<String>) -> Fixture {
     let database = root.join("juniper.db");
     crate::storage::initialize(&database).unwrap();
     let requests = Arc::new(Mutex::new(Vec::new()));
+    let script = setup(&database);
     let base_url = model_server(script, requests.clone());
     let connection = store::open(&database).unwrap();
     let snapshot = json!({
@@ -533,4 +540,137 @@ fn a_question_waits_for_the_user_and_an_unknown_tool_is_denied() {
         unknown.result.as_ref().unwrap()["error"]["code"],
         "TOOL_NOT_ENABLED"
     );
+}
+
+#[cfg(unix)]
+#[test]
+fn a_plugin_tool_needs_approval_a_standing_grant_binds_to_its_tool_set_and_disabling_blocks_it() {
+    use super::mcp;
+    let server = format!(
+        "{}/tests/fixtures/mcp_fixture_server.py",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    let plugin_id = Arc::new(Mutex::new(String::new()));
+    let recorded = plugin_id.clone();
+    let fixture = new_fixture_with(move |database| {
+        let connection = store::open(database).unwrap();
+        let plugin = mcp::register(
+            &connection,
+            mcp::PluginConfig {
+                name: "Fixture".into(),
+                kind: "mcp-stdio".into(),
+                command: Some("/usr/bin/python3".into()),
+                args: vec![server, "--era".into(), "modern".into()],
+                env: vec![],
+                url: None,
+                credential_ref: None,
+            },
+        )
+        .unwrap();
+        let tested = tauri::async_runtime::block_on(mcp::test_connection(
+            database.to_path_buf(),
+            plugin.id.clone(),
+        ))
+        .unwrap();
+        assert_eq!(tested.state.status, "connected");
+        mcp::set_enabled(&connection, &plugin.id, true).unwrap();
+        let echo = mcp::exposed_name(&plugin.id, "echo");
+        let inject = mcp::exposed_name(&plugin.id, "inject");
+        *recorded.lock().unwrap() = plugin.id.clone();
+        vec![
+            sse_tool_calls(&[("c1", &echo, json!({ "text": "first" }))]),
+            sse_tool_calls(&[
+                ("c2", &echo, json!({ "text": "second" })),
+                ("c3", &inject, json!({})),
+            ]),
+            sse_answer("The server said first and second."),
+            sse_tool_calls(&[("d1", &echo, json!({ "text": "after disable" }))]),
+            sse_answer("The tool was unavailable."),
+        ]
+    });
+    let plugin_id = plugin_id.lock().unwrap().clone();
+    let echo = mcp::exposed_name(&plugin_id, "echo");
+    let inject = mcp::exposed_name(&plugin_id, "inject");
+    let mut profile = AgentProfile::default_for("agent-1");
+    profile.enabled_tools.extend([echo.clone(), inject.clone()]);
+    store::save_agent_profile(&fixture.connection(), &profile, 0).unwrap();
+
+    let id = fixture.start("Echo twice.", false);
+    let task = fixture.run(&id);
+    assert_eq!(
+        task.status,
+        TaskStatus::WaitingApproval,
+        "a plugin call asks first: {:?}",
+        task.status_reason
+    );
+    let approval = store::approvals_for_task(&fixture.connection(), &id)
+        .unwrap()
+        .remove(0);
+    assert!(approval.standing_allowed && approval.preview.contains("echo"));
+    // Allow for this agent: a standing grant bound to the server's tool set.
+    fixture.approve(&task, "allow-standing");
+    let task = fixture.run(&id);
+    // The second echo ran under the grant; `inject` is a different tool and asks.
+    assert_eq!(task.status, TaskStatus::WaitingApproval);
+    let grants = store::grants(&fixture.connection(), false).unwrap();
+    assert_eq!(grants.len(), 1);
+    assert!(grants[0].scope["toolsDigest"].is_string());
+    fixture.approve(&task, "allow-once");
+    let task = fixture.run(&id);
+    assert_eq!(
+        task.status,
+        TaskStatus::Completed,
+        "{:?}",
+        task.status_reason
+    );
+    let actions = store::actions(&fixture.connection(), &id).unwrap();
+    assert_eq!(
+        actions
+            .iter()
+            .filter(|action| action.status == "succeeded")
+            .count(),
+        3
+    );
+    let injected = actions.iter().find(|action| action.tool == inject).unwrap();
+    assert!(
+        injected.result.as_ref().unwrap()["result"]["note"]
+            .as_str()
+            .unwrap()
+            .contains("untrusted")
+    );
+    // The injected text did not become authority: no new grants appeared.
+    assert_eq!(
+        store::grants(&fixture.connection(), false).unwrap().len(),
+        1
+    );
+
+    // A changed tool set (new digest) no longer matches the standing grant.
+    let connection = fixture.connection();
+    let context = super::policy::DecisionContext {
+        profile: &profile,
+        assistant_id: "agent-1",
+        project_id: None,
+        grants: &store::grants(&connection, false).unwrap(),
+        scope: json!({ "toolsDigest": "sha256:changed", "server": plugin_id }),
+        offered: true,
+    };
+    assert_eq!(
+        super::policy::decide(
+            super::policy::Risk::Plugin,
+            &format!("mcp:{plugin_id}:echo"),
+            &context
+        ),
+        super::policy::Decision::Ask { standing: true }
+    );
+
+    // Turning the server off removes its tools from later tasks.
+    mcp::set_enabled(&connection, &plugin_id, false).unwrap();
+    let second = fixture.start("Echo again.", false);
+    let task = fixture.run(&second);
+    assert_eq!(task.status, TaskStatus::Completed);
+    let blocked = store::actions(&fixture.connection(), &second)
+        .unwrap()
+        .remove(0);
+    assert_eq!(blocked.result.unwrap()["error"]["code"], "TOOL_NOT_ENABLED");
+    mcp::disconnect(&plugin_id);
 }

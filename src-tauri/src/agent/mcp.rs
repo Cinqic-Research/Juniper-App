@@ -1487,4 +1487,153 @@ mod tests {
         b[0].description = "changed".into();
         assert_ne!(digest_tools(&a), digest_tools(&b));
     }
+    fn fixture() -> String {
+        format!(
+            "{}/tests/fixtures/mcp_fixture_server.py",
+            env!("CARGO_MANIFEST_DIR")
+        )
+    }
+
+    fn database() -> std::path::PathBuf {
+        let path = std::env::temp_dir().join(format!("juniper-mcp-{}.db", uuid::Uuid::new_v4()));
+        crate::storage::initialize(&path).unwrap();
+        path
+    }
+
+    fn stdio(era: &str) -> PluginConfig {
+        PluginConfig {
+            name: format!("Fixture {era}"),
+            kind: "mcp-stdio".into(),
+            command: Some("/usr/bin/python3".into()),
+            args: vec![fixture(), "--era".into(), era.into()],
+            env: vec![],
+            url: None,
+            credential_ref: None,
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn modern_and_legacy_stdio_servers_connect_list_paginated_tools_and_drop_invalid_ones() {
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        for (era, version) in [("modern", MODERN_VERSION), ("legacy", "2025-11-25")] {
+            let path = database();
+            let plugin = register(&store::open(&path).unwrap(), stdio(era)).unwrap();
+            let tested = runtime
+                .block_on(test_connection(path.clone(), plugin.id.clone()))
+                .unwrap();
+            assert_eq!(
+                tested.state.status, "connected",
+                "{era}: {:?}",
+                tested.state.message
+            );
+            assert_eq!(tested.state.era.as_deref(), Some(era));
+            assert_eq!(tested.state.protocol_version.as_deref(), Some(version));
+            let names: Vec<&str> = tested
+                .state
+                .tools
+                .iter()
+                .map(|tool| tool.name.as_str())
+                .collect();
+            assert_eq!(
+                names,
+                vec!["echo", "slow", "inject"],
+                "both pages are listed"
+            );
+            assert_eq!(tested.state.rejected_tools.len(), 1);
+            assert!(tested.state.tools_digest.is_some());
+            // The description is carried as data; risk is never taken from annotations.
+            let spec = all_tools(&store::open(&path).unwrap()).unwrap();
+            assert!(spec.iter().all(|tool| tool.risk == Risk::Plugin));
+            disconnect(&plugin.id);
+            std::fs::remove_file(path).ok();
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn calls_are_cancelled_promptly_and_streamable_http_works_in_both_eras() {
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        let path = database();
+        let connection = store::open(&path).unwrap();
+        let plugin = register(&connection, stdio("modern")).unwrap();
+        runtime
+            .block_on(test_connection(path.clone(), plugin.id.clone()))
+            .unwrap();
+        let plugin = get(&connection, &plugin.id).unwrap();
+        let cancellation = crate::commands::Cancellation::default();
+        let cancel = cancellation.clone();
+        let started = std::time::Instant::now();
+        let outcome = runtime.block_on(async {
+            let connected = connect(&plugin, true).await.unwrap();
+            tokio::spawn(async move {
+                tokio::time::sleep(Duration::from_millis(500)).await;
+                cancel.cancel();
+            });
+            rpc(
+                &connected,
+                "tools/call",
+                json!({ "name": "slow", "arguments": {} }),
+                Some("slow"),
+                &cancellation,
+            )
+            .await
+        });
+        assert_eq!(outcome.unwrap_err().0, "REQUEST_CANCELLED");
+        assert!(started.elapsed() < Duration::from_secs(5));
+        disconnect(&plugin.id);
+
+        for era in ["modern", "legacy"] {
+            let port = std::net::TcpListener::bind("127.0.0.1:0")
+                .unwrap()
+                .local_addr()
+                .unwrap()
+                .port();
+            let mut child = std::process::Command::new("/usr/bin/python3")
+                .args([
+                    fixture(),
+                    "--era".into(),
+                    era.into(),
+                    "--http".into(),
+                    port.to_string(),
+                ])
+                .spawn()
+                .unwrap();
+            std::thread::sleep(Duration::from_millis(700));
+            let config = PluginConfig {
+                name: format!("HTTP {era}"),
+                kind: "mcp-http".into(),
+                command: None,
+                args: vec![],
+                env: vec![],
+                url: Some(format!("http://127.0.0.1:{port}/mcp")),
+                credential_ref: None,
+            };
+            let plugin = register(&connection, config).unwrap();
+            let tested = runtime
+                .block_on(test_connection(path.clone(), plugin.id.clone()))
+                .unwrap();
+            assert_eq!(
+                tested.state.status, "connected",
+                "{era}: {:?}",
+                tested.state.message
+            );
+            assert_eq!(tested.state.era.as_deref(), Some(era));
+            let plugin = get(&connection, &plugin.id).unwrap();
+            let echoed = runtime.block_on(async {
+                let connected = connect(&plugin, true).await.unwrap();
+                rpc(
+                    &connected,
+                    "tools/call",
+                    json!({ "name": "echo", "arguments": { "text": "hi" } }),
+                    Some("echo"),
+                    &crate::commands::Cancellation::default(),
+                )
+                .await
+            });
+            assert_eq!(echoed.unwrap()["content"][0]["text"], "echo: hi", "{era}");
+            let _ = child.kill();
+        }
+        std::fs::remove_file(path).ok();
+    }
 }
