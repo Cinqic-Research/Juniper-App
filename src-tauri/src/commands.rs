@@ -342,8 +342,12 @@ pub fn managed_models(app: AppHandle) -> Result<Vec<managed_models::ManagedModel
 }
 
 #[tauri::command]
-pub fn delete_managed_model(app: AppHandle, catalog_id: String) -> Result<(), String> {
-    managed_models::remove(&app, &catalog_id)
+pub fn delete_managed_model(
+    app: AppHandle,
+    catalog_id: String,
+    artifact_id: Option<String>,
+) -> Result<(), String> {
+    managed_models::remove(&app, &catalog_id, artifact_id.as_deref())
 }
 
 #[tauri::command]
@@ -351,11 +355,19 @@ pub async fn download_managed_model(
     app: AppHandle,
     state: State<'_, AppState>,
     catalog_id: String,
+    artifact_id: Option<String>,
     request_id: String,
 ) -> Result<(), String> {
     let cancellation = begin_cancellable_operation(state.inner(), &request_id)?;
-    let result =
-        managed_models::download(app, state.inner(), &catalog_id, &request_id, cancellation).await;
+    let result = managed_models::download(
+        app,
+        state.inner(),
+        &catalog_id,
+        artifact_id.as_deref(),
+        &request_id,
+        cancellation,
+    )
+    .await;
     state
         .cancellations
         .lock()
@@ -377,6 +389,7 @@ pub async fn import_managed_model(
     state: State<'_, AppState>,
     selection_id: String,
     catalog_id: String,
+    artifact_id: Option<String>,
     request_id: String,
 ) -> Result<(), String> {
     let path = state
@@ -391,6 +404,7 @@ pub async fn import_managed_model(
         app,
         state.inner(),
         &catalog_id,
+        artifact_id.as_deref(),
         &path,
         &request_id,
         cancellation,

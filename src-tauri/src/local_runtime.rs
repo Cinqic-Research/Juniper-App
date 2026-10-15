@@ -36,6 +36,13 @@ const HEALTH_INTERVAL: Duration = Duration::from_millis(250);
 const PROBE_TIMEOUT: Duration = Duration::from_secs(10);
 const WARM_UP_TIMEOUT: Duration = Duration::from_secs(300);
 const GENERIC_CACHE_RAM_MIB: &str = "1024";
+/// The context a generic model is served with: its own length, capped so
+/// the KV cache stays predictable on modest hardware.
+const GENERIC_CONTEXT_CAP: u64 = 16_384;
+
+fn generic_context(entry: &CatalogEntry) -> u32 {
+    entry.context_length.clamp(2_048, GENERIC_CONTEXT_CAP) as u32
+}
 const STDERR_TAIL_LINES: usize = 48;
 const STDERR_LINE_CHARS: usize = 400;
 
@@ -199,9 +206,20 @@ impl LocalRuntime {
             Some((_, artifact)) => (artifact.id, Launch::TokenIds),
             None => {
                 let entry = catalog::find(&catalog_id)?;
-                let artifact = entry.artifacts.first().cloned().ok_or_else(|| {
-                    "LOCAL_MODEL_NOT_READY: This catalog entry has no artifact.".to_owned()
-                })?;
+                // The model profile names the artifact the user installed;
+                // without one, the first installed artifact of the entry.
+                let artifact = match request.model.artifact_id.as_deref() {
+                    Some(id) => entry.artifacts.iter().find(|artifact| artifact.id == id).cloned().ok_or_else(|| {
+                        "LOCAL_MODEL_NOT_READY: This model's download is no longer in the catalog.".to_owned()
+                    })?,
+                    None => managed_models::path_for_catalog(app, &catalog_id, None)
+                        .map(|(_, artifact)| artifact)
+                        .or_else(|_| {
+                            entry.artifacts.first().cloned().ok_or_else(|| {
+                                "LOCAL_MODEL_NOT_READY: This catalog entry has no artifact.".to_owned()
+                            })
+                        })?,
+                };
                 let profile = qualified_profile(&artifact)?;
                 (
                     artifact.id.clone(),
@@ -436,10 +454,9 @@ fn text_policy(route: &Route) -> RequestPolicy {
             .map_or(GENERIC_IDLE_TIMEOUT, |profile| {
                 Duration::from_secs(profile.lifecycle.first_token_timeout_seconds)
             }),
-        context_window: route
-            .profile
-            .as_ref()
-            .map(|profile| profile.server.ctx_size),
+        // The served context is fixed at launch, so every prompt is measured
+        // against it before generation.
+        context_window: route.identity.context_size,
         backend: route.profile.clone().map_or(Backend::Generic, |profile| {
             Backend::GptOss(Box::new(profile))
         }),
@@ -496,7 +513,7 @@ async fn start<R: Runtime>(
     cancellation: &Cancellation,
     starting: &Mutex<Option<tokio::process::Child>>,
 ) -> Result<(tokio::process::Child, Route), String> {
-    let model_path = managed_models::path_for_catalog(app, &entry.id)?;
+    let (model_path, _) = managed_models::path_for_catalog(app, &entry.id, Some(&artifact.id))?;
     // This launcher serves text-mode chat; a Juniper 1 GGUF needs the token-ID backend (A-02).
     let mut model_file = std::fs::File::open(&model_path)
         .map_err(|_| "The managed model file is unavailable.".to_owned())?;
@@ -562,7 +579,12 @@ async fn start<R: Runtime>(
                 command.env("CUDA_VISIBLE_DEVICES", "0");
             }
         }
-        None => args.extend(["--cache-ram".into(), GENERIC_CACHE_RAM_MIB.into()]),
+        None => args.extend([
+            "--cache-ram".into(),
+            GENERIC_CACHE_RAM_MIB.into(),
+            "--ctx-size".into(),
+            generic_context(entry).to_string(),
+        ]),
     }
     let (child_pid, diagnostics) = spawn(command, &args, starting)?;
     #[cfg(target_os = "linux")]
@@ -591,7 +613,11 @@ async fn start<R: Runtime>(
             template_sha256: profile
                 .as_ref()
                 .map(|profile| profile.template.sha256.clone()),
-            context_size: profile.as_ref().map(|profile| profile.server.ctx_size),
+            context_size: Some(
+                profile
+                    .as_ref()
+                    .map_or_else(|| generic_context(entry), |profile| profile.server.ctx_size),
+            ),
             tokenizer_sha256: None,
             protocol: None,
         },

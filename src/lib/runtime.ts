@@ -223,6 +223,7 @@ export async function importNativeJuniper1Model(
 
 export async function downloadManagedModel(
   catalogId: string,
+  artifactId: string,
   onProgress: (progress: ModelPullProgress) => void,
   signal: AbortSignal,
 ): Promise<void> {
@@ -233,7 +234,7 @@ export async function downloadManagedModel(
   const cancel = () => void cancelManagedModel(requestId)
   signal.addEventListener('abort', cancel, { once: true })
   try {
-    await invoke('download_managed_model', { catalogId, requestId })
+    await invoke('download_managed_model', { catalogId, artifactId, requestId })
     if (signal.aborted) throw abortError()
   } finally {
     signal.removeEventListener('abort', cancel)
@@ -252,6 +253,7 @@ export async function cancelManagedModel(requestId: string): Promise<void> {
 export async function importManagedModel(
   selectionId: string,
   catalogId: string,
+  artifactId: string,
   onProgress: (progress: ModelPullProgress) => void,
   signal: AbortSignal,
 ): Promise<void> {
@@ -262,7 +264,7 @@ export async function importManagedModel(
   const cancel = () => void cancelManagedModel(requestId)
   signal.addEventListener('abort', cancel, { once: true })
   try {
-    await invoke('import_managed_model', { selectionId, catalogId, requestId })
+    await invoke('import_managed_model', { selectionId, catalogId, artifactId, requestId })
     if (signal.aborted) throw abortError()
   } finally {
     signal.removeEventListener('abort', cancel)
@@ -281,9 +283,10 @@ export async function unloadLocalRuntime(): Promise<boolean> {
   return invoke<boolean>('unload_local_runtime')
 }
 
-export async function deleteManagedModel(catalogId: string): Promise<void> {
+/** Removes one downloaded artifact, or every artifact of the model. */
+export async function deleteManagedModel(catalogId: string, artifactId?: string): Promise<void> {
   if (!runningInTauri) throw new Error('Model management requires the Juniper native runtime.')
-  await invoke('delete_managed_model', { catalogId })
+  await invoke('delete_managed_model', { catalogId, artifactId: artifactId ?? null })
 }
 
 export async function deleteProviderModel(

@@ -73,15 +73,41 @@ describe('model catalog', () => {
     expect(artifact.maturity).toBe('experimental')
     expect(artifact.qualification).toBe('unknown')
   })
-  it('ships four under-1B downloads with verified HTTPS variants', () => {
-    const downloads = MODEL_CATALOG.models.filter((model) => !isImportOnly(model.artifacts[0]!))
-    expect(downloads).toHaveLength(4)
-    expect(downloads.every((model) => model.parameterCount < 1_000_000_000)).toBe(true)
-    for (const model of MODEL_CATALOG.models) {
-      expect(model.variants[0]?.sha256).toMatch(/^[a-f0-9]{64}$/)
-      expect(model.license).toBe('Apache-2.0')
+  it('pins every download to an exact revision, size, and SHA-256 with stated license terms', () => {
+    const downloads = MODEL_CATALOG.models.flatMap((model) =>
+      model.artifacts
+        .filter((artifact) => !isImportOnly(artifact))
+        .map((artifact) => ({ model, artifact })),
+    )
+    expect(downloads.length).toBeGreaterThan(0)
+    for (const { model, artifact } of downloads) {
+      for (const file of artifact.files) {
+        expect(file.sha256).toMatch(/^[a-f0-9]{64}$/)
+        expect(file.url).toBe(
+          `${model.sourceRepository}/resolve/${artifact.sourceRevision}/${file.path}`,
+        )
+      }
     }
-    for (const model of downloads) expect(model.variants[0]?.url).toMatch(/^https:\/\//)
+    for (const model of MODEL_CATALOG.models) {
+      expect(model.license.length).toBeGreaterThan(0)
+      expect(model.licenseUrl).toMatch(/^https:\/\//)
+      if (model.licenseAcceptance) expect(model.license).not.toMatch(/^(Apache-2\.0|MIT)$/)
+    }
+  })
+
+  it('labels popularity with its dated source and keeps quantizations under one release', () => {
+    const ranked = MODEL_CATALOG.models.filter((model) => model.popularity)
+    const ranks = new Set(ranked.map((model) => model.popularity!.eligibleRank))
+    for (let rank = 1; rank <= 10; rank += 1) expect(ranks.has(rank)).toBe(true)
+    for (const model of ranked) {
+      expect(model.popularity!.source).toBe('huggingface-downloads-30d')
+      expect(model.popularity!.snapshot).toMatch(/^2026-10-15/)
+    }
+    // One entry per release: alternative quantizations are artifacts, not models.
+    const releases = MODEL_CATALOG.models.map(
+      (model) => model.originalModel ?? model.sourceRepository,
+    )
+    expect(new Set(releases).size).toBe(releases.length)
   })
 
   it('ships gpt-oss-20b as an import-only artifact with qualified capabilities', () => {
@@ -120,18 +146,25 @@ describe('model catalog', () => {
       minimumAppVersion: MODEL_CATALOG.minimumAppVersion,
       // The v1 format had no way to express an import-only artifact.
       models: MODEL_CATALOG.models
-        .filter((model) => !isImportOnly(model.artifacts[0]!))
+        .filter(
+          (model) =>
+            !isImportOnly(model.artifacts[0]!) &&
+            model.artifacts.some((artifact) => artifact.files.length === 1),
+        )
         .map(({ artifacts, ...model }) => ({
           ...model,
-          variants: artifacts.map((artifact) => ({
-            id: artifact.id,
-            fileName: artifact.files[0]!.path,
-            quantization: artifact.quantization,
-            sizeBytes: artifact.sizeBytes,
-            sha256: artifact.sha256,
-            url: artifact.sourceUrl,
-            sourceRevision: artifact.sourceRevision,
-          })),
+          // v1 could describe only single-file downloads.
+          variants: artifacts
+            .filter((artifact) => artifact.files.length === 1)
+            .map((artifact) => ({
+              id: artifact.id,
+              fileName: artifact.files[0]!.path,
+              quantization: artifact.quantization,
+              sizeBytes: artifact.sizeBytes,
+              sha256: artifact.files[0]!.sha256,
+              url: artifact.sourceUrl ?? artifact.files[0]!.url,
+              sourceRevision: artifact.sourceRevision,
+            })),
         })),
     }
     const parsed = parseCatalog(legacy)

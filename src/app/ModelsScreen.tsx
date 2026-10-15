@@ -30,6 +30,7 @@ import {
   isImportOnly,
   recommendModels,
   runtimeOptionsForModel,
+  type CatalogArtifact,
   type CatalogModel,
   type DeviceCapabilities,
   type ModelCatalog,
@@ -48,7 +49,42 @@ import { useDialogs } from './overlays'
 import { EmptyState, LocationBadge, PageHeader, Segmented } from './ui'
 
 type Update = (change: (current: AppData) => AppData) => void
-type View = 'recommended' | 'all' | 'installed'
+type View = 'recommended' | 'popular' | 'all' | 'installed'
+
+interface TransferProgress {
+  completed: number
+  total: number
+  status: string
+  /** When the current transfer started and how much was already on disk, for speed. */
+  startedAt: number
+  startedBytes: number
+}
+
+const LICENSE_ACCEPTED_KEY = 'juniper.licenseAccepted.'
+
+function licenseAccepted(entry: CatalogModel): boolean {
+  try {
+    return localStorage.getItem(LICENSE_ACCEPTED_KEY + entry.id) === entry.license
+  } catch {
+    return false
+  }
+}
+
+function rememberLicense(entry: CatalogModel) {
+  try {
+    localStorage.setItem(LICENSE_ACCEPTED_KEY + entry.id, entry.license)
+  } catch {
+    // Acceptance is asked again next time.
+  }
+}
+
+const OPEN_LICENSES = ['Apache-2.0', 'MIT']
+
+function sizeBand(bytes: number): 'small' | 'medium' | 'large' {
+  if (bytes <= 2_000_000_000) return 'small'
+  if (bytes <= 5_000_000_000) return 'medium'
+  return 'large'
+}
 
 function memoryLabel(device: DeviceCapabilities | null): string {
   if (!device?.availableMemoryBytes && !device?.totalMemoryBytes) return 'Unknown'
@@ -121,7 +157,12 @@ export function ModelsScreen({
   const [view, setView] = useState<View>('recommended')
   const [query, setQuery] = useState('')
   const [activeDownload, setActiveDownload] = useState<string | null>(null)
-  const [progress, setProgress] = useState<{ completed: number; total: number } | null>(null)
+  const [progress, setProgress] = useState<TransferProgress | null>(null)
+  const [choice, setChoice] = useState<Record<string, string>>({})
+  const [family, setFamily] = useState('')
+  const [purpose, setPurpose] = useState('')
+  const [size, setSize] = useState('')
+  const [licenseFilter, setLicenseFilter] = useState('')
   const [message, setMessage] = useState<string | null>(null)
   const [runtimeStatus, setRuntimeStatus] = useState<LocalRuntimeStatus>({ state: 'idle' })
   const [nativeModels, setNativeModels] = useState<NativeJuniper1Model[]>([])
@@ -165,9 +206,37 @@ export function ModelsScreen({
       ),
     [installed],
   )
+  const readyArtifacts = useMemo(
+    () =>
+      new Set(
+        installed
+          .filter((model) => model.verified && model.state === 'ready')
+          .flatMap((model) => (model.artifactId ? [model.artifactId] : [])),
+      ),
+    [installed],
+  )
+  const families = useMemo(
+    () => [...new Set(catalog.models.map((model) => model.family))].sort(),
+    [catalog],
+  )
+  const artifactFor = useCallback(
+    (recommendation: ModelRecommendation): CatalogArtifact =>
+      recommendation.model.artifacts.find(
+        (artifact) => artifact.id === choice[recommendation.model.id],
+      ) ??
+      recommendation.model.artifacts.find((artifact) => readyArtifacts.has(artifact.id)) ??
+      recommendation.artifact,
+    [choice, readyArtifacts],
+  )
   const visible = useMemo(() => {
     const normalized = query.trim().toLowerCase()
-    return recommendations.filter((item) => {
+    const filtered = recommendations.filter((item) => {
+      if (family && item.model.family !== family) return false
+      if (purpose && !item.model.tags.includes(purpose)) return false
+      if (size && sizeBand(item.artifact.sizeBytes) !== size) return false
+      if (licenseFilter === 'open' && !OPEN_LICENSES.includes(item.model.license)) return false
+      if (licenseFilter === 'terms' && OPEN_LICENSES.includes(item.model.license)) return false
+      if (view === 'popular' && !item.model.popularity) return false
       const matches =
         !normalized ||
         [
@@ -181,27 +250,34 @@ export function ModelsScreen({
       if (view === 'recommended') return item.fit !== 'not-recommended' || item.storageSafe
       return true
     })
-  }, [managedIds, query, recommendations, view])
+    return view === 'popular'
+      ? [...filtered].sort(
+          (left, right) =>
+            (left.model.popularity?.eligibleRank ?? 999) -
+            (right.model.popularity?.eligibleRank ?? 999),
+        )
+      : filtered
+  }, [family, licenseFilter, managedIds, purpose, query, recommendations, size, view])
 
   const externalModels = data.models.filter((model) => isExternalModel(data, model))
 
-  function profileFor(entry: CatalogModel): ModelProfile {
+  function profileFor(entry: CatalogModel, artifact: CatalogArtifact): ModelProfile {
     const provider = data.providers.find((item) => item.kind === 'juniper-local') ?? defaultProvider
-    const qualified = entry.artifacts[0]?.capabilities
+    const qualified = artifact.capabilities
     return modelProfileFromDiscovery(provider, entry.id, {
       catalogId: entry.id,
-      managedVariantId: entry.artifacts[0]?.id,
-      artifactId: entry.artifacts[0]?.id,
-      runtimeId: entry.artifacts[0]?.runtimeId,
+      managedVariantId: artifact.id,
+      artifactId: artifact.id,
+      runtimeId: artifact.runtimeId,
       displayName: entry.displayName,
       description: entry.description,
       sourceReference: entry.sourceRepository,
       family: entry.family,
       architecture: entry.architecture,
       parameterSize: parameterLabel(entry.parameterCount),
-      fileSizeBytes: entry.artifacts[0]?.sizeBytes,
-      quantization: entry.artifacts[0]?.quantization,
-      format: entry.artifacts[0]?.format,
+      fileSizeBytes: artifact.sizeBytes,
+      quantization: artifact.quantization,
+      format: artifact.format,
       license: entry.license,
       template: entry.chatTemplate,
       contextLength: entry.contextLength,
@@ -218,8 +294,12 @@ export function ModelsScreen({
   }
 
   /** Records the verified download as a model profile; optionally makes it the default. */
-  function registerManagedModel(entry: CatalogModel, makeDefault: boolean) {
-    const profile = profileFor(entry)
+  function registerManagedModel(
+    entry: CatalogModel,
+    artifact: CatalogArtifact,
+    makeDefault: boolean,
+  ) {
+    const profile = profileFor(entry, artifact)
     update((current) => {
       const provider = current.providers.find((item) => item.kind === 'juniper-local')
       const providers = provider ? current.providers : [...current.providers, defaultProvider]
@@ -233,14 +313,36 @@ export function ModelsScreen({
     setMessage(
       makeDefault
         ? `${entry.displayName} is now ${defaultAssistant.name}’s default model.`
-        : `${entry.displayName} is ${entry.artifacts[0] && isImportOnly(entry.artifacts[0]) ? 'imported' : 'downloaded'} and verified. The local engine loads it on first use.`,
+        : `${entry.displayName} (${artifact.quantization ?? artifact.id}) is ${isImportOnly(artifact) ? 'imported' : 'downloaded'} and verified. The local engine loads it on first use.`,
     )
   }
 
-  async function download(entry: CatalogModel) {
+  const onProgress = (event: { completedBytes?: number; totalBytes?: number; status: string }) =>
+    setProgress((current) => {
+      const completed = event.completedBytes ?? 0
+      const restart = !current || current.status !== 'downloading'
+      return {
+        completed,
+        total: event.totalBytes ?? 0,
+        status: event.status,
+        startedAt: restart ? Date.now() : current.startedAt,
+        startedBytes: restart ? completed : current.startedBytes,
+      }
+    })
+
+  async function download(entry: CatalogModel, artifact: CatalogArtifact) {
     if (!runningInTauri) {
       setMessage('Model downloads are available in the Juniper desktop or Android app.')
       return
+    }
+    if (entry.licenseAcceptance === 'required' && !licenseAccepted(entry)) {
+      const accepted = await dialogs.confirm({
+        title: `Accept the ${entry.license}?`,
+        message: `${entry.displayName} is distributed under the ${entry.license} (${entry.licenseUrl}). Its developer requires you to accept these terms before use. Juniper’s own Apache-2.0 license does not apply to the model.`,
+        confirmLabel: 'Accept and download',
+      })
+      if (!accepted) return
+      rememberLicense(entry)
     }
     controller.current?.abort()
     const next = new AbortController()
@@ -249,18 +351,13 @@ export function ModelsScreen({
     setProgress(null)
     setMessage(null)
     try {
-      await downloadManagedModel(
-        entry.id,
-        (event) =>
-          setProgress({ completed: event.completedBytes ?? 0, total: event.totalBytes ?? 0 }),
-        next.signal,
-      )
+      await downloadManagedModel(entry.id, artifact.id, onProgress, next.signal)
       setInstalled(await getManagedModels())
-      registerManagedModel(entry, false)
+      registerManagedModel(entry, artifact, false)
     } catch (error) {
       setMessage(
         next.signal.aborted
-          ? 'Download paused. Resume when you are ready.'
+          ? 'Download paused. It resumes from where it stopped.'
           : error instanceof Error
             ? error.message
             : 'Download failed.',
@@ -273,7 +370,7 @@ export function ModelsScreen({
   }
 
   /** Installs an import-only model from a file the user already has. */
-  async function importFile(entry: CatalogModel) {
+  async function importFile(entry: CatalogModel, artifact: CatalogArtifact) {
     if (!runningInTauri) {
       setMessage('Model import is available in the Juniper desktop app.')
       return
@@ -293,15 +390,9 @@ export function ModelsScreen({
     setProgress(null)
     setMessage(null)
     try {
-      await importManagedModel(
-        selection.id,
-        entry.id,
-        (event) =>
-          setProgress({ completed: event.completedBytes ?? 0, total: event.totalBytes ?? 0 }),
-        next.signal,
-      )
+      await importManagedModel(selection.id, entry.id, artifact.id, onProgress, next.signal)
       setInstalled(await getManagedModels())
-      registerManagedModel(entry, false)
+      registerManagedModel(entry, artifact, false)
     } catch (error) {
       setMessage(
         next.signal.aborted
@@ -399,7 +490,7 @@ export function ModelsScreen({
     const confirmed = await dialogs.confirm({
       title: `Remove ${entry.displayName}?`,
       message:
-        'The model file is deleted from this device. Chats that use it will need another model.',
+        'Every downloaded file of this model is deleted from this device. Chats that use it will need another model.',
       confirmLabel: 'Remove model',
       danger: true,
     })
@@ -445,10 +536,57 @@ export function ModelsScreen({
           onChange={setView}
           options={[
             { value: 'recommended', label: 'Recommended' },
+            { value: 'popular', label: 'Popular' },
             { value: 'all', label: 'All' },
             { value: 'installed', label: 'Installed' },
           ]}
         />
+        <div className="models-filters">
+          <select
+            aria-label="Family"
+            value={family}
+            onChange={(event) => setFamily(event.target.value)}
+          >
+            <option value="">All families</option>
+            {families.map((item) => (
+              <option key={item} value={item}>
+                {item}
+              </option>
+            ))}
+          </select>
+          <select
+            aria-label="Purpose"
+            value={purpose}
+            onChange={(event) => setPurpose(event.target.value)}
+          >
+            <option value="">Any purpose</option>
+            <option value="general">General chat</option>
+            <option value="reasoning">Reasoning</option>
+            <option value="coding">Coding</option>
+            <option value="writing">Writing</option>
+            <option value="tools">Tools and agents</option>
+            <option value="small">Small and fast</option>
+          </select>
+          <select
+            aria-label="Download size"
+            value={size}
+            onChange={(event) => setSize(event.target.value)}
+          >
+            <option value="">Any size</option>
+            <option value="small">Up to 2 GB</option>
+            <option value="medium">2–5 GB</option>
+            <option value="large">Over 5 GB</option>
+          </select>
+          <select
+            aria-label="License"
+            value={licenseFilter}
+            onChange={(event) => setLicenseFilter(event.target.value)}
+          >
+            <option value="">Any license</option>
+            <option value="open">Apache-2.0 or MIT</option>
+            <option value="terms">Model-specific terms</option>
+          </select>
+        </div>
         <label className="search-field">
           <Icon name="search" size={18} />
           <input
@@ -471,26 +609,35 @@ export function ModelsScreen({
         {visible.map((recommendation) => {
           const entry = recommendation.model
           const profile = data.models.find((model) => model.catalogId === entry.id)
+          const artifact = artifactFor(recommendation)
+          const readyArtifact = entry.artifacts.find((item) => readyArtifacts.has(item.id))
           return (
             <CatalogModelCard
               key={entry.id}
               recommendation={recommendation}
+              artifact={artifact}
+              readyArtifactIds={readyArtifacts}
+              onSelectArtifact={(id) => setChoice((current) => ({ ...current, [entry.id]: id }))}
               installed={installedIds.has(entry.id)}
-              managedState={installed.find((model) => model.catalogId === entry.id)?.state}
+              managedState={installed.find((model) => model.artifactId === artifact.id)?.state}
               downloading={activeDownload === entry.id}
               progress={activeDownload === entry.id ? progress : null}
               isDefault={Boolean(profile && profile.id === defaultModelId)}
               defaultAssistantName={defaultAssistant.name}
               runtimeOptions={runtimeOptionsForModel(entry, device?.runtimes)}
               resident={
-                runtimeStatus.artifactId === entry.artifacts[0]?.id ? runtimeStatus.state : null
+                entry.artifacts.some((item) => item.id === runtimeStatus.artifactId)
+                  ? runtimeStatus.state
+                  : null
               }
               onDownload={() =>
-                void (isImportOnly(recommendation.artifact) ? importFile(entry) : download(entry))
+                void (isImportOnly(artifact)
+                  ? importFile(entry, artifact)
+                  : download(entry, artifact))
               }
               onUnload={() => void unload()}
               onPause={() => controller.current?.abort()}
-              onMakeDefault={() => registerManagedModel(entry, true)}
+              onMakeDefault={() => registerManagedModel(entry, readyArtifact ?? artifact, true)}
               onRemove={() => void remove(entry)}
             />
           )
@@ -735,8 +882,26 @@ export function ModelsScreen({
   )
 }
 
+function etaLabel(progress: TransferProgress): string | null {
+  const seconds = (Date.now() - progress.startedAt) / 1000
+  const moved = progress.completed - progress.startedBytes
+  if (progress.status !== 'downloading' || seconds < 2 || moved <= 0) return null
+  const rate = moved / seconds
+  const remaining = Math.max(0, progress.total - progress.completed) / rate
+  const time =
+    remaining >= 3600
+      ? `${Math.floor(remaining / 3600)} h ${Math.round((remaining % 3600) / 60)} min`
+      : remaining >= 60
+        ? `${Math.round(remaining / 60)} min`
+        : `${Math.round(remaining)} s`
+  return `${formatBytes(rate)}/s · about ${time} left`
+}
+
 function CatalogModelCard({
   recommendation,
+  artifact,
+  readyArtifactIds,
+  onSelectArtifact,
   installed,
   managedState,
   downloading,
@@ -752,10 +917,13 @@ function CatalogModelCard({
   onRemove,
 }: {
   recommendation: ModelRecommendation
+  artifact: CatalogArtifact
+  readyArtifactIds: Set<string>
+  onSelectArtifact: (artifactId: string) => void
   installed: boolean
   managedState?: ManagedModel['state']
   downloading: boolean
-  progress: { completed: number; total: number } | null
+  progress: TransferProgress | null
   isDefault: boolean
   defaultAssistantName: string
   runtimeOptions: ReturnType<typeof runtimeOptionsForModel>
@@ -766,8 +934,10 @@ function CatalogModelCard({
   onMakeDefault: () => void
   onRemove: () => void
 }) {
-  const { model, artifact } = recommendation
+  const { model } = recommendation
   const percent = progress?.total ? Math.round((progress.completed / progress.total) * 100) : 0
+  const eta = progress ? etaLabel(progress) : null
+  const artifactInstalled = readyArtifactIds.has(artifact.id)
   const usableEngine = runtimeOptions.find((option) => option.selectable)
   const engineUnavailable = runtimeOptions.length > 0 && !usableEngine
   const importOnly = isImportOnly(artifact)
@@ -781,6 +951,37 @@ function CatalogModelCard({
       <p className="model-card-facts">
         {formatBytes(artifact.sizeBytes)} · Good for {model.useCases.slice(0, 3).join(', ')}
       </p>
+      <p className="muted small">
+        {model.organization} · {parameterLabel(model.parameterCount)} parameters · {model.license}
+        {model.licenseAcceptance === 'required' ? ' (accept before download)' : ''} · needs about{' '}
+        {formatBytes(model.minimumRecommendedRamBytes)}–{formatBytes(model.recommendedRamBytes)}{' '}
+        memory (estimate)
+      </p>
+      {model.popularity && (
+        <p className="muted small">
+          Popular on Hugging Face: #{model.popularity.eligibleRank} by 30-day downloads among chat
+          models (snapshot {model.popularity.snapshot.slice(0, 10)}). Popularity is not a quality
+          rating.
+        </p>
+      )}
+      {model.artifacts.length > 1 && (
+        <label className="artifact-picker">
+          <span className="label">Version</span>
+          <select
+            value={artifact.id}
+            disabled={downloading}
+            onChange={(event) => onSelectArtifact(event.target.value)}
+          >
+            {model.artifacts.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.quantization ?? item.id} · {formatBytes(item.sizeBytes)}
+                {item.files.length > 1 ? ` · ${item.files.length} files` : ''}
+                {readyArtifactIds.has(item.id) ? ' · installed' : ''}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
 
       {!recommendation.storageSafe && (
         <p className="warning-line">
@@ -823,15 +1024,24 @@ function CatalogModelCard({
       {downloading && (
         <div className="progress-block" role="status">
           <div>
-            <span>{importOnly ? 'Verifying the file' : 'Downloading and verifying'}</span>
+            <span>
+              {importOnly
+                ? 'Verifying the file'
+                : progress?.status === 'queued'
+                  ? 'Waiting for another download to finish'
+                  : progress?.status === 'verifying'
+                    ? 'Checking the file’s SHA-256'
+                    : 'Downloading'}
+            </span>
             <strong>{percent}%</strong>
           </div>
           <progress value={percent} max="100" aria-label={`${model.displayName} download`} />
+          {eta && <small className="muted">{eta}</small>}
         </div>
       )}
 
       <div className="model-card-actions">
-        {installed ? (
+        {installed && artifactInstalled ? (
           <>
             {isDefault ? (
               <span className="chip">Default for {defaultAssistantName}</span>

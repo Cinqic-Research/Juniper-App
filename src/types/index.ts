@@ -467,6 +467,9 @@ export interface ManagedModel {
   sha256: string
   verified: boolean
   state: 'ready' | 'partial' | 'corrupt'
+  /** Bytes already on disk for a partial download. */
+  completedBytes?: number
+  fileCount?: number
 }
 
 export interface NormalizedToolCall {

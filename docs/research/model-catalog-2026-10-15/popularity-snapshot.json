@@ -1,0 +1,2113 @@
+{
+  "snapshotUtc": "2026-10-15T05:53:53Z",
+  "snapshotEastern": "2026-10-15 01:53:53 AM EDT",
+  "queryUrl": "https://huggingface.co/api/models?pipeline_tag=text-generation&sort=downloads&direction=-1&limit=300&full=false&expand[]=downloads&expand[]=tags&expand[]=cardData&expand[]=gated&expand[]=sha&expand[]=likes",
+  "source": "Hugging Face Hub public API, unauthenticated",
+  "downloadsSemantics": "HF \"downloads\" = request-based count over the trailing 30 days (https://huggingface.co/docs/hub/models-download-stats); not users, not quality",
+  "evaluationCutoffListingRank": 110,
+  "eligibilityRules": [
+    "1 instruction/chat tuned (base/pretrained, draft, embedding, reward, classifier, test models excluded)",
+    "2 declared license in card metadata AND license text resolvable (repo license file, cardData.license_link, standard SPDX apache-2.0/mit text, or licensor terms URL in README for Gemma)",
+    "3 name-matched GGUF repo from publisher or ggml-org/Qwen/unsloth/bartowski/lmstudio-community/ibm-granite/LiquidAI/mistralai/google/microsoft/nvidia/openbmb",
+    "4 immutable commit sha for upstream and GGUF repo, and lfs.oid sha256 for every .gguf file in the chosen GGUF repo tree"
+  ],
+  "ranked": [
+    {
+      "listingRank": 1,
+      "upstreamId": "Qwen/Qwen3-0.6B",
+      "downloads": 30452693,
+      "license": "apache-2.0",
+      "licenseUrl": "https://huggingface.co/Qwen/Qwen3-0.6B/blob/c1899de289a04d12100db370d81485cdf75e47ca/LICENSE",
+      "gated": false,
+      "revision": "c1899de289a04d12100db370d81485cdf75e47ca",
+      "paramsTotal": 751632384,
+      "modelType": "qwen3",
+      "includedArtifactRepo": "Qwen/Qwen3-0.6B-GGUF",
+      "consumerFeasible": true,
+      "chatTemplateNote": null,
+      "mirrorsInSnapshot": [
+        {
+          "id": "Qwen/Qwen3-0.6B-GGUF",
+          "downloads": 317617,
+          "rank": 243,
+          "why": "base_model:quantized tag"
+        }
+      ],
+      "mirrorDownloadsInSnapshot": 317617,
+      "ggufMirrorDownloadsTop100": 853934,
+      "eligibleRank": 1
+    },
+    {
+      "listingRank": 3,
+      "upstreamId": "Qwen/Qwen3-4B",
+      "downloads": 12585505,
+      "license": "apache-2.0",
+      "licenseUrl": "https://huggingface.co/Qwen/Qwen3-4B/blob/1cfa9a7208912126459214e8b04321603b3df60c/LICENSE",
+      "gated": false,
+      "revision": "1cfa9a7208912126459214e8b04321603b3df60c",
+      "paramsTotal": 4022468096,
+      "modelType": "qwen3",
+      "includedArtifactRepo": "Qwen/Qwen3-4B-GGUF",
+      "consumerFeasible": true,
+      "chatTemplateNote": null,
+      "mirrorsInSnapshot": [
+        {
+          "id": "Qwen/Qwen3-4B-GGUF",
+          "downloads": 539429,
+          "rank": 151,
+          "why": "base_model:quantized tag"
+        },
+        {
+          "id": "unsloth/Qwen3-4B-GGUF",
+          "downloads": 491453,
+          "rank": 167,
+          "why": "base_model:quantized tag"
+        },
+        {
+          "id": "bartowski/Qwen_Qwen3-4B-GGUF",
+          "downloads": 243514,
+          "rank": 294,
+          "why": "base_model:quantized tag"
+        }
+      ],
+      "mirrorDownloadsInSnapshot": 1274396,
+      "ggufMirrorDownloadsTop100": 1816394,
+      "eligibleRank": 2
+    },
+    {
+      "listingRank": 4,
+      "upstreamId": "Qwen/Qwen3-8B",
+      "downloads": 9739109,
+      "license": "apache-2.0",
+      "licenseUrl": "https://huggingface.co/Qwen/Qwen3-8B/blob/b968826d9c46dd6066d109eabc6255188de91218/LICENSE",
+      "gated": false,
+      "revision": "b968826d9c46dd6066d109eabc6255188de91218",
+      "paramsTotal": 8190735360,
+      "modelType": "qwen3",
+      "includedArtifactRepo": "Qwen/Qwen3-8B-GGUF",
+      "consumerFeasible": true,
+      "chatTemplateNote": null,
+      "mirrorsInSnapshot": [
+        {
+          "id": "Qwen/Qwen3-8B-AWQ",
+          "downloads": 2193533,
+          "rank": 35,
+          "why": "base_model:quantized tag"
+        },
+        {
+          "id": "Qwen/Qwen3-8B-GGUF",
+          "downloads": 555234,
+          "rank": 142,
+          "why": "base_model:quantized tag"
+        },
+        {
+          "id": "Qwen/Qwen3-8B-FP8",
+          "downloads": 538561,
+          "rank": 152,
+          "why": "base_model:quantized tag"
+        }
+      ],
+      "mirrorDownloadsInSnapshot": 3287328,
+      "ggufMirrorDownloadsTop100": 990614,
+      "eligibleRank": 3
+    },
+    {
+      "listingRank": 5,
+      "upstreamId": "Qwen/Qwen2.5-7B-Instruct",
+      "downloads": 7357696,
+      "license": "apache-2.0",
+      "licenseUrl": "https://huggingface.co/Qwen/Qwen2.5-7B-Instruct/blob/a09a35458c702b33eeacc393d103063234e8bc28/LICENSE",
+      "gated": false,
+      "revision": "a09a35458c702b33eeacc393d103063234e8bc28",
+      "paramsTotal": 7615616512,
+      "modelType": "qwen2",
+      "includedArtifactRepo": "Qwen/Qwen2.5-7B-Instruct-GGUF",
+      "consumerFeasible": true,
+      "chatTemplateNote": null,
+      "mirrorsInSnapshot": [
+        {
+          "id": "Qwen/Qwen2.5-7B-Instruct-AWQ",
+          "downloads": 2330011,
+          "rank": 33,
+          "why": "base_model:quantized tag"
+        },
+        {
+          "id": "Qwen/Qwen2.5-7B-Instruct-GPTQ-Int4",
+          "downloads": 273672,
+          "rank": 269,
+          "why": "base_model:quantized tag"
+        }
+      ],
+      "mirrorDownloadsInSnapshot": 2603683,
+      "ggufMirrorDownloadsTop100": 636279,
+      "eligibleRank": 4
+    },
+    {
+      "listingRank": 6,
+      "upstreamId": "Qwen/Qwen3-14B",
+      "downloads": 6913178,
+      "license": "apache-2.0",
+      "licenseUrl": "https://huggingface.co/Qwen/Qwen3-14B/blob/40c069824f4251a91eefaf281ebe4c544efd3e18/LICENSE",
+      "gated": false,
+      "revision": "40c069824f4251a91eefaf281ebe4c544efd3e18",
+      "paramsTotal": 14768307200,
+      "modelType": "qwen3",
+      "includedArtifactRepo": "Qwen/Qwen3-14B-GGUF",
+      "consumerFeasible": true,
+      "chatTemplateNote": null,
+      "mirrorsInSnapshot": [
+        {
+          "id": "Qwen/Qwen3-14B-AWQ",
+          "downloads": 2894022,
+          "rank": 29,
+          "why": "base_model:quantized tag"
+        },
+        {
+          "id": "nvidia/Qwen3-14B-NVFP4",
+          "downloads": 244039,
+          "rank": 293,
+          "why": "base_model:quantized tag"
+        }
+      ],
+      "mirrorDownloadsInSnapshot": 3138061,
+      "ggufMirrorDownloadsTop100": 635385,
+      "eligibleRank": 5
+    },
+    {
+      "listingRank": 7,
+      "upstreamId": "meta-llama/Llama-3.2-1B-Instruct",
+      "downloads": 6380305,
+      "license": "llama3.2",
+      "licenseUrl": "https://huggingface.co/meta-llama/Llama-3.2-1B-Instruct/blob/9213176726f574b556790deb65791e0c5aa438b6/LICENSE.txt",
+      "gated": "manual",
+      "revision": "9213176726f574b556790deb65791e0c5aa438b6",
+      "paramsTotal": 1235814400,
+      "modelType": "llama",
+      "includedArtifactRepo": "unsloth/Llama-3.2-1B-Instruct-GGUF",
+      "consumerFeasible": true,
+      "chatTemplateNote": null,
+      "mirrorsInSnapshot": [
+        {
+          "id": "unsloth/Llama-3.2-1B-Instruct",
+          "downloads": 745392,
+          "rank": 105,
+          "why": "quant/reupload by repo name (no quantized tag)"
+        }
+      ],
+      "mirrorDownloadsInSnapshot": 745392,
+      "ggufMirrorDownloadsTop100": 410330,
+      "eligibleRank": 6
+    },
+    {
+      "listingRank": 8,
+      "upstreamId": "Qwen/Qwen2.5-0.5B-Instruct",
+      "downloads": 6276110,
+      "license": "apache-2.0",
+      "licenseUrl": "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct/blob/7ae557604adf67be50417f59c2c2f167def9a775/LICENSE",
+      "gated": false,
+      "revision": "7ae557604adf67be50417f59c2c2f167def9a775",
+      "paramsTotal": 494032768,
+      "modelType": "qwen2",
+      "includedArtifactRepo": "Qwen/Qwen2.5-0.5B-Instruct-GGUF",
+      "consumerFeasible": true,
+      "chatTemplateNote": null,
+      "mirrorsInSnapshot": [
+        {
+          "id": "Qwen/Qwen2.5-0.5B-Instruct-GGUF",
+          "downloads": 269141,
+          "rank": 272,
+          "why": "base_model:quantized tag"
+        }
+      ],
+      "mirrorDownloadsInSnapshot": 269141,
+      "ggufMirrorDownloadsTop100": 429141,
+      "eligibleRank": 7
+    },
+    {
+      "listingRank": 9,
+      "upstreamId": "meta-llama/Llama-3.1-8B-Instruct",
+      "downloads": 6034692,
+      "license": "llama3.1",
+      "licenseUrl": "https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct/blob/0e9e39f249a16976918f6564b8830bc894c89659/LICENSE",
+      "gated": "manual",
+      "revision": "0e9e39f249a16976918f6564b8830bc894c89659",
+      "paramsTotal": 8030261248,
+      "modelType": "llama",
+      "includedArtifactRepo": "unsloth/Llama-3.1-8B-Instruct-GGUF",
+      "consumerFeasible": true,
+      "chatTemplateNote": null,
+      "mirrorsInSnapshot": [
+        {
+          "id": "bartowski/Meta-Llama-3.1-8B-Instruct-GGUF",
+          "downloads": 495304,
+          "rank": 164,
+          "why": "base_model:quantized tag"
+        }
+      ],
+      "mirrorDownloadsInSnapshot": 495304,
+      "ggufMirrorDownloadsTop100": 820570,
+      "eligibleRank": 8
+    },
+    {
+      "listingRank": 10,
+      "upstreamId": "Qwen/Qwen2.5-1.5B-Instruct",
+      "downloads": 6018399,
+      "license": "apache-2.0",
+      "licenseUrl": "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct/blob/989aa7980e4cf806f80c7fef2b1adb7bc71aa306/LICENSE",
+      "gated": false,
+      "revision": "989aa7980e4cf806f80c7fef2b1adb7bc71aa306",
+      "paramsTotal": 1543714304,
+      "modelType": "qwen2",
+      "includedArtifactRepo": "Qwen/Qwen2.5-1.5B-Instruct-GGUF",
+      "consumerFeasible": true,
+      "chatTemplateNote": null,
+      "mirrorsInSnapshot": [
+        {
+          "id": "Qwen/Qwen2.5-1.5B-Instruct-GGUF",
+          "downloads": 324334,
+          "rank": 241,
+          "why": "base_model:quantized tag"
+        }
+      ],
+      "mirrorDownloadsInSnapshot": 324334,
+      "ggufMirrorDownloadsTop100": 559898,
+      "eligibleRank": 9
+    },
+    {
+      "listingRank": 11,
+      "upstreamId": "openai/gpt-oss-20b",
+      "downloads": 5982456,
+      "license": "apache-2.0",
+      "licenseUrl": "https://huggingface.co/openai/gpt-oss-20b/blob/6cee5e81ee83917806bbde320786a8fb61efebee/LICENSE",
+      "gated": false,
+      "revision": "6cee5e81ee83917806bbde320786a8fb61efebee",
+      "paramsTotal": 20914757184,
+      "modelType": "gpt_oss",
+      "includedArtifactRepo": "ggml-org/gpt-oss-20b-GGUF",
+      "consumerFeasible": false,
+      "chatTemplateNote": null,
+      "mirrorsInSnapshot": [
+        {
+          "id": "unsloth/gpt-oss-20b-GGUF",
+          "downloads": 512904,
+          "rank": 158,
+          "why": "base_model:quantized tag"
+        },
+        {
+          "id": "FastFlowLM/GPT-OSS-20B-NPU2",
+          "downloads": 389994,
+          "rank": 204,
+          "why": "base_model:quantized tag"
+        }
+      ],
+      "mirrorDownloadsInSnapshot": 902898,
+      "ggufMirrorDownloadsTop100": 838759,
+      "eligibleRank": 10
+    },
+    {
+      "listingRank": 16,
+      "upstreamId": "deepseek-ai/DeepSeek-V3.2",
+      "downloads": 4844451,
+      "license": "mit",
+      "licenseUrl": "https://huggingface.co/deepseek-ai/DeepSeek-V3.2/blob/a7e62ac04ecb2c0a54d736dc46601c5606cf10a6/LICENSE",
+      "gated": false,
+      "revision": "a7e62ac04ecb2c0a54d736dc46601c5606cf10a6",
+      "paramsTotal": 685355329792,
+      "modelType": "deepseek_v32",
+      "includedArtifactRepo": "unsloth/DeepSeek-V3.2-GGUF",
+      "consumerFeasible": false,
+      "chatTemplateNote": "no HF chat template; uses custom encoding script",
+      "mirrorsInSnapshot": [],
+      "mirrorDownloadsInSnapshot": 0,
+      "ggufMirrorDownloadsTop100": 8000,
+      "eligibleRank": 11
+    },
+    {
+      "listingRank": 20,
+      "upstreamId": "deepseek-ai/DeepSeek-V4-Flash-0731",
+      "downloads": 4438887,
+      "license": "mit",
+      "licenseUrl": "https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash-0731/blob/7872f01b1d1fe23eabc4c98b48bffcef5a386062/LICENSE",
+      "gated": false,
+      "revision": "7872f01b1d1fe23eabc4c98b48bffcef5a386062",
+      "paramsTotal": 304180418494,
+      "modelType": "deepseek_v4",
+      "includedArtifactRepo": "ggml-org/DeepSeek-V4-Flash-0731-GGUF",
+      "consumerFeasible": false,
+      "chatTemplateNote": "no HF chat template; uses custom encoding script",
+      "mirrorsInSnapshot": [
+        {
+          "id": "huihui-ai/Huihui-DeepSeek-V4-Flash-0731-abliterated-GGUF",
+          "downloads": 343033,
+          "rank": 228,
+          "why": "base_model:quantized tag"
+        }
+      ],
+      "mirrorDownloadsInSnapshot": 343033,
+      "ggufMirrorDownloadsTop100": 525175,
+      "eligibleRank": 12
+    },
+    {
+      "listingRank": 21,
+      "upstreamId": "Qwen/Qwen2.5-3B-Instruct",
+      "downloads": 4299162,
+      "license": "other:qwen-research",
+      "licenseUrl": "https://huggingface.co/Qwen/Qwen2.5-3B-Instruct/blob/aa8e72537993ba99e69dfaafa59ed015b17504d1/LICENSE",
+      "gated": false,
+      "revision": "aa8e72537993ba99e69dfaafa59ed015b17504d1",
+      "paramsTotal": 3085938688,
+      "modelType": "qwen2",
+      "includedArtifactRepo": "Qwen/Qwen2.5-3B-Instruct-GGUF",
+      "consumerFeasible": true,
+      "chatTemplateNote": null,
+      "mirrorsInSnapshot": [
+        {
+          "id": "Qwen/Qwen2.5-3B-Instruct-AWQ",
+          "downloads": 497870,
+          "rank": 162,
+          "why": "base_model:quantized tag"
+        }
+      ],
+      "mirrorDownloadsInSnapshot": 497870,
+      "ggufMirrorDownloadsTop100": 326372,
+      "eligibleRank": 13
+    },
+    {
+      "listingRank": 22,
+      "upstreamId": "Qwen/Qwen3-1.7B",
+      "downloads": 4034338,
+      "license": "apache-2.0",
+      "licenseUrl": "https://huggingface.co/Qwen/Qwen3-1.7B/blob/70d244cc86ccca08cf5af4e1e306ecf908b1ad5e/LICENSE",
+      "gated": false,
+      "revision": "70d244cc86ccca08cf5af4e1e306ecf908b1ad5e",
+      "paramsTotal": 2031739904,
+      "modelType": "qwen3",
+      "includedArtifactRepo": "Qwen/Qwen3-1.7B-GGUF",
+      "consumerFeasible": true,
+      "chatTemplateNote": null,
+      "mirrorsInSnapshot": [],
+      "mirrorDownloadsInSnapshot": 0,
+      "ggufMirrorDownloadsTop100": 820258,
+      "eligibleRank": 14
+    },
+    {
+      "listingRank": 24,
+      "upstreamId": "openai/gpt-oss-120b",
+      "downloads": 3455569,
+      "license": "apache-2.0",
+      "licenseUrl": "https://huggingface.co/openai/gpt-oss-120b/blob/b5c939de8f754692c1647ca79fbf85e8c1e70f8a/LICENSE",
+      "gated": false,
+      "revision": "b5c939de8f754692c1647ca79fbf85e8c1e70f8a",
+      "paramsTotal": 116829156672,
+      "modelType": "gpt_oss",
+      "includedArtifactRepo": "ggml-org/gpt-oss-120b-GGUF",
+      "consumerFeasible": false,
+      "chatTemplateNote": null,
+      "mirrorsInSnapshot": [],
+      "mirrorDownloadsInSnapshot": 0,
+      "ggufMirrorDownloadsTop100": 286511,
+      "eligibleRank": 15
+    },
+    {
+      "listingRank": 27,
+      "upstreamId": "Qwen/Qwen3-4B-Instruct-2507",
+      "downloads": 3293032,
+      "license": "apache-2.0",
+      "licenseUrl": "https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507/blob/cdbee75f17c01a7cc42f958dc650907174af0554/LICENSE",
+      "gated": false,
+      "revision": "cdbee75f17c01a7cc42f958dc650907174af0554",
+      "paramsTotal": 4022468096,
+      "modelType": "qwen3",
+      "includedArtifactRepo": "unsloth/Qwen3-4B-Instruct-2507-GGUF",
+      "consumerFeasible": true,
+      "chatTemplateNote": null,
+      "mirrorsInSnapshot": [
+        {
+          "id": "Qwen/Qwen3-4B-Instruct-2507-FP8",
+          "downloads": 1188927,
+          "rank": 63,
+          "why": "base_model:quantized tag"
+        }
+      ],
+      "mirrorDownloadsInSnapshot": 1188927,
+      "ggufMirrorDownloadsTop100": 641581,
+      "eligibleRank": 16
+    },
+    {
+      "listingRank": 28,
+      "upstreamId": "Qwen/Qwen3-32B",
+      "downloads": 3235453,
+      "license": "apache-2.0",
+      "licenseUrl": "https://huggingface.co/Qwen/Qwen3-32B/blob/9216db5781bf21249d130ec9da846c4624c16137/LICENSE",
+      "gated": false,
+      "revision": "9216db5781bf21249d130ec9da846c4624c16137",
+      "paramsTotal": 32762123264,
+      "modelType": "qwen3",
+      "includedArtifactRepo": "Qwen/Qwen3-32B-GGUF",
+      "consumerFeasible": false,
+      "chatTemplateNote": null,
+      "mirrorsInSnapshot": [
+        {
+          "id": "Qwen/Qwen3-32B-AWQ",
+          "downloads": 883124,
+          "rank": 91,
+          "why": "base_model:quantized tag"
+        },
+        {
+          "id": "RedHatAI/Qwen3-32B-NVFP4",
+          "downloads": 392613,
+          "rank": 201,
+          "why": "base_model:quantized tag"
+        }
+      ],
+      "mirrorDownloadsInSnapshot": 1275737,
+      "ggufMirrorDownloadsTop100": 333212,
+      "eligibleRank": 17
+    },
+    {
+      "listingRank": 34,
+      "upstreamId": "google/gemma-3-1b-it",
+      "downloads": 2247811,
+      "license": "gemma",
+      "licenseUrl": "https://ai.google.dev/gemma/terms",
+      "gated": "manual",
+      "revision": "dcc83ea841ab6100d6b47a070329e1ba4cf78752",
+      "paramsTotal": 999885952,
+      "modelType": "gemma3_text",
+      "includedArtifactRepo": "ggml-org/gemma-3-1b-it-GGUF",
+      "consumerFeasible": true,
+      "chatTemplateNote": null,
+      "mirrorsInSnapshot": [],
+      "mirrorDownloadsInSnapshot": 0,
+      "ggufMirrorDownloadsTop100": 517615,
+      "eligibleRank": 18
+    },
+    {
+      "listingRank": 37,
+      "upstreamId": "zai-org/GLM-5.3",
+      "downloads": 1779954,
+      "license": "other:glm-5.3",
+      "licenseUrl": "https://huggingface.co/zai-org/GLM-5.3/blob/ba32f8c19c8738e2c57c71798c601d477a7bf844/LICENSE",
+      "gated": false,
+      "revision": "ba32f8c19c8738e2c57c71798c601d477a7bf844",
+      "paramsTotal": 753329940480,
+      "modelType": "glm_moe_dsa",
+      "includedArtifactRepo": "unsloth/GLM-5.3-GGUF",
+      "consumerFeasible": false,
+      "chatTemplateNote": null,
+      "mirrorsInSnapshot": [
+        {
+          "id": "unsloth/GLM-5.3-GGUF",
+          "downloads": 430963,
+          "rank": 189,
+          "why": "base_model:quantized tag"
+        }
+      ],
+      "mirrorDownloadsInSnapshot": 430963,
+      "ggufMirrorDownloadsTop100": 442341,
+      "eligibleRank": 19
+    },
+    {
+      "listingRank": 38,
+      "upstreamId": "Qwen/Qwen2.5-Coder-14B-Instruct",
+      "downloads": 1755766,
+      "license": "apache-2.0",
+      "licenseUrl": "https://huggingface.co/Qwen/Qwen2.5-Coder-14B-Instruct/blob/aedcc2d42b622764e023cf882b6652e646b95671/LICENSE",
+      "gated": false,
+      "revision": "aedcc2d42b622764e023cf882b6652e646b95671",
+      "paramsTotal": 14770033664,
+      "modelType": "qwen2",
+      "includedArtifactRepo": "Qwen/Qwen2.5-Coder-14B-Instruct-GGUF",
+      "consumerFeasible": true,
+      "chatTemplateNote": null,
+      "mirrorsInSnapshot": [
+        {
+          "id": "Qwen/Qwen2.5-Coder-14B-Instruct-AWQ",
+          "downloads": 356500,
+          "rank": 221,
+          "why": "base_model:quantized tag"
+        }
+      ],
+      "mirrorDownloadsInSnapshot": 356500,
+      "ggufMirrorDownloadsTop100": 266398,
+      "eligibleRank": 20
+    },
+    {
+      "listingRank": 43,
+      "upstreamId": "Qwen/Qwen2.5-32B-Instruct",
+      "downloads": 1605309,
+      "license": "apache-2.0",
+      "licenseUrl": "https://huggingface.co/Qwen/Qwen2.5-32B-Instruct/blob/5ede1c97bbab6ce5cda5812749b4c0bdf79b18dd/LICENSE",
+      "gated": false,
+      "revision": "5ede1c97bbab6ce5cda5812749b4c0bdf79b18dd",
+      "paramsTotal": 32763876352,
+      "modelType": "qwen2",
+      "includedArtifactRepo": "Qwen/Qwen2.5-32B-Instruct-GGUF",
+      "consumerFeasible": false,
+      "chatTemplateNote": null,
+      "mirrorsInSnapshot": [
+        {
+          "id": "Qwen/Qwen2.5-32B-Instruct-AWQ",
+          "downloads": 1043274,
+          "rank": 75,
+          "why": "base_model:quantized tag"
+        },
+        {
+          "id": "bartowski/Qwen2.5-32B-Instruct-GGUF",
+          "downloads": 885271,
+          "rank": 90,
+          "why": "base_model:quantized tag"
+        },
+        {
+          "id": "Qwen/Qwen2.5-32B-Instruct-GPTQ-Int4",
+          "downloads": 485229,
+          "rank": 171,
+          "why": "base_model:quantized tag"
+        }
+      ],
+      "mirrorDownloadsInSnapshot": 2413774,
+      "ggufMirrorDownloadsTop100": 914151,
+      "eligibleRank": 21
+    },
+    {
+      "listingRank": 44,
+      "upstreamId": "Qwen/Qwen2.5-Coder-7B-Instruct",
+      "downloads": 1589786,
+      "license": "apache-2.0",
+      "licenseUrl": "https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct/blob/c03e6d358207e414f1eca0bb1891e29f1db0e242/LICENSE",
+      "gated": false,
+      "revision": "c03e6d358207e414f1eca0bb1891e29f1db0e242",
+      "paramsTotal": 7615616512,
+      "modelType": "qwen2",
+      "includedArtifactRepo": "Qwen/Qwen2.5-Coder-7B-Instruct-GGUF",
+      "consumerFeasible": true,
+      "chatTemplateNote": null,
+      "mirrorsInSnapshot": [
+        {
+          "id": "Qwen/Qwen2.5-Coder-7B-Instruct-AWQ",
+          "downloads": 716368,
+          "rank": 112,
+          "why": "base_model:quantized tag"
+        },
+        {
+          "id": "Orion-zhen/Qwen2.5-Coder-7B-Instruct-AWQ",
+          "downloads": 707170,
+          "rank": 114,
+          "why": "base_model:quantized tag"
+        },
+        {
+          "id": "Qwen/Qwen2.5-Coder-7B-Instruct-GPTQ-Int4",
+          "downloads": 445332,
+          "rank": 186,
+          "why": "base_model:quantized tag"
+        },
+        {
+          "id": "Qwen/Qwen2.5-Coder-7B-Instruct-GGUF",
+          "downloads": 321014,
+          "rank": 242,
+          "why": "base_model:quantized tag"
+        }
+      ],
+      "mirrorDownloadsInSnapshot": 2189884,
+      "ggufMirrorDownloadsTop100": 477949,
+      "eligibleRank": 22
+    },
+    {
+      "listingRank": 45,
+      "upstreamId": "nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16",
+      "downloads": 1565119,
+      "license": "other:nvidia-nemotron-open-model-license",
+      "licenseUrl": "https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16/blob/dfaf35de3e30f1867dd8dbc38a7fc9fb52d3914f/LICENSE",
+      "gated": false,
+      "revision": "dfaf35de3e30f1867dd8dbc38a7fc9fb52d3914f",
+      "paramsTotal": 3973556832,
+      "modelType": "nemotron_h",
+      "includedArtifactRepo": "nvidia/NVIDIA-Nemotron-3-Nano-4B-GGUF",
+      "consumerFeasible": true,
+      "chatTemplateNote": null,
+      "mirrorsInSnapshot": [],
+      "mirrorDownloadsInSnapshot": 0,
+      "ggufMirrorDownloadsTop100": 60471,
+      "eligibleRank": 23
+    },
+    {
+      "listingRank": 49,
+      "upstreamId": "deepseek-ai/DeepSeek-V3",
+      "downloads": 1470043,
+      "license": "unspecified in cardData; repo files LICENSE-CODE+LICENSE-MODEL",
+      "licenseUrl": "https://huggingface.co/deepseek-ai/DeepSeek-V3/blob/e815299b0bcbac849fa540c768ef21845365c9eb/LICENSE-CODE",
+      "gated": false,
+      "revision": "e815299b0bcbac849fa540c768ef21845365c9eb",
+      "paramsTotal": 684531386000,
+      "modelType": "deepseek_v3",
+      "includedArtifactRepo": "unsloth/DeepSeek-V3-GGUF",
+      "consumerFeasible": false,
+      "chatTemplateNote": null,
+      "mirrorsInSnapshot": [],
+      "mirrorDownloadsInSnapshot": 0,
+      "ggufMirrorDownloadsTop100": 1602,
+      "eligibleRank": 24
+    },
+    {
+      "listingRank": 54,
+      "upstreamId": "meta-llama/Llama-3.2-3B-Instruct",
+      "downloads": 1352983,
+      "license": "llama3.2",
+      "licenseUrl": "https://huggingface.co/meta-llama/Llama-3.2-3B-Instruct/blob/0cb88a4f764b7a12671c53f0838cd831a0843b95/LICENSE.txt",
+      "gated": "manual",
+      "revision": "0cb88a4f764b7a12671c53f0838cd831a0843b95",
+      "paramsTotal": 3212749824,
+      "modelType": "llama",
+      "includedArtifactRepo": "unsloth/Llama-3.2-3B-Instruct-GGUF",
+      "consumerFeasible": true,
+      "chatTemplateNote": null,
+      "mirrorsInSnapshot": [
+        {
+          "id": "RedHatAI/Llama-3.2-3B-Instruct-FP8-dynamic",
+          "downloads": 514082,
+          "rank": 157,
+          "why": "base_model:quantized tag"
+        }
+      ],
+      "mirrorDownloadsInSnapshot": 514082,
+      "ggufMirrorDownloadsTop100": 516490,
+      "eligibleRank": 25
+    },
+    {
+      "listingRank": 55,
+      "upstreamId": "zai-org/GLM-4.7-Flash",
+      "downloads": 1346404,
+      "license": "mit",
+      "licenseUrl": null,
+      "gated": false,
+      "revision": "7dd20894a642a0aa287e9827cb1a1f7f91386b67",
+      "paramsTotal": 31221488576,
+      "modelType": "glm4_moe_lite",
+      "includedArtifactRepo": "ggml-org/GLM-4.7-Flash-GGUF",
+      "consumerFeasible": false,
+      "chatTemplateNote": null,
+      "mirrorsInSnapshot": [
+        {
+          "id": "QuantTrio/GLM-4.7-Flash-AWQ",
+          "downloads": 459913,
+          "rank": 181,
+          "why": "base_model:quantized tag"
+        }
+      ],
+      "mirrorDownloadsInSnapshot": 459913,
+      "ggufMirrorDownloadsTop100": 275346,
+      "eligibleRank": 26
+    },
+    {
+      "listingRank": 56,
+      "upstreamId": "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B",
+      "downloads": 1333486,
+      "license": "mit",
+      "licenseUrl": "https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B/blob/ad9f0ae0864d7fbcd1cd905e3c6c5b069cc8b562/LICENSE",
+      "gated": false,
+      "revision": "ad9f0ae0864d7fbcd1cd905e3c6c5b069cc8b562",
+      "paramsTotal": 1777088000,
+      "modelType": "qwen2",
+      "includedArtifactRepo": "unsloth/DeepSeek-R1-Distill-Qwen-1.5B-GGUF",
+      "consumerFeasible": true,
+      "chatTemplateNote": null,
+      "mirrorsInSnapshot": [],
+      "mirrorDownloadsInSnapshot": 0,
+      "ggufMirrorDownloadsTop100": 152903,
+      "eligibleRank": 27
+    },
+    {
+      "listingRank": 57,
+      "upstreamId": "Qwen/Qwen3-30B-A3B",
+      "downloads": 1290653,
+      "license": "apache-2.0",
+      "licenseUrl": "https://huggingface.co/Qwen/Qwen3-30B-A3B/blob/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39/LICENSE",
+      "gated": false,
+      "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+      "paramsTotal": 30532122624,
+      "modelType": "qwen3_moe",
+      "includedArtifactRepo": "Qwen/Qwen3-30B-A3B-GGUF",
+      "consumerFeasible": false,
+      "chatTemplateNote": null,
+      "mirrorsInSnapshot": [],
+      "mirrorDownloadsInSnapshot": 0,
+      "ggufMirrorDownloadsTop100": 391699,
+      "eligibleRank": 28
+    },
+    {
+      "listingRank": 59,
+      "upstreamId": "deepseek-ai/DeepSeek-V3-0324",
+      "downloads": 1282489,
+      "license": "mit",
+      "licenseUrl": "https://huggingface.co/deepseek-ai/DeepSeek-V3-0324/blob/e9b33add76883f293d6bf61f6bd89b497e80e335/LICENSE",
+      "gated": false,
+      "revision": "e9b33add76883f293d6bf61f6bd89b497e80e335",
+      "paramsTotal": 684531386000,
+      "modelType": "deepseek_v3",
+      "includedArtifactRepo": "unsloth/DeepSeek-V3-0324-GGUF",
+      "consumerFeasible": false,
+      "chatTemplateNote": null,
+      "mirrorsInSnapshot": [],
+      "mirrorDownloadsInSnapshot": 0,
+      "ggufMirrorDownloadsTop100": 121598,
+      "eligibleRank": 29
+    },
+    {
+      "listingRank": 60,
+      "upstreamId": "openbmb/MiniCPM5-2B",
+      "downloads": 1247513,
+      "license": "apache-2.0",
+      "licenseUrl": null,
+      "gated": false,
+      "revision": "f97400052a43d642bbc6e9975e2397e3ae6a6b52",
+      "paramsTotal": 2516756480,
+      "modelType": "llama",
+      "includedArtifactRepo": "openbmb/MiniCPM5-2B-GGUF",
+      "consumerFeasible": true,
+      "chatTemplateNote": null,
+      "mirrorsInSnapshot": [
+        {
+          "id": "openbmb/MiniCPM5-2B-MLX",
+          "downloads": 547756,
+          "rank": 145,
+          "why": "quant/reupload by repo name (no quantized tag)"
+        }
+      ],
+      "mirrorDownloadsInSnapshot": 547756,
+      "ggufMirrorDownloadsTop100": 84768,
+      "eligibleRank": 30
+    },
+    {
+      "listingRank": 61,
+      "upstreamId": "deepseek-ai/DeepSeek-R1",
+      "downloads": 1228430,
+      "license": "mit",
+      "licenseUrl": "https://huggingface.co/deepseek-ai/DeepSeek-R1/blob/56d4cbbb4d29f4355bab4b9a39ccb717a14ad5ad/LICENSE",
+      "gated": false,
+      "revision": "56d4cbbb4d29f4355bab4b9a39ccb717a14ad5ad",
+      "paramsTotal": 684489845504,
+      "modelType": "deepseek_v3",
+      "includedArtifactRepo": "unsloth/DeepSeek-R1-GGUF",
+      "consumerFeasible": false,
+      "chatTemplateNote": null,
+      "mirrorsInSnapshot": [],
+      "mirrorDownloadsInSnapshot": 0,
+      "ggufMirrorDownloadsTop100": 29635,
+      "eligibleRank": 31
+    },
+    {
+      "listingRank": 67,
+      "upstreamId": "Qwen/Qwen2.5-14B-Instruct",
+      "downloads": 1117538,
+      "license": "apache-2.0",
+      "licenseUrl": "https://huggingface.co/Qwen/Qwen2.5-14B-Instruct/blob/cf98f3b3bbb457ad9e2bb7baf9a0125b6b88caa8/LICENSE",
+      "gated": false,
+      "revision": "cf98f3b3bbb457ad9e2bb7baf9a0125b6b88caa8",
+      "paramsTotal": 14770033664,
+      "modelType": "qwen2",
+      "includedArtifactRepo": "Qwen/Qwen2.5-14B-Instruct-GGUF",
+      "consumerFeasible": true,
+      "chatTemplateNote": null,
+      "mirrorsInSnapshot": [
+        {
+          "id": "Qwen/Qwen2.5-14B-Instruct-AWQ",
+          "downloads": 1613477,
+          "rank": 42,
+          "why": "base_model:quantized tag"
+        }
+      ],
+      "mirrorDownloadsInSnapshot": 1613477,
+      "ggufMirrorDownloadsTop100": 204219,
+      "eligibleRank": 32
+    },
+    {
+      "listingRank": 72,
+      "upstreamId": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16",
+      "downloads": 1053158,
+      "license": "other:nvidia-nemotron-open-model-license",
+      "licenseUrl": "https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-nemotron-open-model-license/",
+      "gated": false,
+      "revision": "bf77c3174f68ad409e1c2aa60daeb46e32d1c606",
+      "paramsTotal": 31577937344,
+      "modelType": "nemotron_h",
+      "includedArtifactRepo": "ggml-org/NVIDIA-Nemotron-3-Nano-30B-A3B-GGUF",
+      "consumerFeasible": false,
+      "chatTemplateNote": null,
+      "mirrorsInSnapshot": [
+        {
+          "id": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4",
+          "downloads": 1635065,
+          "rank": 40,
+          "why": "base_model:quantized tag"
+        },
+        {
+          "id": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8",
+          "downloads": 237951,
+          "rank": 300,
+          "why": "base_model:quantized tag"
+        }
+      ],
+      "mirrorDownloadsInSnapshot": 1873016,
+      "ggufMirrorDownloadsTop100": 47472,
+      "eligibleRank": 33
+    },
+    {
+      "listingRank": 76,
+      "upstreamId": "Qwen/Qwen3-30B-A3B-Instruct-2507",
+      "downloads": 1036773,
+      "license": "apache-2.0",
+      "licenseUrl": "https://huggingface.co/Qwen/Qwen3-30B-A3B-Instruct-2507/blob/0d7cf23991f47feeb3a57ecb4c9cee8ea4a17bfe/LICENSE",
+      "gated": false,
+      "revision": "0d7cf23991f47feeb3a57ecb4c9cee8ea4a17bfe",
+      "paramsTotal": 30532122624,
+      "modelType": "qwen3_moe",
+      "includedArtifactRepo": "ggml-org/Qwen3-30B-A3B-Instruct-2507-Q8_0-GGUF",
+      "consumerFeasible": false,
+      "chatTemplateNote": null,
+      "mirrorsInSnapshot": [
+        {
+          "id": "stelterlab/Qwen3-30B-A3B-Instruct-2507-AWQ",
+          "downloads": 491270,
+          "rank": 168,
+          "why": "base_model:quantized tag"
+        },
+        {
+          "id": "Qwen/Qwen3-30B-A3B-Instruct-2507-FP8",
+          "downloads": 335403,
+          "rank": 232,
+          "why": "base_model:quantized tag"
+        }
+      ],
+      "mirrorDownloadsInSnapshot": 826673,
+      "ggufMirrorDownloadsTop100": 309579,
+      "eligibleRank": 34
+    },
+    {
+      "listingRank": 77,
+      "upstreamId": "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-BF16",
+      "downloads": 1025723,
+      "license": "other:nvidia-nemotron-open-model-license",
+      "licenseUrl": "https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-nemotron-open-model-license/",
+      "gated": false,
+      "revision": "2dc98e2afe4face0e4ce40972a915c45368bd34a",
+      "paramsTotal": 123611012096,
+      "modelType": "nemotron_h",
+      "includedArtifactRepo": "unsloth/NVIDIA-Nemotron-3-Super-120B-A12B-GGUF",
+      "consumerFeasible": false,
+      "chatTemplateNote": null,
+      "mirrorsInSnapshot": [],
+      "mirrorDownloadsInSnapshot": 0,
+      "ggufMirrorDownloadsTop100": 28573,
+      "eligibleRank": 35
+    },
+    {
+      "listingRank": 87,
+      "upstreamId": "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B-BF16",
+      "downloads": 902153,
+      "license": "other:openmdw-1.1",
+      "licenseUrl": "https://openmdw.ai/license/1-1/",
+      "gated": false,
+      "revision": "77df655d5e9f8362164ed14dd8b48f8bce657498",
+      "paramsTotal": 560524578816,
+      "modelType": "nemotron_h",
+      "includedArtifactRepo": "unsloth/NVIDIA-Nemotron-3-Ultra-550B-A55B-GGUF",
+      "consumerFeasible": false,
+      "chatTemplateNote": null,
+      "mirrorsInSnapshot": [],
+      "mirrorDownloadsInSnapshot": 0,
+      "ggufMirrorDownloadsTop100": 8737,
+      "eligibleRank": 36
+    },
+    {
+      "listingRank": 95,
+      "upstreamId": "google/gemma-2-9b-it",
+      "downloads": 829988,
+      "license": "gemma",
+      "licenseUrl": "https://ai.google.dev/gemma/terms",
+      "gated": "manual",
+      "revision": "11c9b309abf73637e4b6f9a3fa1e92e615547819",
+      "paramsTotal": 9241705984,
+      "modelType": "gemma2",
+      "includedArtifactRepo": "bartowski/gemma-2-9b-it-GGUF",
+      "consumerFeasible": true,
+      "chatTemplateNote": null,
+      "mirrorsInSnapshot": [],
+      "mirrorDownloadsInSnapshot": 0,
+      "ggufMirrorDownloadsTop100": 59131,
+      "eligibleRank": 37
+    },
+    {
+      "listingRank": 100,
+      "upstreamId": "Qwen/Qwen2.5-Coder-32B-Instruct",
+      "downloads": 774742,
+      "license": "apache-2.0",
+      "licenseUrl": "https://huggingface.co/Qwen/Qwen2.5-Coder-32B-Instruct/blob/381fc969f78efac66bc87ff7ddeadb7e73c218a7/LICENSE",
+      "gated": false,
+      "revision": "381fc969f78efac66bc87ff7ddeadb7e73c218a7",
+      "paramsTotal": 32763876352,
+      "modelType": "qwen2",
+      "includedArtifactRepo": "Qwen/Qwen2.5-Coder-32B-Instruct-GGUF",
+      "consumerFeasible": false,
+      "chatTemplateNote": null,
+      "mirrorsInSnapshot": [
+        {
+          "id": "Qwen/Qwen2.5-Coder-32B-Instruct-AWQ",
+          "downloads": 964238,
+          "rank": 79,
+          "why": "base_model:quantized tag"
+        }
+      ],
+      "mirrorDownloadsInSnapshot": 964238,
+      "ggufMirrorDownloadsTop100": 107054,
+      "eligibleRank": 38
+    },
+    {
+      "listingRank": 101,
+      "upstreamId": "zai-org/GLM-5",
+      "downloads": 772323,
+      "license": "mit",
+      "licenseUrl": null,
+      "gated": false,
+      "revision": "c183ef8c61faee82855eca1ed9bb3a9a7ce3b0b2",
+      "paramsTotal": 753864139008,
+      "modelType": "glm_moe_dsa",
+      "includedArtifactRepo": "unsloth/GLM-5-GGUF",
+      "consumerFeasible": false,
+      "chatTemplateNote": null,
+      "mirrorsInSnapshot": [],
+      "mirrorDownloadsInSnapshot": 0,
+      "ggufMirrorDownloadsTop100": 5497,
+      "eligibleRank": 39
+    },
+    {
+      "listingRank": 102,
+      "upstreamId": "HuggingFaceTB/SmolLM3-3B",
+      "downloads": 764561,
+      "license": "apache-2.0",
+      "licenseUrl": null,
+      "gated": false,
+      "revision": "a07cc9a04f16550a088caea529712d1d335b0ac1",
+      "paramsTotal": 3075098624,
+      "modelType": "smollm3",
+      "includedArtifactRepo": "ggml-org/SmolLM3-3B-GGUF",
+      "consumerFeasible": true,
+      "chatTemplateNote": null,
+      "mirrorsInSnapshot": [],
+      "mirrorDownloadsInSnapshot": 0,
+      "ggufMirrorDownloadsTop100": 81584,
+      "eligibleRank": 40
+    },
+    {
+      "listingRank": 108,
+      "upstreamId": "deepseek-ai/DeepSeek-Coder-V2-Lite-Instruct",
+      "downloads": 731256,
+      "license": "other:deepseek-license",
+      "licenseUrl": "LICENSE",
+      "gated": false,
+      "revision": "e434a23f91ba5b4923cf6c9d9a238eb4a08e3a11",
+      "paramsTotal": 15706484224,
+      "modelType": "deepseek_v2",
+      "includedArtifactRepo": "lmstudio-community/DeepSeek-Coder-V2-Lite-Instruct-GGUF",
+      "consumerFeasible": true,
+      "chatTemplateNote": null,
+      "mirrorsInSnapshot": [],
+      "mirrorDownloadsInSnapshot": 0,
+      "ggufMirrorDownloadsTop100": 29713,
+      "eligibleRank": 41
+    }
+  ],
+  "exclusions": [
+    {
+      "rank": 2,
+      "id": "openai-community/gpt2",
+      "downloads": 16001636,
+      "reason": "base/pretrained-only (no chat tuning)"
+    },
+    {
+      "rank": 12,
+      "id": "facebook/opt-125m",
+      "downloads": 5948464,
+      "reason": "base/pretrained-only"
+    },
+    {
+      "rank": 13,
+      "id": "trl-internal-testing/tiny-Qwen2ForCausalLM-2.5",
+      "downloads": 5668842,
+      "reason": "tiny test/random model"
+    },
+    {
+      "rank": 14,
+      "id": "RadixArk/Kimi-K3-DSpark",
+      "downloads": 5371571,
+      "reason": "speculative-decoding draft model (DSparkDraftModel), not a chat model; no license declared"
+    },
+    {
+      "rank": 19,
+      "id": "dphn/dolphin-2.9.1-yi-1.5-34b",
+      "downloads": 4665833,
+      "reason": "rule3: no name-matched GGUF from declared reputable quantizers (only community quantizers: mradermacher/dolphin-2.9.1-yi-1.5-34b-i1-GGUF, mradermacher/dolphin-2.9.1-yi-1.5-34b-GGUF)"
+    },
+    {
+      "rank": 25,
+      "id": "EleutherAI/pythia-160m",
+      "downloads": 3446926,
+      "reason": "base/pretrained-only"
+    },
+    {
+      "rank": 36,
+      "id": "distilbert/distilgpt2",
+      "downloads": 1874892,
+      "reason": "base/pretrained-only"
+    },
+    {
+      "rank": 41,
+      "id": "mistralai/Mistral-7B-Instruct-v0.2",
+      "downloads": 1626049,
+      "reason": "rule3: no name-matched GGUF from declared reputable quantizers (only community quantizers: TheBloke/Mistral-7B-Instruct-v0.2-GGUF, mozilla-ai/Mistral-7B-Instruct-v0.2-llamafile)"
+    },
+    {
+      "rank": 47,
+      "id": "HuggingFaceTB/SmolLM2-135M",
+      "downloads": 1520896,
+      "reason": "base/pretrained-only"
+    },
+    {
+      "rank": 51,
+      "id": "Qwen/Qwen2.5-0.5B",
+      "downloads": 1399614,
+      "reason": "base/pretrained-only"
+    },
+    {
+      "rank": 52,
+      "id": "EleutherAI/pythia-70m-deduped",
+      "downloads": 1393984,
+      "reason": "base/pretrained-only"
+    },
+    {
+      "rank": 53,
+      "id": "ornith-ai/Ornith-1.0-35B",
+      "downloads": 1379293,
+      "reason": "lineage: no base_model declared (Qwen3.5-arch derivative of unstated origin); license_link points to a different org (deepreinforce-ai); no license file in repo"
+    },
+    {
+      "rank": 58,
+      "id": "bigscience/bloomz-560m",
+      "downloads": 1285515,
+      "reason": "non-chat (multitask prompted, no chat template)"
+    },
+    {
+      "rank": 65,
+      "id": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+      "downloads": 1131294,
+      "reason": "rule3: no name-matched GGUF from declared reputable quantizers (only community quantizers: TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF, second-state/TinyLlama-1.1B-Chat-v1.0-GGUF)"
+    },
+    {
+      "rank": 71,
+      "id": "openbmb/MiniCPM5-2B-DSpark",
+      "downloads": 1084185,
+      "reason": "speculative-decoding draft model, not a chat model"
+    },
+    {
+      "rank": 74,
+      "id": "sshleifer/tiny-gpt2",
+      "downloads": 1046989,
+      "reason": "tiny test/random model"
+    },
+    {
+      "rank": 80,
+      "id": "openai-community/gpt2-large",
+      "downloads": 959459,
+      "reason": "base/pretrained-only"
+    },
+    {
+      "rank": 94,
+      "id": "trl-internal-testing/tiny-Qwen3ForCausalLM",
+      "downloads": 832502,
+      "reason": "tiny test/random model"
+    },
+    {
+      "rank": 96,
+      "id": "ornith-ai/Ornith-1.0-9B",
+      "downloads": 813366,
+      "reason": "lineage: no base_model declared (Qwen3.5-arch derivative of unstated origin); license_link points to a different org (deepreinforce-ai); no license file in repo"
+    },
+    {
+      "rank": 97,
+      "id": "deepseek-ai/DeepSeek-V4-Flash",
+      "downloads": 806067,
+      "reason": "superseded by -0731 snapshot; no chat template tag (evaluate -0731 instead)"
+    },
+    { "rank": 99, "id": "Qwen/Qwen2.5-7B", "downloads": 781749, "reason": "base/pretrained-only" },
+    {
+      "rank": 103,
+      "id": "Qwen/Qwen3-8B-Base",
+      "downloads": 758111,
+      "reason": "base/pretrained-only"
+    },
+    {
+      "rank": 115,
+      "id": "meta-llama/Llama-2-7b-hf",
+      "downloads": 701229,
+      "reason": "base/pretrained-only"
+    },
+    {
+      "rank": 116,
+      "id": "meta-llama/Llama-3.1-8B",
+      "downloads": 680490,
+      "reason": "base/pretrained-only"
+    },
+    {
+      "rank": 117,
+      "id": "EleutherAI/pythia-14m",
+      "downloads": 677445,
+      "reason": "base/pretrained-only"
+    },
+    { "rank": 120, "id": "Qwen/Qwen-72B", "downloads": 667233, "reason": "base/pretrained-only" },
+    {
+      "rank": 123,
+      "id": "Qwen/Qwen2.5-1.5B",
+      "downloads": 665108,
+      "reason": "base/pretrained-only"
+    },
+    {
+      "rank": 124,
+      "id": "meta-llama/Llama-3.2-1B",
+      "downloads": 650466,
+      "reason": "base/pretrained-only"
+    },
+    {
+      "rank": 135,
+      "id": "peft-internal-testing/tiny-random-OPTForCausalLM",
+      "downloads": 587183,
+      "reason": "tiny test/random model"
+    },
+    {
+      "rank": 155,
+      "id": "llamafactory/tiny-random-Llama-3",
+      "downloads": 529497,
+      "reason": "tiny test/random model"
+    },
+    {
+      "rank": 165,
+      "id": "trl-internal-testing/tiny-random-LlamaForCausalLM",
+      "downloads": 493502,
+      "reason": "tiny test/random model"
+    },
+    {
+      "rank": 206,
+      "id": "hmellor/tiny-random-LlamaForCausalLM",
+      "downloads": 386132,
+      "reason": "tiny test/random model"
+    },
+    {
+      "rank": 240,
+      "id": "hmellor/tiny-random-Gemma2ForCausalLM",
+      "downloads": 326767,
+      "reason": "tiny test/random model"
+    },
+    {
+      "rank": 248,
+      "id": "trl-internal-testing/tiny-GptOssForCausalLM",
+      "downloads": 305828,
+      "reason": "tiny test/random model"
+    },
+    {
+      "rank": 290,
+      "id": "trl-internal-testing/tiny-Qwen3MoeForCausalLM",
+      "downloads": 249300,
+      "reason": "tiny test/random model"
+    }
+  ],
+  "mirrorRepos": [
+    {
+      "rank": 15,
+      "id": "ornith-ai/Ornith-1.5-9B-GGUF",
+      "downloads": 5024266,
+      "upstream": "ornith-ai/Ornith-1.5-9B",
+      "why": "quant/reupload by repo name (no quantized tag)"
+    },
+    {
+      "rank": 17,
+      "id": "prism-ml/Ternary-Bonsai-2-27B-gguf",
+      "downloads": 4786442,
+      "upstream": "Qwen/Qwen3.8-27B",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 18,
+      "id": "nvidia/Qwen3.6-35B-A3B-NVFP4",
+      "downloads": 4679110,
+      "upstream": "Qwen/Qwen3.6-35B-A3B",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 23,
+      "id": "ornith-ai/Ornith-1.5-35B-A3B-GGUF",
+      "downloads": 3681287,
+      "upstream": "ornith-ai/Ornith-1.5-35B-A3B",
+      "why": "quant/reupload by repo name (no quantized tag)"
+    },
+    {
+      "rank": 26,
+      "id": "unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF",
+      "downloads": 3445398,
+      "upstream": "Qwen/Qwen3-Coder-30B-A3B-Instruct",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 29,
+      "id": "Qwen/Qwen3-14B-AWQ",
+      "downloads": 2894022,
+      "upstream": "Qwen/Qwen3-14B",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 30,
+      "id": "CMSManhattan/JiRackUltra_1b",
+      "downloads": 2540060,
+      "upstream": null,
+      "why": "GGUF repo without base_model:quantized tag (lineage unverified)"
+    },
+    {
+      "rank": 31,
+      "id": "JonathanColetti/Qwen3.8-27B-Uncensored-GGUF",
+      "downloads": 2536380,
+      "upstream": "Qwen/Qwen3.8-27B",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 32,
+      "id": "ornith-ai/Ornith-1.0-9B-GGUF",
+      "downloads": 2372127,
+      "upstream": "ornith-ai/Ornith-1.0-9B",
+      "why": "quant/reupload by repo name (no quantized tag)"
+    },
+    {
+      "rank": 33,
+      "id": "Qwen/Qwen2.5-7B-Instruct-AWQ",
+      "downloads": 2330011,
+      "upstream": "Qwen/Qwen2.5-7B-Instruct",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 35,
+      "id": "Qwen/Qwen3-8B-AWQ",
+      "downloads": 2193533,
+      "upstream": "Qwen/Qwen3-8B",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 39,
+      "id": "nvidia/Qwen2.5-VL-7B-Instruct-NVFP4",
+      "downloads": 1654455,
+      "upstream": "Qwen/Qwen2.5-VL-7B-Instruct",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 40,
+      "id": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4",
+      "downloads": 1635065,
+      "upstream": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 42,
+      "id": "Qwen/Qwen2.5-14B-Instruct-AWQ",
+      "downloads": 1613477,
+      "upstream": "Qwen/Qwen2.5-14B-Instruct",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 46,
+      "id": "ornith-ai/Ornith-1.0-35B-GGUF",
+      "downloads": 1541620,
+      "upstream": "ornith-ai/Ornith-1.0-35B",
+      "why": "quant/reupload by repo name (no quantized tag)"
+    },
+    {
+      "rank": 48,
+      "id": "antirez/deepseek-v4-gguf",
+      "downloads": 1491779,
+      "upstream": "deepseek-ai/DeepSeek-V4-Flash",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 50,
+      "id": "HuggingFaceTB/SmolLM2-135M-Instruct",
+      "downloads": 1447635,
+      "upstream": "HuggingFaceTB/SmolLM2-135M",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 62,
+      "id": "nvidia/Gemma-4-31B-IT-NVFP4",
+      "downloads": 1200016,
+      "upstream": "google/gemma-4-31B-it",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 63,
+      "id": "Qwen/Qwen3-4B-Instruct-2507-FP8",
+      "downloads": 1188927,
+      "upstream": "Qwen/Qwen3-4B-Instruct-2507",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 64,
+      "id": "ornith-ai/Ornith-1.5-397B-GGUF",
+      "downloads": 1159165,
+      "upstream": "ornith-ai/Ornith-1.5-397B",
+      "why": "quant/reupload by repo name (no quantized tag)"
+    },
+    {
+      "rank": 66,
+      "id": "0bserverx/Qwen3.8-27B-Heretic-Abliterated-Uncensored-GGUF",
+      "downloads": 1118112,
+      "upstream": "Qwen/Qwen3.8-27B",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 68,
+      "id": "prism-ml/Ternary-Bonsai-27B-mlx-2bit",
+      "downloads": 1101833,
+      "upstream": "Qwen/Qwen3.6-27B",
+      "why": "quant/reupload by repo name (no quantized tag)"
+    },
+    {
+      "rank": 69,
+      "id": "ornith-ai/Ornith-1.5-35B-A3B-NVFP4",
+      "downloads": 1100405,
+      "upstream": "ornith-ai/Ornith-1.5-35B-A3B",
+      "why": "quant/reupload by repo name (no quantized tag)"
+    },
+    {
+      "rank": 70,
+      "id": "prism-ml/Bonsai-27B-mlx-1bit",
+      "downloads": 1089677,
+      "upstream": "Qwen/Qwen3.6-27B",
+      "why": "quant/reupload by repo name (no quantized tag)"
+    },
+    {
+      "rank": 73,
+      "id": "Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8",
+      "downloads": 1047299,
+      "upstream": "Qwen/Qwen3-Coder-30B-A3B-Instruct",
+      "why": "quant/reupload by repo name (no quantized tag)"
+    },
+    {
+      "rank": 75,
+      "id": "Qwen/Qwen2.5-32B-Instruct-AWQ",
+      "downloads": 1043274,
+      "upstream": "Qwen/Qwen2.5-32B-Instruct",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 78,
+      "id": "Qwen/Qwen3-Coder-Next-FP8",
+      "downloads": 993795,
+      "upstream": "Qwen/Qwen3-Coder-Next",
+      "why": "quant/reupload by repo name (no quantized tag)"
+    },
+    {
+      "rank": 79,
+      "id": "Qwen/Qwen2.5-Coder-32B-Instruct-AWQ",
+      "downloads": 964238,
+      "upstream": "Qwen/Qwen2.5-Coder-32B-Instruct",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 81,
+      "id": "RedHatAI/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-FP8",
+      "downloads": 956561,
+      "upstream": "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 82,
+      "id": "empero-ai/Qwen3.8-35B-A3B-Distill-GGUF",
+      "downloads": 954923,
+      "upstream": "empero-ai/Qwen3.8-35B-A3B-Distill",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 83,
+      "id": "LiquidAI/LFM2.5-2.6B-GGUF",
+      "downloads": 935872,
+      "upstream": "LiquidAI/LFM2.5-2.6B",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 84,
+      "id": "unsloth/GLM-5.3-Flash-GGUF",
+      "downloads": 930805,
+      "upstream": "zai-org/GLM-5.3-Flash",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 85,
+      "id": "nvidia/Gemma-4-26B-A4B-NVFP4",
+      "downloads": 921201,
+      "upstream": "google/gemma-4-26B-A4B-it",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 86,
+      "id": "ukisai/Swift-1.5-Qwen3.8-27B-GSQ-RCO-GGUF",
+      "downloads": 920223,
+      "upstream": "ukisai/Swift-1.5-Qwen3.8-27b",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 88,
+      "id": "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4",
+      "downloads": 902134,
+      "upstream": "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16",
+      "why": "quant/reupload by repo name (no quantized tag)"
+    },
+    {
+      "rank": 89,
+      "id": "LGAI-EXAONE/EXAONE-3.5-7.8B-Instruct-AWQ",
+      "downloads": 895430,
+      "upstream": "LGAI-EXAONE/EXAONE-3.5-7.8B-Instruct",
+      "why": "quant/reupload by repo name (no quantized tag)"
+    },
+    {
+      "rank": 90,
+      "id": "bartowski/Qwen2.5-32B-Instruct-GGUF",
+      "downloads": 885271,
+      "upstream": "Qwen/Qwen2.5-32B-Instruct",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 91,
+      "id": "Qwen/Qwen3-32B-AWQ",
+      "downloads": 883124,
+      "upstream": "Qwen/Qwen3-32B",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 92,
+      "id": "nvidia/Qwen3.6-27B-NVFP4",
+      "downloads": 858131,
+      "upstream": "Qwen/Qwen3.6-27B",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 93,
+      "id": "casperhansen/llama-3.3-70b-instruct-awq",
+      "downloads": 834203,
+      "upstream": "meta-llama/Llama-3.1-70B",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 98,
+      "id": "cyankiwi/Qwen3-Coder-30B-A3B-Instruct-AWQ-4bit",
+      "downloads": 805401,
+      "upstream": "Qwen/Qwen3-Coder-30B-A3B-Instruct",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 104,
+      "id": "AtomicChat/Qwen3.8-Flash-Next-GGUF",
+      "downloads": 745553,
+      "upstream": "Qwen/Qwen3.8-Flash-Next",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 105,
+      "id": "unsloth/Llama-3.2-1B-Instruct",
+      "downloads": 745392,
+      "upstream": "meta-llama/Llama-3.2-1B-Instruct",
+      "why": "quant/reupload by repo name (no quantized tag)"
+    },
+    {
+      "rank": 106,
+      "id": "ornith-ai/Ornith-1.5-9B-NVFP4",
+      "downloads": 733843,
+      "upstream": "ornith-ai/Ornith-1.5-9B",
+      "why": "quant/reupload by repo name (no quantized tag)"
+    },
+    {
+      "rank": 107,
+      "id": "nvidia/Qwen3.5-122B-A10B-NVFP4",
+      "downloads": 733839,
+      "upstream": "Qwen/Qwen3.5-122B-A10B",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 109,
+      "id": "esatapedico/Qwen3.8-27B-NVFP4-MTP-GGUF",
+      "downloads": 730566,
+      "upstream": "unsloth/Qwen3.8-27B-NVFP4",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 110,
+      "id": "CMSManhattan/JiRackUltra_14b",
+      "downloads": 729792,
+      "upstream": null,
+      "why": "GGUF repo without base_model:quantized tag (lineage unverified)"
+    },
+    {
+      "rank": 112,
+      "id": "Qwen/Qwen2.5-Coder-7B-Instruct-AWQ",
+      "downloads": 716368,
+      "upstream": "Qwen/Qwen2.5-Coder-7B-Instruct",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 114,
+      "id": "Orion-zhen/Qwen2.5-Coder-7B-Instruct-AWQ",
+      "downloads": 707170,
+      "upstream": "Qwen/Qwen2.5-Coder-7B-Instruct",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 127,
+      "id": "nvidia/Qwen3.8-27B-NVFP4",
+      "downloads": 623524,
+      "upstream": "Qwen/Qwen3.8-27B",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 130,
+      "id": "cyankiwi/MiniCPM-SALA-AWQ-8bit",
+      "downloads": 603004,
+      "upstream": "openbmb/MiniCPM-SALA",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 133,
+      "id": "OBLITERATUS/Qwen3.8-27B-OBLITERATED",
+      "downloads": 590067,
+      "upstream": "Qwen/Qwen3.8-27B",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 134,
+      "id": "prism-ml/Ternary-Bonsai-27B-gguf",
+      "downloads": 588214,
+      "upstream": "Qwen/Qwen3.6-27B",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 139,
+      "id": "empero-ai/Qwen3.8-9B-Distill-GGUF",
+      "downloads": 560548,
+      "upstream": "empero-ai/Qwen3.8-9B-Distill",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 141,
+      "id": "CMSManhattan/JiRackDeltaNet_27b",
+      "downloads": 555590,
+      "upstream": null,
+      "why": "GGUF repo without base_model:quantized tag (lineage unverified)"
+    },
+    {
+      "rank": 142,
+      "id": "Qwen/Qwen3-8B-GGUF",
+      "downloads": 555234,
+      "upstream": "Qwen/Qwen3-8B",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 145,
+      "id": "openbmb/MiniCPM5-2B-MLX",
+      "downloads": 547756,
+      "upstream": "openbmb/MiniCPM5-2B",
+      "why": "quant/reupload by repo name (no quantized tag)"
+    },
+    {
+      "rank": 146,
+      "id": "empero-ai/Qwen3.8-4B-Distill-GGUF",
+      "downloads": 547454,
+      "upstream": "empero-ai/Qwen3.8-4B-Distill",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 150,
+      "id": "Qwen/Qwen2.5-72B-Instruct-AWQ",
+      "downloads": 542773,
+      "upstream": "Qwen/Qwen2.5-72B-Instruct",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 151,
+      "id": "Qwen/Qwen3-4B-GGUF",
+      "downloads": 539429,
+      "upstream": "Qwen/Qwen3-4B",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 152,
+      "id": "Qwen/Qwen3-8B-FP8",
+      "downloads": 538561,
+      "upstream": "Qwen/Qwen3-8B",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 153,
+      "id": "yuxinlu1/gemma-4-12B-agentic-fable5-composer2.5-v2-3.5x-tau2-GGUF",
+      "downloads": 535923,
+      "upstream": "google/gemma-4-12B-it",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 154,
+      "id": "FINAL-Bench/POCKET-35B-GGUF",
+      "downloads": 533001,
+      "upstream": "FINAL-Bench/Darwin-36B-Opus",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 157,
+      "id": "RedHatAI/Llama-3.2-3B-Instruct-FP8-dynamic",
+      "downloads": 514082,
+      "upstream": "meta-llama/Llama-3.2-3B-Instruct",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 158,
+      "id": "unsloth/gpt-oss-20b-GGUF",
+      "downloads": 512904,
+      "upstream": "openai/gpt-oss-20b",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 160,
+      "id": "abenzerps/Apodex-1.1-mini-GGUF",
+      "downloads": 505427,
+      "upstream": "apodex/Apodex-1.1-mini",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 162,
+      "id": "Qwen/Qwen2.5-3B-Instruct-AWQ",
+      "downloads": 497870,
+      "upstream": "Qwen/Qwen2.5-3B-Instruct",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 164,
+      "id": "bartowski/Meta-Llama-3.1-8B-Instruct-GGUF",
+      "downloads": 495304,
+      "upstream": "meta-llama/Llama-3.1-8B-Instruct",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 167,
+      "id": "unsloth/Qwen3-4B-GGUF",
+      "downloads": 491453,
+      "upstream": "Qwen/Qwen3-4B",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 168,
+      "id": "stelterlab/Qwen3-30B-A3B-Instruct-2507-AWQ",
+      "downloads": 491270,
+      "upstream": "Qwen/Qwen3-30B-A3B-Instruct-2507",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 170,
+      "id": "BoldingBuilds/orcarouter_GLM-5.3-Flash-Uncensored-GGUF",
+      "downloads": 485377,
+      "upstream": "orcarouter/GLM-5.3-Flash-Uncensored-FP8",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 171,
+      "id": "Qwen/Qwen2.5-32B-Instruct-GPTQ-Int4",
+      "downloads": 485229,
+      "upstream": "Qwen/Qwen2.5-32B-Instruct",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 172,
+      "id": "empero-ai/Qwen3.8-2B-Distill-GGUF",
+      "downloads": 480858,
+      "upstream": "empero-ai/Qwen3.8-2B-Distill",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 173,
+      "id": "QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ",
+      "downloads": 480177,
+      "upstream": "Qwen/Qwen3-VL-30B-A3B-Instruct",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 178,
+      "id": "XHToken/Spark-X2.5-4B-GGUF",
+      "downloads": 467547,
+      "upstream": "XHToken/Spark-X2.5-4B",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 180,
+      "id": "peculiar-ragdoll/Sharp-Spark-X2.5-4B-GGUF",
+      "downloads": 463083,
+      "upstream": "XHToken/Spark-X2.5-4B",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 181,
+      "id": "QuantTrio/GLM-4.7-Flash-AWQ",
+      "downloads": 459913,
+      "upstream": "zai-org/GLM-4.7-Flash",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 182,
+      "id": "LiquidAI/LFM2.5-230M-GGUF",
+      "downloads": 458904,
+      "upstream": "LiquidAI/LFM2.5-230M",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 185,
+      "id": "LeaderboardModel1/zeta-2.1-autoround-W4A16",
+      "downloads": 445970,
+      "upstream": "zed-industries/zeta-2.1",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 186,
+      "id": "Qwen/Qwen2.5-Coder-7B-Instruct-GPTQ-Int4",
+      "downloads": 445332,
+      "upstream": "Qwen/Qwen2.5-Coder-7B-Instruct",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 189,
+      "id": "unsloth/GLM-5.3-GGUF",
+      "downloads": 430963,
+      "upstream": "zai-org/GLM-5.3",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 196,
+      "id": "prism-ml/Bonsai-27B-gguf",
+      "downloads": 404309,
+      "upstream": "Qwen/Qwen3.6-27B",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 200,
+      "id": "sakamakismile/Qwen3.8-27B-MTP-NVFP4",
+      "downloads": 398956,
+      "upstream": "Qwen/Qwen3.8-27B",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 201,
+      "id": "RedHatAI/Qwen3-32B-NVFP4",
+      "downloads": 392613,
+      "upstream": "Qwen/Qwen3-32B",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 204,
+      "id": "FastFlowLM/GPT-OSS-20B-NPU2",
+      "downloads": 389994,
+      "upstream": "openai/gpt-oss-20b",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 212,
+      "id": "Qwen/Qwen3-235B-A22B-Instruct-2507-FP8",
+      "downloads": 368697,
+      "upstream": "Qwen/Qwen3-235B-A22B-Instruct-2507",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 213,
+      "id": "unsloth/mistral-7b-v0.3-bnb-4bit",
+      "downloads": 368382,
+      "upstream": "mistralai/Mistral-7B-v0.3",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 214,
+      "id": "prism-ml/Ternary-Bonsai-8B-gguf",
+      "downloads": 367317,
+      "upstream": "prism-ml/Ternary-Bonsai-8B-unpacked",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 217,
+      "id": "z-lab/Qwen3.8-27B-DFlash2-GGUF",
+      "downloads": 362242,
+      "upstream": "Qwen/Qwen3.8-27B",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 219,
+      "id": "deepseek-ai/DeepSeek-V3.1",
+      "downloads": 359653,
+      "upstream": "deepseek-ai/DeepSeek-V3.1-Base",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 221,
+      "id": "Qwen/Qwen2.5-Coder-14B-Instruct-AWQ",
+      "downloads": 356500,
+      "upstream": "Qwen/Qwen2.5-Coder-14B-Instruct",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 225,
+      "id": "LiquidAI/LFM2.5-1.2B-Instruct-GGUF",
+      "downloads": 348319,
+      "upstream": "LiquidAI/LFM2.5-1.2B-Instruct",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 226,
+      "id": "abenzerps/Spark-X2.5-4B-GGUF",
+      "downloads": 345305,
+      "upstream": "XHToken/Spark-X2.5-4B",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 227,
+      "id": "nvidia/GLM-5.2-NVFP4",
+      "downloads": 343987,
+      "upstream": "zai-org/GLM-5.2",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 228,
+      "id": "huihui-ai/Huihui-DeepSeek-V4-Flash-0731-abliterated-GGUF",
+      "downloads": 343033,
+      "upstream": "deepseek-ai/DeepSeek-V4-Flash-0731",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 229,
+      "id": "michaelw9999/Qwen3.6-35B-A3B-NVFP4-MTP-GGUF",
+      "downloads": 339026,
+      "upstream": "Qwen/Qwen3.6-35B-A3B",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 232,
+      "id": "Qwen/Qwen3-30B-A3B-Instruct-2507-FP8",
+      "downloads": 335403,
+      "upstream": "Qwen/Qwen3-30B-A3B-Instruct-2507",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 233,
+      "id": "tvall43/Qwen3.6-14B-A3B-FableVibes-GGUF",
+      "downloads": 334596,
+      "upstream": "tvall43/Qwen3.6-14B-A3B-FableVibes",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 234,
+      "id": "OBLITERATUS/Ornith-1.5-9B-OBLITERATED",
+      "downloads": 333483,
+      "upstream": "ornith-ai/Ornith-1.5-9B",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 239,
+      "id": "unsloth/Ornith-1.0-9B-GGUF",
+      "downloads": 329103,
+      "upstream": "deepreinforce-ai/Ornith-1.0-9B",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 241,
+      "id": "Qwen/Qwen2.5-1.5B-Instruct-GGUF",
+      "downloads": 324334,
+      "upstream": "Qwen/Qwen2.5-1.5B-Instruct",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 242,
+      "id": "Qwen/Qwen2.5-Coder-7B-Instruct-GGUF",
+      "downloads": 321014,
+      "upstream": "Qwen/Qwen2.5-Coder-7B-Instruct",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 243,
+      "id": "Qwen/Qwen3-0.6B-GGUF",
+      "downloads": 317617,
+      "upstream": "Qwen/Qwen3-0.6B",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 246,
+      "id": "ConwayResearch/Underdog-Saluki-27B-1.0",
+      "downloads": 311969,
+      "upstream": "ISTA-DASLab/Qwen3.8-27B-GSQ-RCO-GGUF",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 249,
+      "id": "janhq/Jan-v3.5-4B-gguf",
+      "downloads": 302508,
+      "upstream": "janhq/Jan-v3-4B-base-instruct",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 251,
+      "id": "unsloth/Qwen-AgentWorld-35B-A3B-GGUF",
+      "downloads": 300500,
+      "upstream": "Qwen/Qwen-AgentWorld-35B-A3B",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 256,
+      "id": "llm-jp/llm-jp-4-33b-thinking-gguf",
+      "downloads": 296850,
+      "upstream": null,
+      "why": "GGUF repo without base_model:quantized tag (lineage unverified)"
+    },
+    {
+      "rank": 258,
+      "id": "RedHatAI/Qwen3-Coder-Next-FP8-dynamic",
+      "downloads": 288719,
+      "upstream": "Qwen/Qwen3-Coder-Next",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 265,
+      "id": "unsloth/GLM-5.2-GGUF",
+      "downloads": 278992,
+      "upstream": "zai-org/GLM-5.2",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 268,
+      "id": "KyleHessling1/Qwopus3.6-27B-Fusion-GGUF",
+      "downloads": 274156,
+      "upstream": "Qwen/Qwen3.6-27B",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 269,
+      "id": "Qwen/Qwen2.5-7B-Instruct-GPTQ-Int4",
+      "downloads": 273672,
+      "upstream": "Qwen/Qwen2.5-7B-Instruct",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 271,
+      "id": "jimmy31chen/RVN-Qwen3.8-Flash-Next-Abliterated-Uncensored-IQ3_S-Strata",
+      "downloads": 270446,
+      "upstream": "0bserverx/RVN-Qwen3.8-Flash-Next-Abliterated-Uncensored",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 272,
+      "id": "Qwen/Qwen2.5-0.5B-Instruct-GGUF",
+      "downloads": 269141,
+      "upstream": "Qwen/Qwen2.5-0.5B-Instruct",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 275,
+      "id": "superwhisper/s1-mini-GGUF",
+      "downloads": 265554,
+      "upstream": "superwhisper/s1-mini",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 276,
+      "id": "QuantTrio/Qwen3-Coder-30B-A3B-Instruct-AWQ",
+      "downloads": 265284,
+      "upstream": "Qwen/Qwen3-Coder-30B-A3B-Instruct",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 277,
+      "id": "LiquidAI/LFM2.5-8B-A1B-GGUF",
+      "downloads": 263962,
+      "upstream": "LiquidAI/LFM2.5-8B-A1B",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 280,
+      "id": "bartowski/Kwaipilot_KAT-Coder-V2.5-Dev-GGUF",
+      "downloads": 260472,
+      "upstream": "Kwaipilot/KAT-Coder-V2.5-Dev",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 283,
+      "id": "bloomer010/Ling-3.0-tiny-GGUF",
+      "downloads": 258894,
+      "upstream": "inclusionAI/Ling-3.0-tiny",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 287,
+      "id": "webAI-Official/TwIL-LM3",
+      "downloads": 252498,
+      "upstream": null,
+      "why": "GGUF repo without base_model:quantized tag (lineage unverified)"
+    },
+    {
+      "rank": 288,
+      "id": "nvidia/Kimi-K2.5-NVFP4",
+      "downloads": 252202,
+      "upstream": "moonshotai/Kimi-K2.5",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 291,
+      "id": "AnkitAI/Parable-Qwen3-8B-Claude-Fable-5-GGUF",
+      "downloads": 246525,
+      "upstream": null,
+      "why": "GGUF repo without base_model:quantized tag (lineage unverified)"
+    },
+    {
+      "rank": 292,
+      "id": "yuxinlu1/gemma-4-12B-coder-fable5-composer2.5-v1-GGUF",
+      "downloads": 244780,
+      "upstream": "google/gemma-4-12B-it",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 293,
+      "id": "nvidia/Qwen3-14B-NVFP4",
+      "downloads": 244039,
+      "upstream": "Qwen/Qwen3-14B",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 294,
+      "id": "bartowski/Qwen_Qwen3-4B-GGUF",
+      "downloads": 243514,
+      "upstream": "Qwen/Qwen3-4B",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 295,
+      "id": "XHToken/Spark-X2.5-1.7B-GGUF",
+      "downloads": 243431,
+      "upstream": "XHToken/Spark-X2.5-1.7B",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 299,
+      "id": "FINAL-Bench/POCKET-26B-GGUF",
+      "downloads": 238652,
+      "upstream": "google/gemma-4-26B-A4B-it",
+      "why": "base_model:quantized tag"
+    },
+    {
+      "rank": 300,
+      "id": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8",
+      "downloads": 237951,
+      "upstream": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16",
+      "why": "base_model:quantized tag"
+    }
+  ],
+  "notEvaluatedCount": 97
+}

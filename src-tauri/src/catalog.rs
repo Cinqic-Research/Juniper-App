@@ -69,6 +69,8 @@ pub struct CatalogEntry {
     pub source_revision: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub original_model: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub original_revision: Option<String>,
     pub license: String,
     pub license_url: String,
     pub attribution: String,
@@ -80,6 +82,14 @@ pub struct CatalogEntry {
     pub supported_architectures: Vec<String>,
     pub tags: Vec<String>,
     pub release_status: String,
+    /// `required` when the model's license must be accepted in Juniper
+    /// before download.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub license_acceptance: Option<String>,
+    /// Dated popularity evidence (Hugging Face 30-day downloads). Shown as
+    /// "popular on Hugging Face"; it says nothing about quality or fit.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub popularity: Option<serde_json::Value>,
     pub artifacts: Vec<CatalogArtifact>,
 }
 
@@ -186,29 +196,61 @@ mod tests {
     #[test]
     fn bundled_catalog_is_artifact_centric_and_integrity_pinned() {
         let entries = entries().expect("catalog should parse");
-        assert_eq!(entries.len(), 5);
-        assert!(
-            entries
-                .iter()
-                .flat_map(|entry| entry.artifacts.iter())
-                .all(|artifact| {
-                    artifact.runtime_id == "llama.cpp"
-                        && artifact.files.iter().all(|file| valid_hash(&file.sha256))
-                })
-        );
-        // Downloadable entries stay small; a large model is installed only
-        // from a file the user already has and that matches the pinned hash.
         for entry in &entries {
-            let downloadable = entry.artifacts[0]
-                .files
-                .iter()
-                .all(|file| file.url.is_some());
-            assert!(
-                !downloadable || entry.parameter_count < 1_000_000_000,
-                "{}",
-                entry.id
-            );
+            for artifact in &entry.artifacts {
+                assert_eq!(artifact.runtime_id, "llama.cpp", "{}", artifact.id);
+                for file in &artifact.files {
+                    assert!(valid_hash(&file.sha256), "{}", artifact.id);
+                    // A download URL resolves the exact pinned revision of
+                    // the repository the entry names, never a moving branch.
+                    if let Some(url) = &file.url {
+                        assert!(
+                            url.starts_with(&format!(
+                                "{}/resolve/{}/",
+                                entry.source_repository, artifact.source_revision
+                            )),
+                            "{} is not pinned: {url}",
+                            artifact.id
+                        );
+                        assert!(url.ends_with(&file.path), "{}", artifact.id);
+                    }
+                }
+                if artifact.files.len() > 1 {
+                    let count = artifact.files.len();
+                    for (index, file) in artifact.files.iter().enumerate() {
+                        assert!(
+                            file.path
+                                .contains(&format!("-{:05}-of-{count:05}", index + 1)),
+                            "{}: shards must be listed in order",
+                            artifact.id
+                        );
+                    }
+                    assert!(artifact.sha256.is_none(), "a bundle has no single digest");
+                }
+            }
+            if entry.license_acceptance.is_some() {
+                assert!(entry.license_url.starts_with("https://"), "{}", entry.id);
+            }
+            assert!(!entry.attribution.is_empty() && !entry.license.is_empty());
         }
+    }
+
+    #[test]
+    fn the_dated_popularity_snapshot_covers_its_top_ten_eligible_releases() {
+        let entries = entries().expect("catalog should parse");
+        let mut ranks: Vec<u64> = entries
+            .iter()
+            .filter_map(|entry| entry.popularity.as_ref())
+            .filter(|popularity| {
+                popularity["snapshot"]
+                    .as_str()
+                    .is_some_and(|snapshot| snapshot.starts_with("2026-10-15"))
+            })
+            .filter_map(|popularity| popularity["eligibleRank"].as_u64())
+            .collect();
+        ranks.sort_unstable();
+        ranks.dedup();
+        assert_eq!(&ranks[..10], &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
     }
 
     #[test]

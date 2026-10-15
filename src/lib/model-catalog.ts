@@ -65,6 +65,16 @@ export interface CatalogModel {
   supportedArchitectures: string[]
   tags: string[]
   releaseStatus: 'available' | 'deprecated'
+  originalRevision?: string
+  /** The license must be accepted in Juniper before downloading. */
+  licenseAcceptance?: 'required'
+  /** Dated Hugging Face download evidence; not a measure of quality or fit. */
+  popularity?: {
+    source: 'huggingface-downloads-30d'
+    snapshot: string
+    eligibleRank: number
+    downloads: number
+  }
   artifacts: CatalogArtifact[]
   /** Compatibility view; new code must use artifacts. */
   variants: CatalogArtifact[]
