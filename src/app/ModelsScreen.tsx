@@ -366,6 +366,8 @@ export function ModelsScreen({
       if (controller.current === next) controller.current = null
       setActiveDownload(null)
       setProgress(null)
+      // A paused or failed transfer leaves a resumable partial file.
+      setInstalled(await getManagedModels().catch(() => installed))
     }
   }
 
