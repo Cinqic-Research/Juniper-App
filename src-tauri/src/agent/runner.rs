@@ -30,26 +30,30 @@ const MODEL_IDLE_TIMEOUT: Duration = Duration::from_secs(120);
 const APPROVAL_LIFETIME_HOURS: i64 = 72;
 
 pub async fn worker<R: Runtime>(app: AppHandle<R>) {
+    // Schedules and approval expiry are checked on a clock of their own, so
+    // a steady queue of tasks cannot delay a scheduled run.
+    let mut last_check: Option<Instant> = None;
     loop {
         let state = app.state::<AppState>();
         let agent = &state.agent;
+        if last_check.is_none_or(|time| time.elapsed() >= Duration::from_secs(15)) {
+            last_check = Some(Instant::now());
+            if let Ok(connection) = agent.connection() {
+                expire_approvals(&app, &connection);
+                super::schedule::tick(&app, &connection, chrono::Utc::now());
+            }
+        }
         let next = if agent.is_stopped() {
             None
         } else {
             next_runnable(agent).ok().flatten()
         };
         match next {
-            Some(task_id) => {
-                run_task(&app, &task_id).await;
-            }
+            Some(task_id) => run_task(&app, &task_id).await,
             None => {
                 tokio::select! {
                     _ = agent.wake.notified() => {}
                     _ = tokio::time::sleep(Duration::from_secs(5)) => {}
-                }
-                if let Ok(connection) = agent.connection() {
-                    expire_approvals(&app, &connection);
-                    super::schedule::tick(&app, &connection, chrono::Utc::now());
                 }
             }
         }
