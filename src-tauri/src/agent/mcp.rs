@@ -1788,10 +1788,8 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn local_plugin_approval_identity_changes_when_the_executable_is_replaced() {
-        let root = std::env::temp_dir().join(format!(
-            "juniper-mcp-plugin-{}",
-            uuid::Uuid::new_v4()
-        ));
+        let root =
+            std::env::temp_dir().join(format!("juniper-mcp-plugin-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&root).unwrap();
         let executable = root.join("server");
         std::fs::write(&executable, b"original server bytes").unwrap();
