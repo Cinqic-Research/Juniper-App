@@ -3,8 +3,11 @@ export type ExecutionLocation = 'on-device' | 'local-network' | 'remote' | 'unkn
 export type SupportLevel = 'supported' | 'unsupported' | 'unknown'
 export type PermissionDecision = 'allow-once' | 'allow-chat' | 'allow-assistant' | 'deny'
 export type PermissionGrantScope = 'chat' | 'assistant'
-/** Primary destinations. Everything else is nested under Settings. */
-export type Page = 'chats' | 'models' | 'settings'
+/**
+ * Primary destinations. `chats` keeps its stored key; it is labelled Chat.
+ * Projects, schedules, skills, and plugins live inside Agent.
+ */
+export type Page = 'chats' | 'agent' | 'models' | 'settings'
 
 export type SettingsSection =
   | 'general'

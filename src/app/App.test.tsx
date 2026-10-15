@@ -125,12 +125,16 @@ describe('Juniper application shell', () => {
     expect(byLabel<HTMLButtonElement>(container, 'Send message').disabled).toBe(true)
   })
 
-  it('keeps exactly three primary destinations', async () => {
+  it('puts Agent, marked Beta, directly beside Chat in the four primary destinations', async () => {
     await mount(settingsFor())
     const primary = Array.from(document.querySelectorAll('.sidebar-nav button')).map((button) =>
       button.textContent?.trim(),
     )
-    expect(primary).toEqual(['Chats', 'Models', 'Settings'])
+    expect(primary).toEqual(['Chat', 'Agent Beta', 'Models', 'Settings'])
+    const phone = Array.from(document.querySelectorAll('.bottom-nav button')).map((button) =>
+      button.textContent?.trim(),
+    )
+    if (phone.length > 0) expect(phone).toEqual(['Chat', 'Agent (Beta)', 'Models', 'Settings'])
   })
 
   it('keeps every pre-redesign surface reachable from the new navigation', async () => {
@@ -624,7 +628,7 @@ describe('Juniper application shell', () => {
     await click(buttonByText(document.querySelector('[role="alertdialog"]')!, 'Clear chats'))
     expect(stored().conversations).toHaveLength(0)
 
-    await click(buttonByText(document.querySelector('.sidebar-nav')!, 'Chats'))
+    await click(buttonByText(document.querySelector('.sidebar-nav')!, 'Chat'))
     expect(container.querySelector('.chat-title h1')?.textContent).not.toBe('Plan the garden beds')
     const textarea = container.querySelector('textarea')!
     await act(async () => {

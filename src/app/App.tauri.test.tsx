@@ -51,6 +51,10 @@ describe('Juniper native startup', () => {
   function installTauri(handler: InvokeHandler) {
     commands = []
     invocations = []
+    Object.defineProperty(window, '__TAURI_EVENT_PLUGIN_INTERNALS__', {
+      configurable: true,
+      value: { unregisterListener: () => undefined },
+    })
     Object.defineProperty(window, '__TAURI_INTERNALS__', {
       configurable: true,
       value: {
@@ -114,7 +118,7 @@ describe('Juniper native startup', () => {
 
     expect(uncaught).toEqual([])
     expect(commands).toContain('list_models')
-    expect(container.textContent).toContain('Chats')
+    expect(container.textContent).toContain('Chat')
     const lastSave = invocations.filter((call) => call.command === 'save_app_data').at(-1)
     const savedModels = JSON.stringify(lastSave?.args ?? {})
     expect(savedModels).toContain('ollama-local:qwen3:8b')
