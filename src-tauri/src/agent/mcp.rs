@@ -812,12 +812,12 @@ fn sse_response(buffer: &[u8], id: u64) -> Option<Value> {
 /// are sent Base64-encoded as the transport requires.
 fn header_value(value: &str) -> String {
     use base64::Engine;
-    let plain = value
+    let sentinel = value.starts_with("=?base64?") && value.ends_with("?=");
+    let visible = value
         .chars()
-        .all(|character| (' '..='~').contains(&character))
-        && !value.starts_with(' ')
-        && !value.ends_with(' ')
-        && !(value.starts_with("=?base64?") && value.ends_with("?="));
+        .all(|character| (' '..='~').contains(&character));
+    let padded = value.starts_with(' ') || value.ends_with(' ');
+    let plain = visible && !padded && !sentinel;
     if plain {
         value.to_owned()
     } else {

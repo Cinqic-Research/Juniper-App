@@ -13,6 +13,8 @@ pub mod sandbox;
 pub mod schedule;
 pub mod skills;
 pub mod store;
+#[cfg(test)]
+mod tests;
 pub mod tools;
 pub mod types;
 pub mod web;
@@ -124,6 +126,11 @@ impl AgentState {
             .lock()
             .map(|active| active.keys().cloned().collect())
             .unwrap_or_default()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_paths_for_tests(&self, database: PathBuf, data: PathBuf) {
+        let _ = self.paths.set(Paths { database, data });
     }
 
     pub fn is_stopped(&self) -> bool {

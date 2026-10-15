@@ -61,18 +61,27 @@ impl TaskStatus {
     /// keeps the earlier goal and transcript.
     pub fn can_become(self, next: Self) -> bool {
         use TaskStatus::*;
-        match (self, next) {
-            (Queued, Running | Paused | Cancelled) => true,
-            (
-                Running,
-                Queued | WaitingInput | WaitingApproval | Paused | Interrupted | Completed | Failed
-                | Cancelled,
-            ) => true,
-            (WaitingInput | WaitingApproval, Queued | Paused | Cancelled | Failed) => true,
-            (Paused | Interrupted, Queued | Cancelled) => true,
-            (Completed | Failed, Queued) => true,
-            _ => false,
-        }
+        matches!(
+            (self, next),
+            (Queued, Running | Paused | Cancelled)
+                | (
+                    Running,
+                    Queued
+                        | WaitingInput
+                        | WaitingApproval
+                        | Paused
+                        | Interrupted
+                        | Completed
+                        | Failed
+                        | Cancelled
+                )
+                | (
+                    WaitingInput | WaitingApproval,
+                    Queued | Paused | Cancelled | Failed
+                )
+                | (Paused | Interrupted, Queued | Cancelled)
+                | (Completed | Failed, Queued)
+        )
     }
 }
 

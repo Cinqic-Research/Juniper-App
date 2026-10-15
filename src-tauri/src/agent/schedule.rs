@@ -248,9 +248,10 @@ pub fn local_label(instant: DateTime<Utc>, zone: &str) -> String {
         .unwrap_or_else(|_| instant.to_rfc3339())
 }
 
-fn schedule_from_row(
-    row: &rusqlite::Row<'_>,
-) -> rusqlite::Result<(String, String, bool, Option<String>, i64, String, String)> {
+/// id, payload, enabled, next_run_at, revision, created_at, updated_at
+type ScheduleRow = (String, String, bool, Option<String>, i64, String, String);
+
+fn schedule_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ScheduleRow> {
     Ok((
         row.get(0)?,
         row.get(1)?,

@@ -543,6 +543,9 @@ pub fn known_source_labels(connection: &Connection, task: &Task) -> Result<Vec<S
         .collect())
 }
 
+// A source record has this many independent facts; a struct for one call
+// site pattern would only move the list.
+#[allow(clippy::too_many_arguments)]
 pub fn record_source(
     connection: &Connection,
     task: &Task,

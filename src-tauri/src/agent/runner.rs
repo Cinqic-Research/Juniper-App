@@ -300,10 +300,8 @@ async fn run_task_inner<R: Runtime>(
         lineage,
     };
     loop {
-        if let Some(flow) = run.check_interrupts()? {
-            if matches!(flow, Flow::Yield) {
-                return Ok(());
-            }
+        if let Some(Flow::Yield) = run.check_interrupts()? {
+            return Ok(());
         }
         if run.task.pending.is_some() {
             match run.resolve_pending().await? {
@@ -852,9 +850,8 @@ impl<R: Runtime> Run<'_, R> {
             tool_call_id: Some(call.id.clone()),
             tool_name: Some(call.name.clone()),
         });
-        if let Some(action) =
-            store::action_for_call(&lock(&self.connection), &self.task.id, &call.id)?
-        {
+        let action = store::action_for_call(&lock(&self.connection), &self.task.id, &call.id)?;
+        if let Some(action) = action {
             let status = match outcome.status {
                 "success" => "succeeded",
                 "denied" => "denied",
@@ -899,19 +896,22 @@ impl<R: Runtime> Run<'_, R> {
             )));
         }
         self.task.usage.tool_calls += 1;
-        let prepared =
-            match tools::prepare(&lock(&self.connection), &self.context, &self.task, call) {
-                Ok(prepared) => prepared,
-                Err(error) => {
-                    action.status = "failed".into();
-                    if let Err(duplicate) = store::insert_action(&lock(&self.connection), &action) {
-                        return Ok(Some(Outcome::denied("DUPLICATE_CALL_ID", &duplicate)));
-                    }
-                    return Ok(Some(Outcome::error(error)));
+        // Bound first so the connection guard is released before either arm.
+        let prepared = tools::prepare(&lock(&self.connection), &self.context, &self.task, call);
+        let prepared = match prepared {
+            Ok(prepared) => prepared,
+            Err(error) => {
+                action.status = "failed".into();
+                let inserted = store::insert_action(&lock(&self.connection), &action);
+                if let Err(duplicate) = inserted {
+                    return Ok(Some(Outcome::denied("DUPLICATE_CALL_ID", &duplicate)));
                 }
-            };
+                return Ok(Some(Outcome::error(error)));
+            }
+        };
         action.binding = policy::binding(&call.name, &call.arguments, &prepared.target);
-        if let Err(duplicate) = store::insert_action(&lock(&self.connection), &action) {
+        let inserted = store::insert_action(&lock(&self.connection), &action);
+        if let Err(duplicate) = inserted {
             return Ok(Some(Outcome::denied("DUPLICATE_CALL_ID", &duplicate)));
         }
         match call.name.as_str() {
@@ -1076,12 +1076,13 @@ impl<R: Runtime> Run<'_, R> {
                     "approved" => {
                         // Re-prepare against the current state: a changed file,
                         // grant, plugin version, or argument makes it stale.
-                        let prepared = match tools::prepare(
+                        let prepared = tools::prepare(
                             &lock(&self.connection),
                             &self.context,
                             &self.task,
                             call,
-                        ) {
+                        );
+                        let prepared = match prepared {
                             Ok(prepared) => prepared,
                             Err(error) => return Ok(Some(Outcome::error(error))),
                         };
