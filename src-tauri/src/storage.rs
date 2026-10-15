@@ -1553,4 +1553,62 @@ mod tests {
         std::fs::remove_file(path).ok();
         Ok(())
     }
+    /// Upgrades a *copy* of a real database (path in JUNIPER_UPGRADE_DB) and
+    /// checks that the stored state survives unchanged. The original file is
+    /// only read.
+    #[test]
+    #[ignore = "needs a real database copy; run deliberately"]
+    fn live_upgrade_of_a_real_database_copy() -> Result<()> {
+        let source = std::path::PathBuf::from(
+            std::env::var("JUNIPER_UPGRADE_DB").expect("JUNIPER_UPGRADE_DB"),
+        );
+        let root = std::env::temp_dir().join(format!("juniper-upgrade-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).expect("directory");
+        let copy = root.join("juniper.db");
+        std::fs::copy(&source, &copy).expect("copy");
+        let before_version = existing_version(&copy)?;
+        let before: Option<Value> = {
+            let connection = Connection::open(&copy)?;
+            connection
+                .query_row(
+                    "SELECT payload FROM app_state WHERE id = 'singleton'",
+                    [],
+                    |row| row.get::<_, String>(0),
+                )
+                .optional()?
+                .map(|text| serde_json::from_str(&text).expect("json"))
+        };
+        initialize(&copy)?;
+        let after = load_app_data(&copy)?;
+        let backup = migration_backup_path(&copy, before_version.unwrap_or(0));
+        let count = |value: &Option<Value>, key: &str| {
+            value
+                .as_ref()
+                .and_then(|value| value[key].as_array().map(Vec::len))
+        };
+        println!(
+            "{}",
+            json!({
+                "fromVersion": before_version,
+                "toVersion": existing_version(&copy)?,
+                "backupKept": backup.is_file(),
+                "assistants": [count(&before, "assistants"), count(&after, "assistants")],
+                "conversations": [count(&before, "conversations"), count(&after, "conversations")],
+                "memories": [count(&before, "memories"), count(&after, "memories")],
+                "models": [count(&before, "models"), count(&after, "models")],
+                "settingsEqual": before.as_ref().map(|value| &value["settings"]) == after.as_ref().map(|value| &value["settings"]),
+            })
+        );
+        for key in [
+            "assistants",
+            "conversations",
+            "memories",
+            "models",
+            "providers",
+        ] {
+            assert_eq!(count(&before, key), count(&after, key), "{key}");
+        }
+        std::fs::remove_dir_all(root).ok();
+        Ok(())
+    }
 }
