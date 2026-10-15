@@ -103,10 +103,18 @@ describe('Juniper application shell', () => {
   it('shows onboarding with truthful runtime copy and a real way back to it', async () => {
     expect(document.body.textContent).toContain('Your AI. Your models. Your machine.')
     expect(document.body.textContent).toContain('No account. No telemetry.')
+    // Dark mode is one choice away on the first screen.
+    const dark = document.querySelector<HTMLInputElement>(
+      '.onboarding-theme input[type="radio"][value="dark"]',
+    )!
+    await click(dark)
+    expect(stored().settings.theme).toBe('dark')
     await click(buttonByText(document.body, 'Continue'))
     await click(buttonByText(document.body, 'Continue'))
     expect(document.body.textContent).toContain('Browser development preview')
     expect(document.body.textContent).not.toContain('Ollama detected')
+    await click(buttonByText(document.body, 'Continue'))
+    expect(document.body.textContent).toContain('Agent (Beta)')
     await click(buttonByText(document.body, 'Continue'))
     await click(buttonByText(document.body, 'Enter Juniper'))
     expect(document.querySelector('[role="dialog"]')).toBeNull()

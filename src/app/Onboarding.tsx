@@ -5,8 +5,20 @@ import { Icon } from './icons'
 import type { IconName } from './icons'
 import { nativeRuntimeLabel } from './ModelsScreen'
 import { Modal } from './overlays'
+import { Segmented } from './ui'
+import type { ThemePreference } from '../types'
 
-export function Onboarding({ open, onDone }: { open: boolean; onDone: () => void }) {
+export function Onboarding({
+  open,
+  onDone,
+  theme,
+  onTheme,
+}: {
+  open: boolean
+  onDone: () => void
+  theme: ThemePreference
+  onTheme: (theme: ThemePreference) => void
+}) {
   const [step, setStep] = useState(0)
   const [runtimeStatus, setRuntimeStatus] = useState('Checking this device…')
 
@@ -44,10 +56,16 @@ export function Onboarding({ open, onDone }: { open: boolean; onDone: () => void
       art: 'models',
     },
     {
+      eyebrow: 'Agent (Beta)',
+      title: 'Hand off work, and stay in control.',
+      copy: 'Agent works through a goal with the tools and folders you allow, asks before changing anything, and shows every step. It is in beta and runs only while Juniper is open.',
+      art: 'sparkle',
+    },
+    {
       eyebrow: 'Meet Juniper',
       title: 'A capable older sister for the things you’re figuring out.',
       copy: 'Warm, practical, direct, and honest about uncertainty. Change her personality — or build new assistants — in Settings.',
-      art: 'sparkle',
+      art: 'person',
     },
   ]
   const current = steps[step]!
@@ -70,6 +88,20 @@ export function Onboarding({ open, onDone }: { open: boolean; onDone: () => void
         <p className="onboarding-copy" aria-live="polite">
           {current.copy}
         </p>
+        {step === 0 && (
+          <div className="onboarding-theme">
+            <Segmented<ThemePreference>
+              label="Appearance"
+              value={theme}
+              onChange={onTheme}
+              options={[
+                { value: 'system', label: 'System' },
+                { value: 'light', label: 'Light' },
+                { value: 'dark', label: 'Dark' },
+              ]}
+            />
+          </div>
+        )}
         <div className="onboarding-progress" aria-label={`Step ${step + 1} of ${steps.length}`}>
           {steps.map((item, index) => (
             <span key={item.eyebrow} className={index <= step ? 'active' : ''} />

@@ -581,6 +581,10 @@ function JuniperApp() {
       <Onboarding
         open={hydrated && (!data.settings.onboardingComplete || replayingOnboarding)}
         onDone={completeOnboarding}
+        theme={data.settings.theme}
+        onTheme={(theme) =>
+          update((current) => ({ ...current, settings: { ...current.settings, theme } }))
+        }
       />
     </>
   )

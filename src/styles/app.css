@@ -3319,3 +3319,9 @@ div.artifact-preview {
 .app-frame[data-layout='mobile'] .agent-composer-row > * {
   flex: 1 1 100%;
 }
+
+.onboarding-theme {
+  display: flex;
+  justify-content: center;
+  margin-top: var(--space-3);
+}
