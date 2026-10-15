@@ -726,6 +726,14 @@ pub fn start_run(
 /// Settles a terminal task and records its retry claim in one transaction.
 /// `finalized_at` makes startup reconciliation idempotent, including recovery
 /// of legacy v5 rows interrupted between status update and retry insertion.
+struct ScheduleRunFinalization {
+    schedule_id: String,
+    scheduled_for: String,
+    attempt: i64,
+    task_id: Option<String>,
+    finalized_at: Option<String>,
+}
+
 fn finalize_terminal_run(
     connection: &Connection,
     run_id: &str,
@@ -735,19 +743,27 @@ fn finalize_terminal_run(
         return Ok(());
     }
     let transaction = connection.unchecked_transaction().map_err(db_error)?;
-    let run: Option<(String, String, i64, Option<String>, Option<String>)> = transaction
+    let run: Option<ScheduleRunFinalization> = transaction
         .query_row(
             "SELECT schedule_id, scheduled_for, attempt, task_id, finalized_at FROM schedule_runs WHERE id = ?1",
             [run_id],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
+            |row| {
+                Ok(ScheduleRunFinalization {
+                    schedule_id: row.get(0)?,
+                    scheduled_for: row.get(1)?,
+                    attempt: row.get(2)?,
+                    task_id: row.get(3)?,
+                    finalized_at: row.get(4)?,
+                })
+            },
         )
         .optional()
         .map_err(db_error)?;
-    let Some((schedule_id, scheduled_for, attempt, task_id, finalized_at)) = run else {
+    let Some(run) = run else {
         transaction.commit().map_err(db_error)?;
         return Ok(());
     };
-    if finalized_at.is_some() {
+    if run.finalized_at.is_some() {
         transaction.commit().map_err(db_error)?;
         return Ok(());
     }
@@ -761,12 +777,12 @@ fn finalize_terminal_run(
         .map_err(db_error)?;
 
     if status == TaskStatus::Failed
-        && let Some(task_id) = task_id.as_deref()
+        && let Some(task_id) = run.task_id.as_deref()
     {
-        let schedule = get(&transaction, &schedule_id)?;
+        let schedule = get(&transaction, &run.schedule_id)?;
         if schedule.enabled
-            && attempt > 0
-            && (attempt as u64) <= u64::from(schedule.spec.retry_limit)
+            && run.attempt > 0
+            && (run.attempt as u64) <= u64::from(schedule.spec.retry_limit)
         {
             let root_id: Option<String> = transaction
                 .query_row(
@@ -787,12 +803,12 @@ fn finalize_terminal_run(
             } else {
                 true
             };
-            if !changed_something && let Some(next_attempt) = attempt.checked_add(1) {
+            if !changed_something && let Some(next_attempt) = run.attempt.checked_add(1) {
                 let retry_id = store::new_id("run");
                 transaction
                     .execute(
                         "INSERT OR IGNORE INTO schedule_runs(id, schedule_id, scheduled_for, attempt, status, created_at, updated_at, detail) VALUES(?1, ?2, ?3, ?4, 'started', ?5, ?5, 'Retry of a failed occurrence that changed nothing')",
-                        params![retry_id, schedule_id, scheduled_for, next_attempt, now],
+                        params![retry_id, run.schedule_id, run.scheduled_for, next_attempt, now],
                     )
                     .map_err(db_error)?;
             }

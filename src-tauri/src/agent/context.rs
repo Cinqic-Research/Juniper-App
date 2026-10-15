@@ -442,65 +442,6 @@ pub fn resolve(connection: &Connection, task: &Task) -> Result<RunContext, Strin
     })
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn provider(base_url: &str, kind: &str) -> ProviderProfile {
-        ProviderProfile {
-            id: "provider".into(),
-            name: "Provider".into(),
-            kind: kind.into(),
-            base_url: base_url.into(),
-            locality: "local".into(),
-            transport_location: "on-device".into(),
-            api_key_ref: None,
-            device_id: None,
-            device_link_fingerprint: None,
-        }
-    }
-
-    #[test]
-    fn route_location_is_derived_from_the_current_provider_endpoint() {
-        assert_eq!(
-            route_location(&provider("http://127.0.0.1:8080", "ollama")),
-            "on-device"
-        );
-        assert_eq!(
-            route_location(&provider("http://192.168.1.5:8080", "ollama")),
-            "local-network"
-        );
-        for reserved in [
-            "http://100.64.0.1:8080",
-            "http://192.0.2.1:8080",
-            "http://169.254.169.254:8080",
-            "http://168.63.129.16:8080",
-            "http://224.0.0.1:8080",
-            "http://[fd00:ec2::254]:8080",
-            "http://[fd20:ce::254]:8080",
-        ] {
-            assert_eq!(
-                route_location(&provider(reserved, "openai-compatible")),
-                "unknown",
-                "reserved or non-public provider route should remain unknown: {reserved}"
-            );
-        }
-        assert_eq!(
-            route_location(&provider("https://8.8.8.8/v1", "openai-compatible")),
-            "remote"
-        );
-        assert_eq!(
-            route_location(&provider("https://api.example.com/v1", "openai-compatible")),
-            "remote"
-        );
-        assert_eq!(
-            route_location(&provider("not a url", "openai-compatible")),
-            "unknown"
-        );
-        assert_eq!(route_location(&provider("", "juniper-local")), "on-device");
-    }
-}
-
 /// The tools this task may see: enabled for the agent, available on this
 /// platform and configuration, and — for a delegated task — allowed for its
 /// role and already allowed for its parent.
@@ -720,4 +661,63 @@ pub fn instructions(context: &RunContext, task: &Task, lineage: &str) -> Result<
 
 pub fn digest(text: &str) -> String {
     format!("{:x}", Sha256::digest(text.as_bytes()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn provider(base_url: &str, kind: &str) -> ProviderProfile {
+        ProviderProfile {
+            id: "provider".into(),
+            name: "Provider".into(),
+            kind: kind.into(),
+            base_url: base_url.into(),
+            locality: "local".into(),
+            transport_location: "on-device".into(),
+            api_key_ref: None,
+            device_id: None,
+            device_link_fingerprint: None,
+        }
+    }
+
+    #[test]
+    fn route_location_is_derived_from_the_current_provider_endpoint() {
+        assert_eq!(
+            route_location(&provider("http://127.0.0.1:8080", "ollama")),
+            "on-device"
+        );
+        assert_eq!(
+            route_location(&provider("http://192.168.1.5:8080", "ollama")),
+            "local-network"
+        );
+        for reserved in [
+            "http://100.64.0.1:8080",
+            "http://192.0.2.1:8080",
+            "http://169.254.169.254:8080",
+            "http://168.63.129.16:8080",
+            "http://224.0.0.1:8080",
+            "http://[fd00:ec2::254]:8080",
+            "http://[fd20:ce::254]:8080",
+        ] {
+            assert_eq!(
+                route_location(&provider(reserved, "openai-compatible")),
+                "unknown",
+                "reserved or non-public provider route should remain unknown: {reserved}"
+            );
+        }
+        assert_eq!(
+            route_location(&provider("https://8.8.8.8/v1", "openai-compatible")),
+            "remote"
+        );
+        assert_eq!(
+            route_location(&provider("https://api.example.com/v1", "openai-compatible")),
+            "remote"
+        );
+        assert_eq!(
+            route_location(&provider("not a url", "openai-compatible")),
+            "unknown"
+        );
+        assert_eq!(route_location(&provider("", "juniper-local")), "on-device");
+    }
 }

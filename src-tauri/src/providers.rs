@@ -50,7 +50,6 @@ const MAX_CONTEXT_MEMORIES: usize = 64;
 struct ResolvedProviderEndpoint {
     domain: Option<String>,
     addresses: Vec<SocketAddr>,
-    local: bool,
 }
 
 fn is_local_provider_address(address: IpAddr) -> bool {
@@ -141,7 +140,6 @@ fn provider_endpoint_from_addresses(
     Ok(ResolvedProviderEndpoint {
         domain: domain.map(str::to_owned),
         addresses: unique,
-        local: local.unwrap_or(false),
     })
 }
 
@@ -3729,24 +3727,21 @@ mod tests {
         );
         assert!(
             provider_endpoint_from_addresses(Some("llm.local"), &["127.0.0.1:0".parse().unwrap()])
-                .unwrap()
-                .local
+                .is_ok()
         );
         for address in ["169.254.3.4:0", "[fe80::1]:0"] {
             assert!(
                 provider_endpoint_from_addresses(Some("llm.local"), &[address.parse().unwrap()])
-                    .unwrap()
-                    .local,
+                    .is_ok(),
                 "link-local endpoint {address} should remain a local provider route"
             );
         }
         assert!(
-            !provider_endpoint_from_addresses(
+            provider_endpoint_from_addresses(
                 Some("api.example.com"),
                 &["8.8.8.8:0".parse().unwrap()]
             )
-            .unwrap()
-            .local
+            .is_ok()
         );
     }
 
@@ -4639,14 +4634,13 @@ data: [DONE]"#,
                         .expect("test hostname should map to its local address"),
                         "public" => ResolvedProviderEndpoint {
                             // The fixture's pinned socket is loopback so the
-                            // test can reach its local server; `local: false`
-                            // exercises the public-route proxy policy.
+                            // test can reach its local server; this fixture
+                            // path still exercises public-route proxy policy.
                             domain: url.host_str().map(str::to_owned),
                             addresses: vec![std::net::SocketAddr::new(
                                 IpAddr::V4(std::net::Ipv4Addr::LOCALHOST),
                                 url.port().expect("fixture URL should include a port"),
                             )],
-                            local: false,
                         },
                         _ => panic!("unexpected fixture route class"),
                     };

@@ -89,7 +89,11 @@ impl AgentState {
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub fn acquire_runtime_lock(&self, path: &std::path::Path) -> io::Result<()> {
-        let file = OpenOptions::new().write(true).create(true).open(path)?;
+        let file = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(path)?;
         file.try_lock().map_err(|error| match error {
             std::fs::TryLockError::WouldBlock => io::Error::new(
                 io::ErrorKind::AlreadyExists,

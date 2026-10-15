@@ -988,7 +988,7 @@ fn delegated_work_joins_within_role_and_parent_limits_and_cancellation_reaches_c
         parent.status_reason
     );
     assert!(parent.usage.steps >= child.usage.steps + 2);
-    assert!(parent.usage.tool_calls >= child.usage.tool_calls + 1);
+    assert!(parent.usage.tool_calls > child.usage.tool_calls);
     assert!(parent.usage.tokens() > child.usage.tokens());
     assert!(parent.usage.active_ms >= child.usage.active_ms);
     assert!(

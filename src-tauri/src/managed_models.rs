@@ -1008,10 +1008,8 @@ fn verify_against(
         if let (Some(record), Ok(mut cache)) = (before, verified_cache().lock()) {
             cache.insert(path.to_owned(), record);
         }
-    } else {
-        if let Ok(mut cache) = verified_cache().lock() {
-            cache.remove(path);
-        }
+    } else if let Ok(mut cache) = verified_cache().lock() {
+        cache.remove(path);
     }
     Ok(verified && unchanged)
 }
