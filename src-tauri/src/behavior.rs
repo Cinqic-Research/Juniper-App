@@ -93,6 +93,15 @@ fn strip_tags(text: &str, tags: &[&str]) -> String {
     text
 }
 
+/// The constitution's rules, for host instructions composed outside chat.
+pub fn constitution_rules() -> Result<Vec<String>, String> {
+    Ok(constitution()?
+        .rules
+        .into_iter()
+        .map(|rule| rule.text)
+        .collect())
+}
+
 pub fn constitution_id() -> String {
     constitution().map(|value| value.id).unwrap_or_default()
 }

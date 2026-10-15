@@ -30,6 +30,7 @@ pub struct AppState {
     pub runtime_logs: Mutex<VecDeque<RuntimeLogEntry>>,
     #[cfg(not(target_os = "android"))]
     pub local_runtime: crate::local_runtime::LocalRuntime,
+    pub agent: crate::agent::AgentState,
 }
 
 struct PickerGuard<'a>(&'a AtomicBool);

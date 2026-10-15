@@ -93,7 +93,7 @@ struct TextLaunch {
 
 /// Marks the resident server as in use; switching models or unloading waits
 /// for in-flight generations instead of killing them.
-struct Lease(Arc<AtomicUsize>);
+pub(crate) struct Lease(Arc<AtomicUsize>);
 
 impl Drop for Lease {
     fn drop(&mut self) {
@@ -410,7 +410,26 @@ pub async fn stream_chat<R: Runtime>(
         drop(lease);
         return Ok(());
     }
-    let policy = RequestPolicy {
+    let policy = text_policy(&route);
+    let mut normalized = request;
+    normalized.provider.kind = "openai-compatible".into();
+    normalized.provider.base_url = route.endpoint.clone();
+    providers::stream(
+        normalized,
+        app.clone(),
+        cancellation,
+        state,
+        policy,
+        Some(route.identity.clone()),
+    )
+    .await;
+    drop(lease);
+    Ok(())
+}
+
+/// The request policy for a text-mode route to the resident server.
+fn text_policy(route: &Route) -> RequestPolicy {
+    RequestPolicy {
         idle_timeout: route
             .profile
             .as_ref()
@@ -428,21 +447,40 @@ pub async fn stream_chat<R: Runtime>(
         #[cfg(target_os = "linux")]
         loopback_owner: route.owner_pid.map(|pid| (pid, route.port)),
         lineage: Some(route.lineage.clone()),
-    };
-    let mut normalized = request;
+    }
+}
+
+/// Starts or reuses the resident server for one agent model turn. The lease
+/// is held only for that turn, so chats and agent tasks share one resident
+/// model and the server is never started twice. Juniper 1's token-ID backend
+/// is not qualified for agent work and is refused.
+pub(crate) async fn agent_route<R: Runtime>(
+    app: &AppHandle<R>,
+    request: &ChatRequest,
+    cancellation: &Cancellation,
+    state: &AppState,
+) -> Result<(Lease, ChatRequest, RequestPolicy), String> {
+    providers::validate_local_request(request)?;
+    if juniper1::profile::find(
+        request
+            .model
+            .catalog_id
+            .as_deref()
+            .unwrap_or(&request.model.model_id),
+    )
+    .is_some()
+    {
+        return Err("AGENT_MODEL_NOT_QUALIFIED: Juniper 1 is not qualified for agent tasks. Choose another model.".into());
+    }
+    let (lease, route) = state
+        .local_runtime
+        .acquire(app, request, cancellation, state)
+        .await?;
+    let policy = text_policy(&route);
+    let mut normalized = request.clone();
     normalized.provider.kind = "openai-compatible".into();
     normalized.provider.base_url = route.endpoint.clone();
-    providers::stream(
-        normalized,
-        app.clone(),
-        cancellation,
-        state,
-        policy,
-        Some(route.identity.clone()),
-    )
-    .await;
-    drop(lease);
-    Ok(())
+    Ok((lease, normalized, policy))
 }
 
 // Starting a server needs the request (for activity events), the catalog

@@ -9,6 +9,7 @@ use crate::domain::{
 use crate::tools;
 use futures_util::StreamExt;
 use reqwest::{Client, Response};
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, HashSet};
 use std::time::Instant;
@@ -126,7 +127,7 @@ fn openai_api_base(base_url: &str) -> Result<String, ProviderError> {
     })
 }
 
-fn validate_chat_request(request: &ChatRequest) -> Result<(), ProviderError> {
+pub(crate) fn validate_chat_request(request: &ChatRequest) -> Result<(), ProviderError> {
     if request.provider.kind == "juniper-network" {
         return Err(ProviderError::new(
             "DEVICE_LINK_TRANSPORT_UNAVAILABLE",
@@ -513,6 +514,24 @@ fn add_credential(
     Ok(call)
 }
 
+/// A stored secret for a host-side connector (web search key, plugin token).
+/// Desktop keychain only; the value never leaves the native host.
+pub(crate) fn stored_secret(reference: &str) -> Result<String, String> {
+    if !valid_credential_reference(reference) {
+        return Err("The credential reference is invalid.".into());
+    }
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        keyring::Entry::new("com.cinqic.juniper", reference)
+            .and_then(|entry| entry.get_password())
+            .map_err(|_| "The saved credential is unavailable.".to_owned())
+    }
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        Err("Connector credentials are available on desktop in this beta.".into())
+    }
+}
+
 fn add_credential_with_app<R: Runtime>(
     app: &AppHandle<R>,
     call: reqwest::RequestBuilder,
@@ -540,6 +559,8 @@ struct TurnOutcome {
     /// Analysis from this turn, kept only while a Harmony tool call is pending.
     reasoning: String,
     finish_reason: Option<String>,
+    /// Token counts the provider reported for this turn, if any.
+    usage: Option<Usage>,
 }
 
 impl TurnOutcome {
@@ -1559,6 +1580,144 @@ pub(crate) fn emit_reasoning_activity<R: Runtime>(
     let _ = app.emit(topic, event);
 }
 
+/// One model turn for the agent runtime: the agent owns the transcript, the
+/// tool policy, and the loop, so nothing here executes a tool.
+pub(crate) struct AgentTurn {
+    pub(crate) content: String,
+    pub(crate) tool_calls: Vec<NormalizedToolCall>,
+    pub(crate) usage: Option<Usage>,
+}
+
+/// A provider-neutral transcript message, converted to each provider's
+/// wire shape here so the agent's persisted transcript survives a model switch.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct TranscriptMessage {
+    pub(crate) role: String,
+    #[serde(default)]
+    pub(crate) content: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) tool_calls: Vec<TranscriptToolCall>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) tool_call_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) tool_name: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub(crate) struct TranscriptToolCall {
+    pub(crate) id: String,
+    pub(crate) name: String,
+    pub(crate) arguments: Value,
+}
+
+fn wire_messages(kind: &str, messages: &[TranscriptMessage]) -> Vec<Value> {
+    messages
+        .iter()
+        .map(|message| {
+            let content = behavior::neutralize_control_tokens(&message.content).into_owned();
+            match message.role.as_str() {
+                "assistant" if !message.tool_calls.is_empty() => {
+                    if kind == "ollama" {
+                        json!({
+                            "role": "assistant",
+                            "content": content,
+                            "tool_calls": message.tool_calls.iter().map(|call| json!({
+                                "function": { "name": call.name, "arguments": neutralized_arguments(&call.arguments) }
+                            })).collect::<Vec<_>>()
+                        })
+                    } else {
+                        json!({
+                            "role": "assistant",
+                            "content": if content.is_empty() { Value::Null } else { json!(content) },
+                            "tool_calls": message.tool_calls.iter().map(|call| json!({
+                                "id": call.id,
+                                "type": "function",
+                                "function": {
+                                    "name": call.name,
+                                    "arguments": behavior::neutralize_control_tokens(&call.arguments.to_string())
+                                }
+                            })).collect::<Vec<_>>()
+                        })
+                    }
+                }
+                "tool" if kind == "ollama" => json!({
+                    "role": "tool",
+                    "tool_name": message.tool_name.clone().unwrap_or_default(),
+                    "content": content
+                }),
+                "tool" => json!({
+                    "role": "tool",
+                    "tool_call_id": message.tool_call_id.clone().unwrap_or_default(),
+                    "content": content
+                }),
+                role => json!({ "role": role, "content": content }),
+            }
+        })
+        .collect()
+}
+
+pub(crate) async fn agent_turn<R: Runtime>(
+    request: &ChatRequest,
+    messages: &[TranscriptMessage],
+    tools: &[Value],
+    app: &AppHandle<R>,
+    topic: &str,
+    cancellation: &Cancellation,
+    policy: &RequestPolicy,
+) -> Result<AgentTurn, ProviderError> {
+    let wire = wire_messages(&request.provider.kind, messages);
+    let outcome = if request.provider.kind == "ollama" {
+        let endpoint = format!(
+            "{}/api/chat",
+            validated_base_url(&request.provider.base_url)?
+        );
+        stream_one_ollama_turn(
+            request,
+            &endpoint,
+            &wire,
+            tools,
+            app,
+            topic,
+            cancellation,
+            policy,
+        )
+        .await?
+    } else {
+        let base = openai_api_base(&request.provider.base_url)?;
+        let body = openai_body(request, &wire, tools, policy);
+        check_context(
+            request,
+            policy,
+            base.trim_end_matches("/v1"),
+            &body,
+            app,
+            cancellation,
+        )
+        .await?;
+        stream_one_openai_turn(
+            request,
+            &format!("{base}/chat/completions"),
+            &body,
+            app,
+            topic,
+            cancellation,
+            policy,
+        )
+        .await?
+    };
+    if outcome.tool_calls.is_empty() {
+        outcome.accept_answer(policy)?;
+    } else {
+        outcome.validate_content(policy)?;
+    }
+    Ok(AgentTurn {
+        content: outcome.content,
+        tool_calls: outcome.tool_calls,
+        usage: outcome.usage,
+    })
+}
+
 fn openai_body(
     request: &ChatRequest,
     messages: &[Value],
@@ -1856,6 +2015,7 @@ async fn stream_one_openai_turn<R: Runtime>(
             return Err(stream_error(policy, message));
         }
         if let Some(usage) = provider_usage(&value, None) {
+            outcome.usage = Some(usage.clone());
             let mut event = ChatStreamEvent::for_request(&request.request_id);
             event.usage = Some(usage);
             let _ = app.emit(topic, event);
@@ -2058,6 +2218,7 @@ async fn stream_one_ollama_turn<R: Runtime>(
             terminal_record_seen = true;
             outcome.finish_reason = value["done_reason"].as_str().map(str::to_owned);
             if let Some(usage) = provider_usage(&value, Some("total_duration")) {
+                outcome.usage = Some(usage.clone());
                 let mut event = ChatStreamEvent::for_request(&request.request_id);
                 event.usage = Some(usage);
                 let _ = app.emit(topic, event);
