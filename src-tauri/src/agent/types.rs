@@ -300,6 +300,8 @@ pub struct TaskAction {
 pub struct Approval {
     pub id: String,
     pub task_id: String,
+    /// The top-level task this approval belongs to (itself or an ancestor).
+    pub root_id: String,
     pub action_id: String,
     pub tool: String,
     pub capability: String,

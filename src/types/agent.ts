@@ -128,6 +128,8 @@ export interface TaskAction {
 export interface Approval {
   id: string
   taskId: string
+  /** The top-level task the approval belongs to. */
+  rootId: string
   actionId: string
   tool: string
   capability: string

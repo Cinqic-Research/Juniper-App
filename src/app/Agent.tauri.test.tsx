@@ -113,6 +113,7 @@ const detail: TaskDetail = {
     {
       id: 'approval-1',
       taskId: 'task-1',
+      rootId: 'task-1',
       actionId: 'action-1',
       tool: 'workspace.write',
       capability: 'workspace.write',

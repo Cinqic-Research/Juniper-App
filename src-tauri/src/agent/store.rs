@@ -431,6 +431,7 @@ fn approval_from_row(row: &Row<'_>) -> rusqlite::Result<Approval> {
     Ok(Approval {
         id: row.get(0)?,
         task_id: row.get(1)?,
+        root_id: row.get(13)?,
         action_id: row.get(2)?,
         tool: row.get(3)?,
         capability: row.get(4)?,
@@ -446,6 +447,8 @@ fn approval_from_row(row: &Row<'_>) -> rusqlite::Result<Approval> {
 }
 
 const APPROVAL_COLUMNS: &str = "id, task_id, action_id, tool, capability, preview, binding, standing_allowed, status, decision, created_at, decided_at, expires_at";
+/// Approval columns plus the owning task's root, for reads.
+const APPROVAL_SELECT: &str = "SELECT a.id, a.task_id, a.action_id, a.tool, a.capability, a.preview, a.binding, a.standing_allowed, a.status, a.decision, a.created_at, a.decided_at, a.expires_at, t.root_id FROM approvals a JOIN tasks t ON t.id = a.task_id";
 
 pub fn insert_approval(connection: &Connection, approval: &Approval) -> StoreResult<()> {
     connection
@@ -474,7 +477,7 @@ pub fn insert_approval(connection: &Connection, approval: &Approval) -> StoreRes
 pub fn approval(connection: &Connection, id: &str) -> StoreResult<Approval> {
     connection
         .query_row(
-            &format!("SELECT {APPROVAL_COLUMNS} FROM approvals WHERE id = ?1"),
+            &format!("{APPROVAL_SELECT} WHERE a.id = ?1"),
             [id],
             approval_from_row,
         )
@@ -486,7 +489,7 @@ pub fn approval(connection: &Connection, id: &str) -> StoreResult<Approval> {
 pub fn approvals_for_task(connection: &Connection, task_id: &str) -> StoreResult<Vec<Approval>> {
     let mut statement = connection
         .prepare(&format!(
-            "SELECT {APPROVAL_COLUMNS} FROM approvals WHERE task_id = ?1 ORDER BY created_at"
+            "{APPROVAL_SELECT} WHERE a.task_id = ?1 ORDER BY a.created_at"
         ))
         .map_err(db_error)?;
     statement
@@ -499,7 +502,7 @@ pub fn approvals_for_task(connection: &Connection, task_id: &str) -> StoreResult
 pub fn pending_approvals(connection: &Connection) -> StoreResult<Vec<Approval>> {
     let mut statement = connection
         .prepare(&format!(
-            "SELECT {APPROVAL_COLUMNS} FROM approvals WHERE status = 'pending' ORDER BY created_at"
+            "{APPROVAL_SELECT} WHERE a.status = 'pending' ORDER BY a.created_at"
         ))
         .map_err(db_error)?;
     statement

@@ -1009,6 +1009,7 @@ impl<R: Runtime> Run<'_, R> {
         let approval = Approval {
             id: store::new_id("approval"),
             task_id: self.task.id.clone(),
+            root_id: self.task.root_id.clone(),
             action_id: action_id.to_owned(),
             tool: call.name.clone(),
             capability: prepared.capability.clone(),

@@ -244,8 +244,13 @@ function TasksPanel({
   const toolsQualified = model?.capabilities.tools === 'supported'
   const allowUnqualified = profile?.profile.allowUnqualifiedModel ?? false
   const projects = overview.projects.filter((project) => !project.archived)
+  // A subtask's request surfaces on its top-level task.
+  const waitingRoots = new Set(overview.pendingApprovals.map((approval) => approval.rootId))
   const attention = overview.tasks.filter(
-    (task) => task.status === 'waiting-approval' || task.status === 'waiting-input',
+    (task) =>
+      task.status === 'waiting-approval' ||
+      task.status === 'waiting-input' ||
+      waitingRoots.has(task.id),
   )
   const active = overview.tasks.filter(
     (task) => ACTIVE.includes(task.status) && !attention.includes(task),
