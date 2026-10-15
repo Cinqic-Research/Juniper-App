@@ -102,6 +102,35 @@ pub fn availability() -> Result<(), String> {
     }
 }
 
+#[cfg(all(test, target_os = "linux"))]
+thread_local! {
+    /// Tests use this to take the older-bubblewrap path on any system.
+    static UNBOUNDED_TMPFS_FOR_TESTS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+#[cfg(target_os = "linux")]
+fn unbounded_tmpfs_forced() -> bool {
+    #[cfg(test)]
+    return UNBOUNDED_TMPFS_FOR_TESTS.with(std::cell::Cell::get);
+    #[cfg(not(test))]
+    false
+}
+
+/// Whether this bubblewrap can bound a tmpfs (`--size`; older releases cannot).
+#[cfg(target_os = "linux")]
+fn tmpfs_size_supported(bwrap: &str) -> bool {
+    static SUPPORTED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *SUPPORTED.get_or_init(|| {
+        std::process::Command::new(bwrap)
+            .arg("--help")
+            .output()
+            .is_ok_and(|output| {
+                String::from_utf8_lossy(&output.stdout).contains("--size")
+                    || String::from_utf8_lossy(&output.stderr).contains("--size")
+            })
+    })
+}
+
 /// `/lib`, `/bin`, and friends: recreated as the same links on merged-/usr
 /// systems, or bound read-only where they are real folders.
 #[cfg(target_os = "linux")]
@@ -224,14 +253,24 @@ pub async fn run(
         "/proc",
         "--dev",
         "/dev",
-        "--size",
-        "67108864",
-        "--tmpfs",
-        "/tmp",
     ]
     .iter()
     .map(|value| (*value).to_owned())
     .collect();
+    if tmpfs_size_supported(bwrap) && !unbounded_tmpfs_forced() {
+        args.extend(["--size", "67108864", "--tmpfs", "/tmp"].map(str::to_owned));
+    } else {
+        // Older bubblewrap cannot bound a tmpfs, so `/tmp` lives in the work
+        // folder, where the quota watcher bounds it.
+        let temporary = work.join(".tmp");
+        std::fs::create_dir_all(&temporary)
+            .map_err(|_| fail("SANDBOX_FAILED", "The sandbox folder could not be created."))?;
+        args.extend([
+            "--bind".into(),
+            temporary.to_string_lossy().into_owned(),
+            "/tmp".into(),
+        ]);
+    }
     args.extend(system_links());
     args.extend([
         "--bind".into(),
@@ -653,6 +692,22 @@ open("result.txt", "w").write("ok")
             "visible"
         );
         std::fs::remove_dir_all(project).ok();
+    }
+
+    #[tokio::test]
+    async fn without_tmpfs_bounds_tmp_lives_in_the_watched_work_folder() {
+        if availability().is_err() {
+            return;
+        }
+        UNBOUNDED_TMPFS_FOR_TESTS.with(|forced| forced.set(true));
+        let ran = python(
+            "import os\nopen('/tmp/scratch.txt','w').write('x')\nprint(os.path.exists('/work/.tmp/scratch.txt'))\n",
+            None,
+        )
+        .await;
+        UNBOUNDED_TMPFS_FOR_TESTS.with(|forced| forced.set(false));
+        assert_eq!(ran.exit_code, Some(0), "{}", ran.stderr);
+        assert!(ran.stdout.contains("True"), "{}", ran.stdout);
     }
 
     #[tokio::test]
