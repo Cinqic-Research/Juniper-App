@@ -6,6 +6,7 @@
 use super::store;
 use super::types::*;
 use crate::commands::AppState;
+use crate::providers::{TranscriptMessage, TranscriptToolCall};
 use serde_json::{Value, json};
 use std::io::{Read, Write};
 use std::path::PathBuf;
@@ -80,11 +81,24 @@ fn model_server(script: Vec<String>, requests: Arc<Mutex<Vec<Value>>>) -> String
                     break;
                 }
             }
-            let response = format!(
-                "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-                body.len(),
+            let body = if let Some(delayed) = body.strip_prefix("DELAY_MS:") {
+                let (delay, response) = delayed.split_once('\n').expect("delay fixture format");
+                std::thread::sleep(std::time::Duration::from_millis(
+                    delay.parse().expect("delay milliseconds"),
+                ));
+                response.to_owned()
+            } else {
                 body
-            );
+            };
+            let response = if body.starts_with("HTTP/") {
+                body
+            } else {
+                format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    body.len(),
+                    body
+                )
+            };
             let _ = stream.write_all(response.as_bytes());
         }
     });
@@ -145,6 +159,434 @@ fn new_fixture_with(setup: impl FnOnce(&std::path::Path) -> Vec<String>) -> Fixt
         app,
         requests,
     }
+}
+
+#[test]
+fn task_disclosure_uses_current_provider_route_when_model_metadata_is_stale() {
+    let fixture = new_fixture(vec![]);
+    let id = fixture.start("Describe the route.", false);
+    let connection = fixture.connection();
+    let mut snapshot = store::app_snapshot(&connection).unwrap();
+    let provider = &mut snapshot["providers"][0];
+    provider["baseUrl"] = json!("https://api.example.com/v1");
+    provider["locality"] = json!("local");
+    provider["transportLocation"] = json!("on-device");
+    let model = &mut snapshot["models"][0];
+    model["executionLocation"] = json!("on-device");
+    connection
+        .execute(
+            "UPDATE app_state SET payload = ?1 WHERE id = 'singleton'",
+            [snapshot.to_string()],
+        )
+        .unwrap();
+
+    let task = store::load_task(&connection, &id).unwrap();
+    let context = super::context::resolve(&connection, &task).unwrap();
+    assert_eq!(context.provider.transport_location, "remote");
+    assert_eq!(context.model.execution_location, "remote");
+    assert!(
+        super::context::instructions(&context, &task, "lineage")
+            .unwrap()
+            .contains("on a remote service; task content is sent to it")
+    );
+}
+
+#[test]
+fn changing_a_provider_route_pauses_an_active_task_using_its_saved_run_context() {
+    let fixture = new_fixture(vec![]);
+    let id = fixture.start("Describe the route.", false);
+    let connection = fixture.connection();
+    let old_snapshot = store::app_snapshot(&connection).unwrap();
+    let mut new_snapshot = old_snapshot.clone();
+    new_snapshot["providers"][0]["baseUrl"] = json!("http://127.0.0.1:11435");
+    let agent = &fixture.app.state::<AppState>().agent;
+    agent.begin(&id).expect("active run should register");
+
+    super::context::pause_tasks_with_route_changes(
+        agent,
+        &connection,
+        Some(&old_snapshot),
+        &new_snapshot,
+    )
+    .unwrap();
+
+    assert_eq!(agent.intent(&id), Some(super::Intent::PauseForRouteChange));
+}
+
+#[test]
+fn route_change_pauses_a_waiting_approval_with_private_project_context_until_resume() {
+    let fixture = new_fixture(vec![
+        sse_tool_calls(&[(
+            "read-private-note",
+            "workspace.read",
+            json!({ "rootId": "root-1", "path": "notes.md" }),
+        )]),
+        sse_tool_calls(&[(
+            "write-after-review",
+            "workspace.write",
+            json!({ "rootId": "root-1", "path": "out/summary.md", "content": "Budget reviewed.\n", "expectedVersion": "absent" }),
+        )]),
+    ]);
+    let id = fixture.start("Read the budget note, then save a summary.", true);
+    let waiting = fixture.run(&id);
+    assert_eq!(waiting.status, TaskStatus::WaitingApproval);
+    assert!(
+        serde_json::to_string(&waiting.transcript)
+            .unwrap()
+            .contains("Budget for Q4 is 12,000 dollars.")
+    );
+    let connection = fixture.connection();
+    let old_snapshot = store::app_snapshot(&connection).unwrap();
+    let mut new_snapshot = old_snapshot.clone();
+    new_snapshot["providers"][0]["baseUrl"] = json!("https://example.com/v1");
+    let agent = &fixture.app.state::<AppState>().agent;
+    assert!(!agent.active_ids().contains(&id));
+
+    super::context::pause_tasks_with_route_changes(
+        agent,
+        &connection,
+        Some(&old_snapshot),
+        &new_snapshot,
+    )
+    .unwrap();
+    crate::storage::save_app_data_with_paths(
+        &fixture.root.join("juniper.db"),
+        &new_snapshot,
+        &std::collections::HashMap::new(),
+    )
+    .unwrap();
+
+    let paused = store::load_task(&connection, &id).unwrap();
+    assert_eq!(paused.status, TaskStatus::Paused);
+    assert!(
+        paused
+            .status_reason
+            .as_deref()
+            .is_some_and(|reason| reason.contains("Review the task content and destination model"))
+    );
+    assert!(
+        store::runnable_tasks(&connection)
+            .unwrap()
+            .iter()
+            .all(|task| task.id != id)
+    );
+
+    let approval = store::approvals_for_task(&connection, &id)
+        .unwrap()
+        .into_iter()
+        .find(|approval| approval.status == "pending")
+        .expect("the write approval remains available for review");
+    let handle = fixture.app.handle().clone();
+    super::commands::approval_decide(
+        handle,
+        fixture.app.state::<AppState>(),
+        approval.id,
+        "allow-once".into(),
+    )
+    .unwrap();
+    assert_eq!(
+        store::load_task(&connection, &id).unwrap().status,
+        TaskStatus::Paused,
+        "approving the tool does not resume a task whose model destination changed"
+    );
+    assert_eq!(fixture.requests.lock().unwrap().len(), 2);
+
+    let handle = fixture.app.handle().clone();
+    super::commands::task_resume(handle, fixture.app.state::<AppState>(), id.clone()).unwrap();
+    assert_eq!(
+        store::load_task(&connection, &id).unwrap().status,
+        TaskStatus::Queued,
+        "only an explicit user resume releases the task on the changed route"
+    );
+    assert_eq!(fixture.requests.lock().unwrap().len(), 2);
+}
+
+#[test]
+fn profile_change_pauses_waiting_tasks_until_the_user_resumes_them() {
+    let fixture = new_fixture(vec![sse_tool_calls(&[(
+        "write-after-profile-change",
+        "workspace.write",
+        json!({ "rootId": "root-1", "path": "out/profile.md", "content": "Review required.\n", "expectedVersion": "absent" }),
+    )])]);
+    let id = fixture.start("Write a project note.", true);
+    assert_eq!(fixture.run(&id).status, TaskStatus::WaitingApproval);
+
+    super::commands::agent_profile_save(
+        fixture.app.state::<AppState>(),
+        AgentProfile::default_for("agent-1"),
+        0,
+    )
+    .unwrap();
+
+    let connection = fixture.connection();
+    let task = store::load_task(&connection, &id).unwrap();
+    assert_eq!(task.status, TaskStatus::Paused);
+    assert!(
+        task.status_reason
+            .as_deref()
+            .is_some_and(|reason| { reason.contains("Review its permissions, model destination") })
+    );
+    assert!(
+        store::runnable_tasks(&connection)
+            .unwrap()
+            .iter()
+            .all(|task| task.id != id)
+    );
+}
+
+#[test]
+fn route_change_while_the_runner_enters_approval_wait_still_requires_resume() {
+    let fixture = new_fixture(vec![sse_tool_calls(&[(
+        "wait-for-approval",
+        "workspace.write",
+        json!({ "rootId": "root-1", "path": "out/route-race.md", "content": "private summary\n", "expectedVersion": "absent" }),
+    )])]);
+    let id = fixture.start("Write a private project summary.", true);
+    let waiting = fixture.run(&id);
+    assert_eq!(waiting.status, TaskStatus::WaitingApproval);
+
+    let connection = fixture.connection();
+    let agent = &fixture.app.state::<AppState>().agent;
+    agent.begin(&id).unwrap();
+    assert!(agent.signal(&id, super::Intent::PauseForRouteChange));
+    let intent = agent.end(&id);
+    let mut task = store::load_task(&connection, &id).unwrap();
+    super::runner::finalize_run(&connection, agent, &mut task, &Ok(()), intent).unwrap();
+    assert_eq!(task.status, TaskStatus::Paused);
+
+    let approval = store::approvals_for_task(&connection, &id)
+        .unwrap()
+        .into_iter()
+        .find(|approval| approval.status == "pending")
+        .unwrap();
+    let handle = fixture.app.handle().clone();
+    super::commands::approval_decide(
+        handle,
+        fixture.app.state::<AppState>(),
+        approval.id,
+        "allow-once".into(),
+    )
+    .unwrap();
+    assert_eq!(
+        store::load_task(&connection, &id).unwrap().status,
+        TaskStatus::Paused,
+        "finishing the approval cannot release a route-change pause"
+    );
+    assert_eq!(fixture.requests.lock().unwrap().len(), 1);
+}
+
+#[test]
+fn cancellation_while_the_runner_enters_approval_wait_expires_the_approval() {
+    let fixture = new_fixture(vec![sse_tool_calls(&[(
+        "cancel-at-approval",
+        "workspace.write",
+        json!({ "rootId": "root-1", "path": "out/cancel-race.md", "content": "must not write\n", "expectedVersion": "absent" }),
+    )])]);
+    let id = fixture.start("Write a project note.", true);
+    let waiting = fixture.run(&id);
+    assert_eq!(waiting.status, TaskStatus::WaitingApproval);
+
+    let agent = &fixture.app.state::<AppState>().agent;
+    agent.begin(&id).unwrap();
+    assert!(agent.signal(&id, super::Intent::Cancel));
+    let intent = agent.end(&id);
+    let connection = fixture.connection();
+    let mut task = store::load_task(&connection, &id).unwrap();
+    super::runner::finalize_run(&connection, agent, &mut task, &Ok(()), intent).unwrap();
+
+    assert_eq!(task.status, TaskStatus::Cancelled);
+    let approval = store::approvals_for_task(&connection, &id)
+        .unwrap()
+        .into_iter()
+        .find(|approval| approval.tool == "workspace.write")
+        .unwrap();
+    assert_eq!(approval.status, "expired");
+    assert_eq!(
+        store::actions(&connection, &id)
+            .unwrap()
+            .into_iter()
+            .find(|action| action.call_id == "cancel-at-approval")
+            .unwrap()
+            .status,
+        "cancelled"
+    );
+    let handle = fixture.app.handle().clone();
+    assert!(
+        super::commands::approval_decide(
+            handle,
+            fixture.app.state::<AppState>(),
+            approval.id,
+            "allow-once".into(),
+        )
+        .is_err()
+    );
+    assert_eq!(fixture.requests.lock().unwrap().len(), 1);
+}
+
+#[test]
+fn route_pause_serializes_with_delegated_child_creation() {
+    let fixture = new_fixture(vec![]);
+    let parent_id = fixture.start("Delegate a project summary.", true);
+    let connection = fixture.connection();
+    let parent = store::load_task(&connection, &parent_id).unwrap();
+    let mut child = parent.clone();
+    child.id = store::new_id("task");
+    child.parent_id = Some(parent_id.clone());
+    child.depth = parent.depth + 1;
+    child.role = Some("researcher".into());
+    child.title = "Researcher · project summary".into();
+    child.goal = "summarize the private project context".into();
+    child.status = TaskStatus::Queued;
+    child.current_action = None;
+    child.plan.clear();
+    child.usage = TaskUsage::default();
+    child.provenance = TaskProvenance::default();
+    child.transcript = vec![TranscriptMessage {
+        role: "user".into(),
+        content: child.goal.clone(),
+        tool_calls: Vec::new(),
+        tool_call_id: None,
+        tool_name: None,
+    }];
+    child.pending = None;
+    child.result = None;
+    child.revision = 1;
+    child.created_at = store::now();
+    child.updated_at = child.created_at.clone();
+    child.finished_at = None;
+
+    let agent = &fixture.app.state::<AppState>().agent;
+    let cancellation = agent.begin(&parent_id).unwrap();
+    let old_snapshot = store::app_snapshot(&connection).unwrap();
+    let mut new_snapshot = old_snapshot.clone();
+    new_snapshot["providers"][0]["baseUrl"] = json!("https://remote.example/v1");
+    {
+        let _route_configuration = agent.lock_route_configuration();
+        super::context::pause_tasks_with_route_changes(
+            agent,
+            &connection,
+            Some(&old_snapshot),
+            &new_snapshot,
+        )
+        .unwrap();
+    }
+
+    assert!(
+        super::runner::checkpoint_child_spawn_if_active(
+            agent,
+            &cancellation,
+            &connection,
+            &parent,
+            &child,
+        )
+        .is_err()
+    );
+    assert!(store::load_task(&connection, &child.id).is_err());
+    let intent = agent.end(&parent_id);
+    let mut parent = store::load_task(&connection, &parent_id).unwrap();
+    super::runner::finalize_run(
+        &connection,
+        agent,
+        &mut parent,
+        &Err("TASK_INTERRUPTED: route changed before child checkpoint".into()),
+        intent,
+    )
+    .unwrap();
+    assert_eq!(parent.status, TaskStatus::Paused);
+    assert!(
+        store::runnable_tasks(&connection)
+            .unwrap()
+            .iter()
+            .all(|task| task.id != child.id)
+    );
+}
+
+#[test]
+fn changing_only_provider_health_status_does_not_pause_an_active_task() {
+    let fixture = new_fixture(vec![]);
+    let id = fixture.start("Keep using the selected route.", false);
+    let connection = fixture.connection();
+    let old_snapshot = store::app_snapshot(&connection).unwrap();
+    let mut new_snapshot = old_snapshot.clone();
+    new_snapshot["providers"][0]["status"] = json!("connected");
+    let agent = &fixture.app.state::<AppState>().agent;
+    agent.begin(&id).expect("active run should register");
+
+    super::context::pause_tasks_with_route_changes(
+        agent,
+        &connection,
+        Some(&old_snapshot),
+        &new_snapshot,
+    )
+    .unwrap();
+
+    assert_eq!(agent.intent(&id), None);
+}
+
+#[test]
+fn changing_assistant_default_model_pauses_an_active_task_without_an_override() {
+    let fixture = new_fixture(vec![]);
+    let id = fixture.start("Keep using the selected route.", false);
+    let connection = fixture.connection();
+    let old_snapshot = store::app_snapshot(&connection).unwrap();
+    let mut new_snapshot = old_snapshot.clone();
+    new_snapshot["assistants"][0]["modelProfileId"] = json!("model-2");
+    let agent = &fixture.app.state::<AppState>().agent;
+    agent.begin(&id).expect("active run should register");
+
+    super::context::pause_tasks_with_route_changes(
+        agent,
+        &connection,
+        Some(&old_snapshot),
+        &new_snapshot,
+    )
+    .unwrap();
+
+    assert_eq!(agent.intent(&id), Some(super::Intent::PauseForRouteChange));
+}
+
+#[test]
+fn failed_model_turns_are_charged_to_steps_tokens_and_active_time() {
+    let fixture = new_fixture(vec![
+        "HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+            .into(),
+    ]);
+    let id = fixture.start("Answer this briefly.", false);
+    let connection = fixture.connection();
+    let mut task = store::load_task(&connection, &id).unwrap();
+    task.budget.max_retries_per_cause = 0;
+    store::save_task(&connection, &mut task).unwrap();
+
+    let task = fixture.run(&id);
+
+    assert_eq!(task.status, TaskStatus::Failed);
+    assert_eq!(task.usage.steps, 1);
+    assert!(task.usage.input_tokens > 0);
+    assert!(task.usage.tokens_estimated);
+    assert!(task.usage.active_ms > 0);
+}
+
+#[test]
+fn a_model_turn_cannot_run_past_the_task_time_budget() {
+    let fixture = new_fixture(vec![format!(
+        "DELAY_MS:5000\n{}",
+        sse_answer("This arrives after the task deadline.")
+    )]);
+    let id = fixture.start("Answer after the deadline.", false);
+    let connection = fixture.connection();
+    let mut task = store::load_task(&connection, &id).unwrap();
+    task.budget.max_seconds = 2;
+    store::save_task(&connection, &mut task).unwrap();
+
+    let started = std::time::Instant::now();
+    let task = fixture.run(&id);
+
+    assert!(started.elapsed() < std::time::Duration::from_millis(4500));
+    assert_eq!(task.status, TaskStatus::Failed);
+    assert_eq!(task.result.unwrap().outcome, "partial");
+    assert_eq!(task.usage.steps, 1);
+    assert!(task.usage.input_tokens > 0);
+    assert!(task.usage.active_ms >= 1900);
 }
 
 impl Fixture {
@@ -276,6 +718,98 @@ fn a_goal_runs_through_real_tools_to_a_source_linked_deliverable_with_an_approve
 }
 
 #[test]
+fn an_expired_pending_approval_cannot_be_allowed_before_the_periodic_sweep() {
+    let fixture = new_fixture(vec![
+        sse_tool_calls(&[(
+            "expired-write",
+            "workspace.write",
+            json!({ "rootId": "root-1", "path": "out/expired.txt", "content": "must not be written", "expectedVersion": "absent" }),
+        )]),
+        sse_answer("The approval expired, so I did not write the file."),
+        sse_tool_calls(&[(
+            "malformed-expiry-write",
+            "workspace.write",
+            json!({ "rootId": "root-1", "path": "out/malformed-expiry.txt", "content": "must not be written", "expectedVersion": "absent" }),
+        )]),
+        sse_answer("The malformed approval deadline failed closed, so I did not write the file."),
+    ]);
+    let connection = fixture.connection();
+    for (prompt, expires_at, output_path) in [
+        (
+            "Write one file after approval.",
+            "2000-01-01T00:00:00Z",
+            "out/expired.txt",
+        ),
+        (
+            "Write a file with a malformed approval deadline.",
+            "not-a-timestamp",
+            "out/malformed-expiry.txt",
+        ),
+    ] {
+        let id = fixture.start(prompt, true);
+        let task = fixture.run(&id);
+        assert_eq!(task.status, TaskStatus::WaitingApproval);
+        let approval = store::approvals_for_task(&connection, &id)
+            .unwrap()
+            .into_iter()
+            .find(|approval| approval.status == "pending")
+            .expect("approval is pending");
+        connection
+            .execute(
+                "UPDATE approvals SET expires_at = ?1 WHERE id = ?2",
+                rusqlite::params![expires_at, approval.id],
+            )
+            .unwrap();
+
+        let error = store::decide_approval(&connection, &approval.id, "approved", "allow-once")
+            .unwrap_err();
+        assert!(error.starts_with("APPROVAL_EXPIRED:"), "{error}");
+        assert_eq!(
+            store::approval(&connection, &approval.id).unwrap().status,
+            "pending",
+            "a rejected direct decision remains pending until the sweep"
+        );
+
+        let app = fixture.app.handle().clone();
+        super::runner::expire_approvals(&app, &connection);
+        assert_eq!(
+            store::approval(&connection, &approval.id).unwrap().status,
+            "expired"
+        );
+        let queued = store::load_task(&connection, &id).unwrap();
+        assert_eq!(queued.status, TaskStatus::Queued);
+        assert!(
+            queued
+                .status_reason
+                .as_deref()
+                .unwrap_or_default()
+                .contains("expired")
+        );
+
+        let resumed = fixture.run(&id);
+        assert_eq!(
+            resumed.status,
+            TaskStatus::Completed,
+            "{:?}",
+            resumed.status_reason
+        );
+        assert!(
+            resumed.pending.is_none(),
+            "the expired action must leave the pending cursor"
+        );
+        assert!(resumed.transcript.iter().any(|message| {
+            message.role == "tool" && message.content.contains("APPROVAL_EXPIRED")
+        }));
+        assert_eq!(
+            store::actions(&connection, &id).unwrap()[0].status,
+            "denied",
+            "the expired write is recorded as denied, never started"
+        );
+        assert!(!fixture.folder.join(output_path).exists());
+    }
+}
+
+#[test]
 fn a_denied_action_stays_denied_and_a_changed_file_invalidates_its_approval() {
     let script = vec![
         sse_tool_calls(&[(
@@ -397,6 +931,41 @@ fn delegated_work_joins_within_role_and_parent_limits_and_cancellation_reaches_c
         child.status_reason
     );
     assert!(child.budget.max_steps < parent.budget.max_steps);
+    assert!(
+        child.budget.max_steps <= parent.budget.max_steps.saturating_sub(parent.usage.steps) / 2
+    );
+    assert!(
+        child.budget.max_tool_calls
+            <= parent
+                .budget
+                .max_tool_calls
+                .saturating_sub(parent.usage.tool_calls)
+                / 2
+    );
+    assert!(
+        child.budget.max_tokens
+            <= parent
+                .budget
+                .max_tokens
+                .saturating_sub(parent.usage.tokens())
+                / 2
+    );
+    assert!(
+        child.budget.max_seconds
+            <= parent
+                .budget
+                .max_seconds
+                .saturating_sub(parent.usage.active_ms / 1000)
+                / 2
+    );
+    assert!(
+        child.budget.max_artifacts
+            <= parent
+                .budget
+                .max_artifacts
+                .saturating_sub(parent.usage.artifacts)
+                / 2
+    );
     assert!(child.provenance.tools.iter().all(|tool| {
         super::policy::role_tools("file-analyst").contains(&tool.as_str())
             || tool == "task.update_plan"
@@ -418,6 +987,10 @@ fn delegated_work_joins_within_role_and_parent_limits_and_cancellation_reaches_c
         "{:?}",
         parent.status_reason
     );
+    assert!(parent.usage.steps >= child.usage.steps + 2);
+    assert!(parent.usage.tool_calls >= child.usage.tool_calls + 1);
+    assert!(parent.usage.tokens() > child.usage.tokens());
+    assert!(parent.usage.active_ms >= child.usage.active_ms);
     assert!(
         parent.result.unwrap().unverified.is_empty(),
         "a child's source is citable by the parent"
@@ -450,6 +1023,194 @@ fn delegated_work_joins_within_role_and_parent_limits_and_cancellation_reaches_c
         store::load_task(&connection, &id).unwrap().status,
         TaskStatus::Cancelled
     );
+}
+
+#[test]
+fn delegation_is_denied_when_remaining_tool_budget_cannot_fund_a_child() {
+    let fixture = with_delegation(new_fixture(vec![sse_tool_calls(&[(
+        "p1",
+        "agent.delegate",
+        json!({ "role": "researcher", "objective": "Search the web." }),
+    )])]));
+    let id = fixture.start("Use one helper.", true);
+    let connection = fixture.connection();
+    let mut task = store::load_task(&connection, &id).unwrap();
+    task.budget.max_tool_calls = 1;
+    store::save_task(&connection, &mut task).unwrap();
+
+    let task = fixture.run(&id);
+
+    assert_eq!(task.usage.tool_calls, 1);
+    assert!(store::children(&connection, &id).unwrap().is_empty());
+}
+
+#[test]
+fn action_result_and_task_cursor_commit_in_one_transaction() {
+    let fixture = new_fixture(vec![]);
+    let id = fixture.start("Checkpoint a result.", false);
+    let connection = fixture.connection();
+    let mut task = store::load_task(&connection, &id).unwrap();
+    store::transition(&connection, &mut task, TaskStatus::Running, None).unwrap();
+    let call = TranscriptToolCall {
+        id: "call-checkpoint".into(),
+        name: "workspace.write".into(),
+        arguments: json!({ "rootId": "root-1", "path": "answer.txt" }),
+    };
+    task.transcript.push(TranscriptMessage {
+        role: "assistant".into(),
+        content: String::new(),
+        tool_calls: vec![call.clone()],
+        tool_call_id: None,
+        tool_name: None,
+    });
+    task.pending = Some(Pending {
+        calls: vec![call.clone()],
+        next: 0,
+        wait: None,
+    });
+    store::save_task(&connection, &mut task).unwrap();
+    let action = TaskAction {
+        id: store::new_id("action"),
+        task_id: id.clone(),
+        step: 1,
+        call_id: call.id.clone(),
+        tool: call.name.clone(),
+        arguments: call.arguments.clone(),
+        binding: "binding".into(),
+        status: "started".into(),
+        result: None,
+        created_at: store::now(),
+        updated_at: store::now(),
+    };
+    store::insert_action(&connection, &action).unwrap();
+
+    connection
+        .execute_batch(
+            "CREATE TRIGGER reject_action_event BEFORE INSERT ON task_events
+             WHEN NEW.kind = 'action' BEGIN SELECT RAISE(ABORT, 'simulated checkpoint failure'); END;",
+        )
+        .unwrap();
+    let mut next = task.clone();
+    next.transcript.push(TranscriptMessage {
+        role: "tool".into(),
+        content: "{\"result\":{\"written\":true}}".into(),
+        tool_calls: Vec::new(),
+        tool_call_id: Some(call.id.clone()),
+        tool_name: Some(call.name.clone()),
+    });
+    next.pending.as_mut().unwrap().next = 1;
+    let result = json!({ "result": { "written": true } });
+    assert!(
+        store::checkpoint_tool_result(
+            &connection,
+            &next,
+            Some((&action.id, "succeeded", &result)),
+            "Wrote answer.txt",
+            None,
+        )
+        .is_err()
+    );
+    let rolled_back = store::load_task(&connection, &id).unwrap();
+    assert_eq!(rolled_back.pending.as_ref().unwrap().next, 0);
+    assert!(
+        !rolled_back
+            .transcript
+            .iter()
+            .any(|message| message.role == "tool")
+    );
+    assert_eq!(
+        store::actions(&connection, &id).unwrap()[0].status,
+        "started"
+    );
+
+    connection
+        .execute_batch("DROP TRIGGER reject_action_event;")
+        .unwrap();
+    let committed = store::checkpoint_tool_result(
+        &connection,
+        &next,
+        Some((&action.id, "succeeded", &result)),
+        "Wrote answer.txt",
+        None,
+    )
+    .unwrap();
+    assert_eq!(committed.pending.as_ref().unwrap().next, 1);
+    assert!(
+        committed
+            .transcript
+            .iter()
+            .any(|message| message.role == "tool")
+    );
+    assert_eq!(
+        store::actions(&connection, &id).unwrap()[0].status,
+        "succeeded"
+    );
+}
+
+#[test]
+fn delegated_child_and_parent_wait_checkpoint_commit_together() {
+    let fixture = new_fixture(vec![]);
+    let parent_id = fixture.start("Delegate safely.", false);
+    let connection = fixture.connection();
+    let mut parent = store::load_task(&connection, &parent_id).unwrap();
+    store::transition(&connection, &mut parent, TaskStatus::Running, None).unwrap();
+
+    let child_id = store::new_id("task");
+    parent.usage.children = 1;
+    parent.pending = Some(Pending {
+        calls: vec![],
+        next: 0,
+        wait: Some(Wait::Children {
+            task_ids: vec![child_id.clone()],
+        }),
+    });
+    let mut child = parent.clone();
+    child.id = child_id.clone();
+    child.parent_id = Some(parent_id.clone());
+    child.root_id = parent.root_id.clone();
+    child.depth = 1;
+    child.role = Some("researcher".into());
+    child.status = TaskStatus::Queued;
+    child.status_reason = None;
+    child.current_action = None;
+    child.usage = TaskUsage::default();
+    child.transcript = vec![TranscriptMessage {
+        role: "user".into(),
+        content: "Find a source.".into(),
+        tool_calls: vec![],
+        tool_call_id: None,
+        tool_name: None,
+    }];
+    child.pending = None;
+    child.result = None;
+    child.revision = 1;
+    child.created_at = store::now();
+    child.updated_at = child.created_at.clone();
+    child.finished_at = None;
+
+    connection
+        .execute_batch(&format!(
+            "CREATE TRIGGER reject_parent_spawn BEFORE UPDATE ON tasks WHEN OLD.id = '{parent_id}' BEGIN SELECT RAISE(ABORT, 'simulated parent checkpoint failure'); END;"
+        ))
+        .unwrap();
+    assert!(store::checkpoint_child_spawn(&connection, &parent, &child).is_err());
+    assert!(store::children(&connection, &parent_id).unwrap().is_empty());
+    assert_eq!(
+        store::load_task(&connection, &parent_id).unwrap().status,
+        TaskStatus::Running
+    );
+
+    connection
+        .execute_batch("DROP TRIGGER reject_parent_spawn;")
+        .unwrap();
+    let committed = store::checkpoint_child_spawn(&connection, &parent, &child).unwrap();
+    assert_eq!(committed.status, TaskStatus::Queued);
+    assert_eq!(committed.usage.children, 1);
+    assert!(matches!(
+        committed.pending.as_ref().and_then(|pending| pending.wait.as_ref()),
+        Some(Wait::Children { task_ids }) if task_ids == &[child_id]
+    ));
+    assert_eq!(store::children(&connection, &parent_id).unwrap().len(), 1);
 }
 
 #[test]
@@ -499,6 +1260,87 @@ fn a_restart_interrupts_running_work_and_resume_reconciles_an_uncertain_write() 
         2,
         "no extra model turn was needed to repeat the write"
     );
+}
+
+#[test]
+fn resuming_after_a_partial_uncertain_reconciliation_keeps_the_action_outcome() {
+    let fixture = new_fixture(vec![sse_answer("The action was already completed.")]);
+    let id = fixture.start("Write the report.", true);
+    let connection = fixture.connection();
+    let mut task = store::load_task(&connection, &id).unwrap();
+    store::transition(&connection, &mut task, TaskStatus::Running, None).unwrap();
+
+    let call = TranscriptToolCall {
+        id: "call-recovered".into(),
+        name: "workspace.write".into(),
+        arguments: json!({
+            "rootId": "root-1",
+            "path": "report.md",
+            "content": "already written\n",
+            "expectedVersion": "absent"
+        }),
+    };
+    task.usage.steps = 1;
+    task.usage.tool_calls = 1;
+    task.transcript.push(TranscriptMessage {
+        role: "assistant".into(),
+        content: String::new(),
+        tool_calls: vec![call.clone()],
+        tool_call_id: None,
+        tool_name: None,
+    });
+    task.pending = Some(Pending {
+        calls: vec![call.clone()],
+        next: 0,
+        wait: None,
+    });
+    store::save_task(&connection, &mut task).unwrap();
+
+    // Simulate a crash after the recovery helper marked an already-applied
+    // write successful but before it saved the transcript/cursor advancement.
+    store::insert_action(
+        &connection,
+        &TaskAction {
+            id: "action-recovered".into(),
+            task_id: id.clone(),
+            step: 1,
+            call_id: call.id.clone(),
+            tool: call.name.clone(),
+            arguments: call.arguments.clone(),
+            binding: "binding".into(),
+            status: "succeeded".into(),
+            result: Some(crate::tools::host_result(
+                &call.id,
+                &call.name,
+                "success",
+                Some(json!({ "note": "The write was already applied." })),
+                None,
+            )),
+            created_at: store::now(),
+            updated_at: store::now(),
+        },
+    )
+    .unwrap();
+    let mut task = store::load_task(&connection, &id).unwrap();
+    store::transition(&connection, &mut task, TaskStatus::Interrupted, None).unwrap();
+
+    let handle = fixture.app.handle().clone();
+    super::commands::task_resume(handle, fixture.app.state::<AppState>(), id.clone()).unwrap();
+    let task = fixture.run(&id);
+
+    assert_eq!(
+        task.status,
+        TaskStatus::Completed,
+        "{:?}",
+        task.status_reason
+    );
+    assert_eq!(
+        store::actions(&fixture.connection(), &id).unwrap()[0].status,
+        "succeeded"
+    );
+    assert!(task.transcript.iter().any(|message| {
+        message.role == "tool" && message.tool_call_id.as_deref() == Some("call-recovered")
+    }));
 }
 
 #[test]
@@ -672,6 +1514,102 @@ fn a_plugin_tool_needs_approval_a_standing_grant_binds_to_its_tool_set_and_disab
         .unwrap()
         .remove(0);
     assert_eq!(blocked.result.unwrap()["error"]["code"], "TOOL_NOT_ENABLED");
+    mcp::disconnect(&plugin_id);
+}
+
+#[cfg(unix)]
+#[test]
+fn a_standing_plugin_grant_does_not_survive_replacing_the_stdio_executable() {
+    use super::mcp;
+    use std::os::unix::fs::PermissionsExt;
+
+    let server = format!(
+        "{}/tests/fixtures/mcp_fixture_server.py",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    let plugin_id = Arc::new(Mutex::new(String::new()));
+    let recorded_id = plugin_id.clone();
+    let executable = Arc::new(Mutex::new(PathBuf::new()));
+    let recorded_executable = executable.clone();
+    let fixture = new_fixture_with(move |database| {
+        let path = database.parent().unwrap().join("mutable-mcp-server");
+        std::fs::write(&path, "#!/bin/sh\nexec /usr/bin/python3 \"$@\"\n").unwrap();
+        let mut permissions = std::fs::metadata(&path).unwrap().permissions();
+        permissions.set_mode(0o755);
+        std::fs::set_permissions(&path, permissions).unwrap();
+
+        let connection = store::open(database).unwrap();
+        let plugin = mcp::register(
+            &connection,
+            mcp::PluginConfig {
+                name: "Mutable fixture".into(),
+                kind: "mcp-stdio".into(),
+                command: Some(path.to_string_lossy().into_owned()),
+                args: vec![server, "--era".into(), "modern".into()],
+                env: vec![],
+                url: None,
+                credential_ref: None,
+            },
+        )
+        .unwrap();
+        let tested = tauri::async_runtime::block_on(mcp::test_connection(
+            database.to_path_buf(),
+            plugin.id.clone(),
+        ))
+        .unwrap();
+        assert_eq!(tested.state.status, "connected");
+        mcp::set_enabled(&connection, &plugin.id, true).unwrap();
+        let echo = mcp::exposed_name(&plugin.id, "echo");
+        *recorded_id.lock().unwrap() = plugin.id;
+        *recorded_executable.lock().unwrap() = path;
+        vec![
+            sse_tool_calls(&[("grant-call", &echo, json!({ "text": "first" }))]),
+            sse_answer("First call completed."),
+            sse_tool_calls(&[("replacement-call", &echo, json!({ "text": "second" }))]),
+        ]
+    });
+
+    let plugin_id = plugin_id.lock().unwrap().clone();
+    let executable = executable.lock().unwrap().clone();
+    let echo = mcp::exposed_name(&plugin_id, "echo");
+    let mut profile = AgentProfile::default_for("agent-1");
+    profile.enabled_tools.push(echo.clone());
+    store::save_agent_profile(&fixture.connection(), &profile, 0).unwrap();
+
+    let first = fixture.start("Use the plugin once.", false);
+    let waiting = fixture.run(&first);
+    assert_eq!(waiting.status, TaskStatus::WaitingApproval);
+    fixture.approve(&waiting, "allow-standing");
+    assert_eq!(fixture.run(&first).status, TaskStatus::Completed);
+    let grants = store::grants(&fixture.connection(), false).unwrap();
+    assert_eq!(grants.len(), 1);
+    assert!(grants[0].scope["targetDigest"].is_string());
+
+    // Keep the same path, server id, and tool list, but change the bytes that
+    // will be executed. The old standing grant must ask again.
+    let replacement =
+        "#!/bin/sh\n# replacement executable identity\nexec /usr/bin/python3 \"$@\"\n";
+    std::fs::write(&executable, replacement).unwrap();
+    let mut permissions = std::fs::metadata(&executable).unwrap().permissions();
+    permissions.set_mode(0o755);
+    std::fs::set_permissions(&executable, permissions).unwrap();
+
+    let second = fixture.start("Use the plugin after replacement.", false);
+    let task = fixture.run(&second);
+    assert_eq!(task.status, TaskStatus::WaitingApproval);
+    let approval = store::approvals_for_task(&fixture.connection(), &second)
+        .unwrap()
+        .into_iter()
+        .find(|approval| approval.status == "pending")
+        .unwrap();
+    assert_eq!(approval.tool, echo);
+    assert!(approval.standing_allowed);
+    assert!(
+        store::actions(&fixture.connection(), &second)
+            .unwrap()
+            .iter()
+            .all(|action| action.status != "succeeded")
+    );
     mcp::disconnect(&plugin_id);
 }
 

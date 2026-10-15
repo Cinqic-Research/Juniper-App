@@ -450,9 +450,17 @@ pub fn capability(call: &TranscriptToolCall) -> Result<String, ToolError> {
 pub fn prepare(
     connection: &Connection,
     call: &TranscriptToolCall,
-) -> Result<(Value, String), ToolError> {
+) -> Result<(Value, String, Value), ToolError> {
     let (plugin, tool) = resolve(connection, &call.name)?;
-    let scope = json!({ "toolsDigest": plugin.state.tools_digest, "server": plugin.id });
+    let target = approval_target(&plugin)?;
+    let target_digest = format!("{:x}", Sha256::digest(target.to_string().as_bytes()));
+    // Standing plugin permissions must follow the same identity as one-shot
+    // approvals, including the executable's bytes for local servers.
+    let scope = json!({
+        "toolsDigest": plugin.state.tools_digest,
+        "server": plugin.id,
+        "targetDigest": target_digest,
+    });
     let arguments = serde_json::to_string_pretty(&call.arguments).unwrap_or_default();
     // An approval covers exactly what it shows: arguments too long to show
     // in full cannot be approved.
@@ -468,7 +476,123 @@ pub fn prepare(
             "Call “{}” on {} ({}) with:\n{arguments}",
             tool.name, plugin.name, plugin.location
         ),
+        target,
     ))
+}
+
+/// Non-secret server identity covered by the tool approval. A stdio server's
+/// executable bytes are hashed so replacing a program at the same path does
+/// not inherit an approval recorded before the replacement.
+fn approval_target(plugin: &Plugin) -> Result<Value, ToolError> {
+    let executable = if plugin.kind == "mcp-stdio" {
+        Some(stdio_executable_identity(plugin)?)
+    } else {
+        None
+    };
+    Ok(json!({
+        "server": plugin.id,
+        "toolsDigest": plugin.state.tools_digest,
+        "kind": plugin.kind,
+        "config": {
+            "command": plugin.config.command,
+            "args": plugin.config.args,
+            "environment": plugin.config.env.iter().map(|entry| json!({
+                "name": entry.name,
+                "credentialRef": entry.credential_ref,
+            })).collect::<Vec<_>>(),
+            "url": plugin.config.url,
+            "credentialRef": plugin.config.credential_ref,
+        },
+        "executable": executable,
+    }))
+}
+
+fn stdio_executable_identity(plugin: &Plugin) -> Result<Value, ToolError> {
+    let command = plugin.config.command.as_deref().unwrap_or_default();
+    let path = resolve_stdio_executable(plugin, command).ok_or_else(|| {
+        fail(
+            "PLUGIN_START_FAILED",
+            "The local server program could not be resolved for approval.",
+        )
+    })?;
+    let canonical = std::fs::canonicalize(&path).map_err(|_| {
+        fail(
+            "PLUGIN_START_FAILED",
+            "The local server program is unavailable.",
+        )
+    })?;
+    let metadata = std::fs::symlink_metadata(&canonical).map_err(|_| {
+        fail(
+            "PLUGIN_START_FAILED",
+            "The local server program is unavailable.",
+        )
+    })?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err(fail(
+            "PLUGIN_START_FAILED",
+            "The local server program must resolve to a regular file.",
+        ));
+    }
+    let mut file = std::fs::File::open(&canonical).map_err(|_| {
+        fail(
+            "PLUGIN_START_FAILED",
+            "The local server program is unavailable.",
+        )
+    })?;
+    let mut hasher = Sha256::new();
+    let mut buffer = [0u8; 64 * 1024];
+    loop {
+        use std::io::Read;
+        let read = file.read(&mut buffer).map_err(|_| {
+            fail(
+                "PLUGIN_START_FAILED",
+                "The local server program could not be verified.",
+            )
+        })?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+    }
+    Ok(json!({
+        "path": canonical.to_string_lossy(),
+        "sha256": format!("{:x}", hasher.finalize()),
+    }))
+}
+
+fn resolve_stdio_executable(plugin: &Plugin, command: &str) -> Option<std::path::PathBuf> {
+    let command_path = std::path::Path::new(command);
+    if command_path.is_absolute() {
+        return command_path.is_file().then(|| command_path.to_path_buf());
+    }
+    if command_path.components().count() > 1 {
+        let directory = plugin_directory(&plugin.id).ok()?;
+        let path = directory.join(command_path);
+        return path.is_file().then_some(path);
+    }
+    // This is the same restricted search path placed in the child process.
+    for folder in std::env::split_paths(std::ffi::OsStr::new(restricted_child_path())) {
+        let candidate = folder.join(command);
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+    None
+}
+
+#[cfg(unix)]
+fn restricted_child_path() -> &'static str {
+    "/usr/local/bin:/usr/bin:/bin"
+}
+
+#[cfg(windows)]
+fn restricted_child_path() -> &'static str {
+    "C:\\Windows\\System32;C:\\Windows"
+}
+
+#[cfg(not(any(unix, windows)))]
+fn restricted_child_path() -> &'static str {
+    ""
 }
 
 // ------------------------------------------------------------------ transports
@@ -574,15 +698,30 @@ fn plugin_directory(plugin_id: &str) -> Result<std::path::PathBuf, ToolError> {
     Ok(folder)
 }
 
-async fn spawn_stdio(plugin: &Plugin) -> Result<Arc<StdioSession>, ToolError> {
-    let command = plugin.config.command.as_deref().unwrap_or_default();
+async fn spawn_stdio(
+    plugin: &Plugin,
+    approved_target: Option<&Value>,
+) -> Result<Arc<StdioSession>, ToolError> {
+    let executable_identity = stdio_executable_identity(plugin)?;
+    if approved_target.is_some_and(|target| target["executable"] != executable_identity) {
+        return Err(fail(
+            "APPROVAL_BINDING_CHANGED",
+            "The local server program changed after approval. Review the plugin call again.",
+        ));
+    }
+    let command = executable_identity["path"].as_str().ok_or_else(|| {
+        fail(
+            "PLUGIN_START_FAILED",
+            "The local server program could not be verified.",
+        )
+    })?;
     let directory = plugin_directory(&plugin.id)?;
     let mut process = tokio::process::Command::new(command);
     process
         .args(&plugin.config.args)
         .current_dir(&directory)
         .env_clear()
-        .env("PATH", "/usr/local/bin:/usr/bin:/bin")
+        .env("PATH", restricted_child_path())
         .env("HOME", &directory)
         .env("LANG", "C.UTF-8")
         .stdin(std::process::Stdio::piped())
@@ -669,6 +808,11 @@ impl StdioSession {
         timeout: Duration,
         cancellation: Option<&crate::commands::Cancellation>,
     ) -> Result<Value, ToolError> {
+        let never = crate::commands::Cancellation::default();
+        let cancellation = cancellation.unwrap_or(&never);
+        if cancellation.is_cancelled() {
+            return Err(fail("REQUEST_CANCELLED", "Cancelled."));
+        }
         let id = self.next.fetch_add(1, Ordering::Relaxed);
         let (sender, receiver) = oneshot::channel();
         self.pending
@@ -676,26 +820,35 @@ impl StdioSession {
             .map_err(|_| fail("PLUGIN_ERROR", "State unavailable."))?
             .insert(id, sender);
         let message = json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params });
-        {
+        let write_result = {
             let mut writer = self.writer.lock().await;
-            writer
-                .write_all(format!("{message}\n").as_bytes())
-                .await
-                .map_err(|_| fail("PLUGIN_DISCONNECTED", "The server stopped."))?;
-            writer
-                .flush()
-                .await
-                .map_err(|_| fail("PLUGIN_DISCONNECTED", "The server stopped."))?;
+            if cancellation.is_cancelled() {
+                Err(fail("REQUEST_CANCELLED", "Cancelled."))
+            } else {
+                tokio::select! {
+                    biased;
+                    _ = cancellation.wait() => Err(fail("REQUEST_CANCELLED", "Cancelled.")),
+                    result = async {
+                        writer.write_all(format!("{message}\n").as_bytes()).await?;
+                        writer.flush().await
+                    } => result.map_err(|_| fail("PLUGIN_DISCONNECTED", "The server stopped.")),
+                }
+            }
+        };
+        if let Err(error) = write_result {
+            if let Ok(mut pending) = self.pending.lock() {
+                pending.remove(&id);
+            }
+            return Err(error);
         }
-        let never = crate::commands::Cancellation::default();
-        let cancellation = cancellation.unwrap_or(&never);
         let outcome = tokio::select! {
+            biased;
+            _ = cancellation.wait() => Err(fail("REQUEST_CANCELLED", "Cancelled.")),
             response = tokio::time::timeout(timeout, receiver) => match response {
                 Ok(Ok(response)) => Ok(response),
                 Ok(Err(_)) => Err(fail("PLUGIN_DISCONNECTED", "The server stopped before answering.")),
                 Err(_) => Err(fail("PLUGIN_TIMEOUT", "The server did not answer in time.")),
             },
-            _ = cancellation.wait() => Err(fail("REQUEST_CANCELLED", "Cancelled.")),
         };
         if outcome.is_err() {
             if let Ok(mut pending) = self.pending.lock() {
@@ -749,6 +902,9 @@ impl HttpSession {
         notification: bool,
         cancellation: &crate::commands::Cancellation,
     ) -> Result<(reqwest::StatusCode, Option<String>, Value), ToolError> {
+        if cancellation.is_cancelled() {
+            return Err(fail("REQUEST_CANCELLED", "Cancelled."));
+        }
         let id = self.next.fetch_add(1, Ordering::Relaxed);
         let mut body = json!({ "jsonrpc": "2.0", "method": method, "params": params });
         if !notification {
@@ -776,8 +932,9 @@ impl HttpSession {
             request = request.bearer_auth(token);
         }
         let response = tokio::select! {
-            response = request.json(&body).send() => response.map_err(|_| fail("PLUGIN_UNREACHABLE", "The server could not be reached."))?,
+            biased;
             _ = cancellation.wait() => return Err(fail("REQUEST_CANCELLED", "Cancelled.")),
+            response = request.json(&body).send() => response.map_err(|_| fail("PLUGIN_UNREACHABLE", "The server could not be reached."))?,
         };
         let status = response.status();
         let session = response
@@ -798,9 +955,9 @@ impl HttpSession {
         let mut message = Value::Null;
         loop {
             let chunk = tokio::select! {
-                chunk = futures_util::StreamExt::next(&mut stream) => chunk,
-                // Closing the response stream is the cancellation signal.
+                biased;
                 _ = cancellation.wait() => return Err(fail("REQUEST_CANCELLED", "Cancelled.")),
+                chunk = futures_util::StreamExt::next(&mut stream) => chunk,
             };
             let Some(chunk) = chunk else { break };
             let chunk = chunk
@@ -880,7 +1037,11 @@ struct Connected {
     server_info: Option<Value>,
 }
 
-async fn connect(plugin: &Plugin, reuse: bool) -> Result<Connected, ToolError> {
+async fn connect(
+    plugin: &Plugin,
+    reuse: bool,
+    approved_target: Option<&Value>,
+) -> Result<Connected, ToolError> {
     let none = crate::commands::Cancellation::default();
     match plugin.kind.as_str() {
         "mcp-stdio" => {
@@ -907,7 +1068,7 @@ async fn connect(plugin: &Plugin, reuse: bool) -> Result<Connected, ToolError> {
                 });
             }
             disconnect(&plugin.id);
-            let session = spawn_stdio(plugin).await?;
+            let session = spawn_stdio(plugin, approved_target).await?;
             let probe = session
                 .request(
                     "server/discover",
@@ -1260,7 +1421,7 @@ pub async fn test_connection(
     };
     let none = crate::commands::Cancellation::default();
     let outcome: Result<PluginState, ToolError> = async {
-        let connected = connect(&plugin, false).await?;
+        let connected = connect(&plugin, false, None).await?;
         let mut tools = Vec::new();
         let mut rejected = Vec::new();
         let mut cursor: Option<String> = None;
@@ -1337,15 +1498,23 @@ pub async fn test_connection(
 pub async fn call_tool(
     execution: &Execution<'_>,
     call: &TranscriptToolCall,
+    expected_target: &Value,
 ) -> Result<Outcome, ToolError> {
     let (plugin, tool) = resolve(&execution.db(), &call.name)?;
+    let current_target = approval_target(&plugin)?;
+    if &current_target != expected_target {
+        return Err(fail(
+            "APPROVAL_BINDING_CHANGED",
+            "The plugin configuration or local server program changed after approval. Review the call again.",
+        ));
+    }
     check_arguments(&tool.input_schema, &call.arguments).map_err(|message| {
         fail(
             "INVALID_TOOL_ARGUMENT",
             format!("Invalid arguments: {message}."),
         )
     })?;
-    let connected = connect(&plugin, true).await?;
+    let connected = connect(&plugin, true, Some(expected_target)).await?;
     let result = rpc(
         &connected,
         "tools/call",
@@ -1430,7 +1599,7 @@ pub(crate) async fn call_for_tests(
     tool: &str,
     arguments: Value,
 ) -> Result<Value, ToolError> {
-    let connected = connect(plugin, true).await?;
+    let connected = connect(plugin, true, None).await?;
     rpc(
         &connected,
         "tools/call",
@@ -1512,6 +1681,38 @@ mod tests {
         assert!(sse_response(stream, 8).is_none());
     }
 
+    #[tokio::test]
+    async fn a_cancelled_http_call_never_reaches_its_server() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let address = listener.local_addr().unwrap();
+        let session = HttpSession {
+            client: reqwest::Client::new(),
+            url: reqwest::Url::parse(&format!("http://{address}/mcp")).unwrap(),
+            token: Some("opaque-test-token".into()),
+            legacy: None,
+            next: AtomicU64::new(1),
+        };
+        let cancellation = crate::commands::Cancellation::default();
+        cancellation.cancel();
+        let error = session
+            .post(
+                "tools/call",
+                json!({ "name": "write", "arguments": {} }),
+                Some("write"),
+                true,
+                false,
+                &cancellation,
+            )
+            .await
+            .expect_err("cancelled action must stop before HTTP dispatch");
+        assert_eq!(error.0, "REQUEST_CANCELLED");
+        assert!(
+            listener.accept().is_err(),
+            "server received an HTTP request"
+        );
+    }
+
     #[test]
     fn configurations_are_validated() {
         let mut config = PluginConfig {
@@ -1586,6 +1787,60 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    fn local_plugin_approval_identity_changes_when_the_executable_is_replaced() {
+        let root = std::env::temp_dir().join(format!(
+            "juniper-mcp-plugin-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let executable = root.join("server");
+        std::fs::write(&executable, b"original server bytes").unwrap();
+        let mut permissions = std::fs::metadata(&executable).unwrap().permissions();
+        use std::os::unix::fs::PermissionsExt;
+        permissions.set_mode(0o700);
+        std::fs::set_permissions(&executable, permissions).unwrap();
+        let plugin = Plugin {
+            id: "approval-identity-test".into(),
+            kind: "mcp-stdio".into(),
+            name: "Local test server".into(),
+            config: PluginConfig {
+                name: "Local test server".into(),
+                kind: "mcp-stdio".into(),
+                command: Some(executable.to_string_lossy().into_owned()),
+                args: vec!["--safe".into()],
+                env: vec![EnvVar {
+                    name: "API_TOKEN".into(),
+                    credential_ref: "test-credential-ref".into(),
+                }],
+                url: None,
+                credential_ref: None,
+            },
+            state: PluginState {
+                tools_digest: Some("digest-1".into()),
+                ..PluginState::default()
+            },
+            enabled: true,
+            revision: 1,
+            location: "local server",
+        };
+        let before = approval_target(&plugin).unwrap();
+        assert_eq!(
+            before["config"]["environment"][0]["credentialRef"],
+            "test-credential-ref"
+        );
+
+        std::fs::write(&executable, b"replacement server bytes").unwrap();
+        let after = approval_target(&plugin).unwrap();
+        assert_ne!(
+            before["executable"]["sha256"],
+            after["executable"]["sha256"]
+        );
+        assert_ne!(before, after);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn modern_and_legacy_stdio_servers_connect_list_paginated_tools_and_drop_invalid_ones() {
         let runtime = tokio::runtime::Runtime::new().unwrap();
         for (era, version) in [("modern", MODERN_VERSION), ("legacy", "2025-11-25")] {
@@ -1637,7 +1892,7 @@ mod tests {
         let cancel = cancellation.clone();
         let started = std::time::Instant::now();
         let outcome = runtime.block_on(async {
-            let connected = connect(&plugin, true).await.unwrap();
+            let connected = connect(&plugin, true, None).await.unwrap();
             tokio::spawn(async move {
                 tokio::time::sleep(Duration::from_millis(500)).await;
                 cancel.cancel();
@@ -1693,7 +1948,7 @@ mod tests {
             assert_eq!(tested.state.era.as_deref(), Some(era));
             let plugin = get(&connection, &plugin.id).unwrap();
             let echoed = runtime.block_on(async {
-                let connected = connect(&plugin, true).await.unwrap();
+                let connected = connect(&plugin, true, None).await.unwrap();
                 rpc(
                     &connected,
                     "tools/call",

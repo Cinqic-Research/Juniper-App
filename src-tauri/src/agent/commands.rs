@@ -198,9 +198,25 @@ pub fn agent_profile_save(
     expected_revision: i64,
 ) -> Result<i64, String> {
     valid_id(&profile.assistant_id)?;
+    let _route_configuration = state.agent.lock_route_configuration();
     let connection = state.agent.connection()?;
     assistant_exists(&connection, &profile.assistant_id)?;
     let profile = sanitize_profile(&connection, profile)?;
+    let current_revision = store::agent_profile(&connection, &profile.assistant_id)?
+        .map_or(0, |(_, revision)| revision);
+    if current_revision != expected_revision {
+        return Err(
+            "PROFILE_REVISION_CONFLICT: This agent changed elsewhere. Reload and try again.".into(),
+        );
+    }
+    // A resumed task resolves its profile again, so require an informed
+    // continuation before committing the profile change. If pausing fails,
+    // keep the prior profile active.
+    super::context::pause_tasks_for_profile_change(
+        &state.agent,
+        &connection,
+        &profile.assistant_id,
+    )?;
     store::save_agent_profile(&connection, &profile, expected_revision)
 }
 
@@ -346,6 +362,7 @@ pub fn task_start<R: Runtime>(
     request: StartTask,
 ) -> Result<String, String> {
     let agent = &state.agent;
+    let _route_configuration = agent.lock_route_configuration();
     if agent.is_stopped() {
         return Err(
             "AGENT_STOPPED: Agent work is stopped. Resume it before starting a task.".into(),
@@ -412,6 +429,7 @@ pub fn task_pause<R: Runtime>(
     task_id: String,
 ) -> Result<(), String> {
     let agent = &state.agent;
+    let _route_configuration = agent.lock_route_configuration();
     if agent.signal(&task_id, Intent::Pause) {
         return Ok(());
     }
@@ -432,6 +450,7 @@ pub fn task_resume<R: Runtime>(
     task_id: String,
 ) -> Result<(), String> {
     let agent = &state.agent;
+    let _route_configuration = agent.lock_route_configuration();
     if agent.is_stopped() {
         return Err("AGENT_STOPPED: Agent work is stopped. Resume agent work first.".into());
     }
@@ -556,6 +575,10 @@ pub fn task_cancel<R: Runtime>(
     task_id: String,
 ) -> Result<(), String> {
     let agent = &state.agent;
+    // Serialize the inactive-task database cancellation with worker startup.
+    // Otherwise a queued task can become active after signal() returns false,
+    // leaving its new cancellation token uncancelled.
+    let _route_configuration = agent.lock_route_configuration();
     let signalled = agent.signal(&task_id, Intent::Cancel);
     with_task(&app, agent, &task_id, |connection, task| {
         // Descendants are cancelled whether or not the parent is executing.
@@ -581,6 +604,7 @@ pub fn task_steer<R: Runtime>(
 ) -> Result<(), String> {
     let text = bounded(&text, 4000)?;
     let agent = &state.agent;
+    let _route_configuration = agent.lock_route_configuration();
     if agent.active_ids().contains(&task_id) {
         // An executing task is paused first so the message is not lost in a
         // concurrent write; the user's message is applied on resume.
@@ -633,6 +657,7 @@ pub fn task_answer<R: Runtime>(
     answer: String,
 ) -> Result<(), String> {
     let answer = bounded(&answer, 4000)?;
+    let _route_configuration = state.agent.lock_route_configuration();
     with_task(&app, &state.agent, &task_id, |connection, task| {
         let waiting = matches!(
             task.pending
@@ -670,6 +695,7 @@ pub fn approval_decide<R: Runtime>(
 ) -> Result<(), String> {
     valid_id(&approval_id)?;
     let agent = &state.agent;
+    let _route_configuration = agent.lock_route_configuration();
     let connection = agent.connection()?;
     let approval = store::approval(&connection, &approval_id)?;
     let (status, recorded) = match decision.as_str() {
@@ -1081,11 +1107,6 @@ pub fn inbox_mark_read<R: Runtime>(
 #[tauri::command]
 pub fn memory_changes(state: State<'_, AppState>) -> Result<Vec<Value>, String> {
     store::memory_outbox(&state.agent.connection()?)
-}
-
-#[tauri::command]
-pub fn memory_changes_applied(state: State<'_, AppState>, ids: Vec<String>) -> Result<(), String> {
-    store::acknowledge_memory_changes(&state.agent.connection()?, &ids)
 }
 
 // ------------------------------------------------------------------ skills

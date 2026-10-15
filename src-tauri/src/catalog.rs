@@ -86,6 +86,9 @@ pub struct CatalogEntry {
     /// before download.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub license_acceptance: Option<String>,
+    /// Pinned model-license revision or recorded external-terms fingerprint.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub license_terms_revision: Option<String>,
     /// Dated popularity evidence (Hugging Face 30-day downloads). Shown as
     /// "popular on Hugging Face"; it says nothing about quality or fit.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -189,9 +192,69 @@ pub fn find(id: &str) -> Result<CatalogEntry, String> {
         .ok_or_else(|| "That model is not in Juniper's trusted catalog.".into())
 }
 
+/// Whether the bundled artifact metadata explicitly supports this device.
+/// Unknown native architectures fail closed. Linux/Windows `desktop` entries
+/// remain valid for older catalog records that used a shared desktop label.
+pub fn supports_device(artifact: &CatalogArtifact, platform: &str, architecture: &str) -> bool {
+    let platform_supported = artifact.platforms.iter().any(|supported| {
+        supported == platform || (supported == "desktop" && matches!(platform, "linux" | "windows"))
+    });
+    let architectures: &[&str] = match architecture {
+        "x86_64" => &["x86_64"],
+        "aarch64" | "arm64" | "arm64-v8a" => &["aarch64", "arm64", "arm64-v8a"],
+        _ => &[],
+    };
+    platform_supported
+        && !architectures.is_empty()
+        && artifact
+            .architectures
+            .iter()
+            .any(|supported| architectures.contains(&supported.as_str()))
+}
+
+pub fn supports_current_device(artifact: &CatalogArtifact) -> bool {
+    supports_device(artifact, std::env::consts::OS, std::env::consts::ARCH)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn artifact(platforms: &[&str], architectures: &[&str]) -> CatalogArtifact {
+        CatalogArtifact {
+            id: "artifact".into(),
+            runtime_id: "llama.cpp".into(),
+            backend_profile: None,
+            capabilities: None,
+            format: "gguf".into(),
+            platforms: platforms.iter().map(|value| (*value).into()).collect(),
+            architectures: architectures.iter().map(|value| (*value).into()).collect(),
+            quantization: None,
+            size_bytes: 1,
+            sha256: None,
+            source_url: None,
+            source_revision: "revision".into(),
+            files: vec![],
+            minimum_runtime_version: None,
+            maturity: "stable".into(),
+            qualification: "not-qualified".into(),
+        }
+    }
+
+    #[test]
+    fn artifact_support_requires_a_known_matching_platform_and_architecture() {
+        let desktop = artifact(&["linux", "windows"], &["x86_64"]);
+        assert!(supports_device(&desktop, "linux", "x86_64"));
+        assert!(supports_device(&desktop, "windows", "x86_64"));
+        assert!(!supports_device(&desktop, "android", "x86_64"));
+        assert!(!supports_device(&desktop, "linux", "unknown"));
+        assert!(!supports_device(&desktop, "linux", "aarch64"));
+
+        let android = artifact(&["android"], &["arm64"]);
+        assert!(supports_device(&android, "android", "aarch64"));
+        assert!(supports_device(&android, "android", "arm64-v8a"));
+        assert!(!supports_device(&android, "android", "armv7"));
+    }
 
     #[test]
     fn bundled_catalog_is_artifact_centric_and_integrity_pinned() {
@@ -300,6 +363,36 @@ mod tests {
         assert!(
             !json.contains(":null"),
             "catalog serializes a null optional field"
+        );
+    }
+
+    #[test]
+    fn native_catalog_serialization_preserves_required_license_revisions() {
+        let entries = entries().expect("catalog should parse");
+        let native_response = serde_json::to_value(entries).expect("catalog should serialize");
+        let models = native_response
+            .as_array()
+            .expect("command returns a model array");
+        for model in models {
+            if model["licenseAcceptance"] == "required" {
+                assert!(
+                    model["licenseTermsRevision"]
+                        .as_str()
+                        .is_some_and(|value| !value.is_empty()),
+                    "{} loses its required license terms revision",
+                    model["id"]
+                );
+            }
+        }
+        let gemma = models
+            .iter()
+            .find(|model| model["id"] == "gemma-3-1b-it")
+            .expect("Gemma catalog entry exists");
+        assert!(
+            gemma["licenseTermsRevision"]
+                .as_str()
+                .unwrap()
+                .contains("-sha256-")
         );
     }
 }

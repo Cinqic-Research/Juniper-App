@@ -314,7 +314,7 @@ export function Menu({
 
 interface ConfirmOptions {
   title: string
-  message?: string
+  message?: ReactNode
   confirmLabel?: string
   cancelLabel?: string
   danger?: boolean

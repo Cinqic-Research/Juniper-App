@@ -77,7 +77,9 @@ pub fn secure_get_credential<R: Runtime>(
         .get("secret")
         .and_then(serde_json::Value::as_str)
         .map(str::to_owned)
-        .ok_or_else(|| "LOCAL_RUNTIME_PLUGIN_ERROR: Secure credential payload was malformed.".into())
+        .ok_or_else(|| {
+            "LOCAL_RUNTIME_PLUGIN_ERROR: Secure credential payload was malformed.".into()
+        })
 }
 
 #[cfg(target_os = "android")]

@@ -136,8 +136,8 @@ requests and bans, response validation (malformed JSON, non-integer or
 out-of-range IDs, excess tokens, prompt-length mismatch, HTTP errors), refused
 redirects with an untouched redirect target, literal-loopback URL rules,
 listener ownership, timeout and cancellation, analysis resubmission and turn
-bounds, the self-test, environment proxies ignored (a child test process with
-`HTTP_PROXY` and friends set, plus a control client that does use the proxy),
+bounds, the self-test, environment proxies ignored for local and public
+provider routes (a child test process with `HTTP_PROXY` and friends set),
 model metadata and tokenizer verification, and the chat path: one answer only
 after the turn parses, analysis never emitted, malformed/truncated/marked
 output never shown, forged roles in user, profile, memory, attachment, and

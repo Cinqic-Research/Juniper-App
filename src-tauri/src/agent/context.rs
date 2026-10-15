@@ -9,6 +9,8 @@ use crate::domain::{ChatMessage, ChatRequest, GenerationOverrides, ModelProfile,
 use rusqlite::Connection;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
+use std::collections::HashSet;
+use std::net::{IpAddr, Ipv6Addr};
 
 pub struct RunContext {
     pub assistant_id: String,
@@ -28,6 +30,315 @@ pub struct RunContext {
 
 fn configuration_error(message: &str) -> String {
     format!("AGENT_NOT_READY: {message}")
+}
+
+/// Resolve disclosure from the endpoint Juniper will actually call. Saved
+/// model and provider locality labels are UI metadata and can be stale after
+/// a connection edit or a profile import.
+fn route_location(provider: &ProviderProfile) -> &'static str {
+    route_location_for_endpoint(&provider.kind, &provider.base_url)
+}
+
+/// Locality facts for the endpoint Juniper will call, shared by Chat and
+/// Agent so saved model labels cannot make a remote route appear local.
+pub(crate) fn route_location_for_endpoint(kind: &str, base_url: &str) -> &'static str {
+    if kind == "juniper-local" {
+        return "on-device";
+    }
+    let Ok(url) = url::Url::parse(base_url) else {
+        return "unknown";
+    };
+    match url.host() {
+        Some(url::Host::Domain(host)) => {
+            let host = host.trim_end_matches('.').to_ascii_lowercase();
+            if host == "localhost" || host.ends_with(".localhost") {
+                "on-device"
+            } else if host.ends_with(".local") {
+                "local-network"
+            } else {
+                // Provider requests reject non-local names that resolve to
+                // private addresses. A successful request to another hostname
+                // therefore uses a public route; the client still resolves,
+                // validates, and pins its destination before sending data.
+                "remote"
+            }
+        }
+        Some(url::Host::Ipv4(address)) => route_ip_location(IpAddr::V4(address)),
+        Some(url::Host::Ipv6(address)) => route_ip_location(IpAddr::V6(address)),
+        None => "unknown",
+    }
+}
+
+fn route_ip_location(address: IpAddr) -> &'static str {
+    if crate::providers::is_provider_metadata_address(address) {
+        return "unknown";
+    }
+    match address {
+        IpAddr::V4(address) => {
+            if address.is_loopback() {
+                "on-device"
+            } else if address.is_private() || address.is_link_local() {
+                "local-network"
+            } else if address.is_unspecified() {
+                "unknown"
+            } else if crate::agent::web::is_public(IpAddr::V4(address)) {
+                "remote"
+            } else {
+                "unknown"
+            }
+        }
+        IpAddr::V6(address) => {
+            if let Some(mapped) = address.to_ipv4_mapped() {
+                return route_ip_location(IpAddr::V4(mapped));
+            }
+            if address == Ipv6Addr::LOCALHOST {
+                "on-device"
+            } else if address.is_unique_local() || address.is_unicast_link_local() {
+                "local-network"
+            } else if address.is_unspecified() {
+                "unknown"
+            } else if crate::agent::web::is_public(IpAddr::V6(address)) {
+                "remote"
+            } else {
+                "unknown"
+            }
+        }
+    }
+}
+
+const ROUTE_CHANGE_REASON: &str = "The model or provider route changed. Review the task content and destination model before resuming.";
+const PROFILE_CHANGE_REASON: &str = "The agent profile changed. Review its permissions, model destination, and task content before resuming.";
+
+/// Pauses every nonterminal task whose persisted context could be sent to a
+/// changed route, including tasks waiting for approval or input. The caller
+/// holds the route-configuration gate while this runs and while it saves the
+/// new snapshot, so queued work cannot slip between the pause and the change.
+pub(crate) fn pause_tasks_with_route_changes(
+    agent: &super::AgentState,
+    connection: &Connection,
+    old_snapshot: Option<&Value>,
+    new_snapshot: &Value,
+) -> Result<(), String> {
+    let tasks = store::nonterminal_tasks(connection)?;
+    let Some(old_snapshot) = old_snapshot else {
+        for task in tasks {
+            pause_task(
+                agent,
+                connection,
+                task,
+                ROUTE_CHANGE_REASON,
+                super::Intent::PauseForRouteChange,
+            )?;
+        }
+        return Ok(());
+    };
+    let (changed_models, changed_providers, changed_assistants) =
+        changed_routes(old_snapshot, new_snapshot);
+    if changed_models.is_empty() && changed_providers.is_empty() && changed_assistants.is_empty() {
+        return Ok(());
+    }
+    for task in tasks {
+        if task_uses_changed_route(
+            Some(connection),
+            old_snapshot,
+            new_snapshot,
+            &task,
+            &changed_models,
+            &changed_providers,
+            &changed_assistants,
+        ) {
+            pause_task(
+                agent,
+                connection,
+                task,
+                ROUTE_CHANGE_REASON,
+                super::Intent::PauseForRouteChange,
+            )?;
+        }
+    }
+    Ok(())
+}
+
+/// Profile changes can alter both the model destination and the tools or
+/// grants used when a saved task is resumed. Conservatively require explicit
+/// continuation for every unfinished task belonging to that assistant.
+pub(crate) fn pause_tasks_for_profile_change(
+    agent: &super::AgentState,
+    connection: &Connection,
+    assistant_id: &str,
+) -> Result<(), String> {
+    for task in store::nonterminal_tasks(connection)? {
+        if task.assistant_id == assistant_id {
+            pause_task(
+                agent,
+                connection,
+                task,
+                PROFILE_CHANGE_REASON,
+                super::Intent::PauseForProfileChange,
+            )?;
+        }
+    }
+    Ok(())
+}
+
+fn pause_task(
+    agent: &super::AgentState,
+    connection: &Connection,
+    mut task: Task,
+    reason: &str,
+    intent: super::Intent,
+) -> Result<(), String> {
+    if agent.signal(&task.id, intent) {
+        return Ok(());
+    }
+    match task.status {
+        TaskStatus::Queued
+        | TaskStatus::Running
+        | TaskStatus::WaitingInput
+        | TaskStatus::WaitingApproval => {
+            store::transition(
+                connection,
+                &mut task,
+                TaskStatus::Paused,
+                Some(reason.into()),
+            )?;
+        }
+        TaskStatus::Paused | TaskStatus::Interrupted => {
+            task.status_reason = Some(reason.into());
+            store::save_task(connection, &mut task)?;
+            store::add_event(connection, &task.id, "route-change", reason, None)?;
+        }
+        TaskStatus::Completed | TaskStatus::Failed | TaskStatus::Cancelled => {}
+    }
+    Ok(())
+}
+
+fn changed_routes(
+    old_snapshot: &Value,
+    new_snapshot: &Value,
+) -> (HashSet<String>, HashSet<String>, HashSet<String>) {
+    fn indexed<'a>(value: &'a Value, key: &str) -> HashSet<&'a str> {
+        value[key]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|item| item["id"].as_str())
+            .collect()
+    }
+    fn item<'a>(value: &'a Value, key: &str, id: &str) -> Option<&'a Value> {
+        value[key]
+            .as_array()?
+            .iter()
+            .find(|entry| entry["id"].as_str() == Some(id))
+    }
+    let mut changed_models = HashSet::new();
+    for id in indexed(old_snapshot, "models")
+        .into_iter()
+        .chain(indexed(new_snapshot, "models"))
+    {
+        let old = item(old_snapshot, "models", id);
+        let new = item(new_snapshot, "models", id);
+        if old.map(|model| (&model["providerId"], &model["modelId"]))
+            != new.map(|model| (&model["providerId"], &model["modelId"]))
+        {
+            changed_models.insert(id.to_owned());
+        }
+    }
+    let mut changed_providers = HashSet::new();
+    for id in indexed(old_snapshot, "providers")
+        .into_iter()
+        .chain(indexed(new_snapshot, "providers"))
+    {
+        let old = item(old_snapshot, "providers", id);
+        let new = item(new_snapshot, "providers", id);
+        if old.map(provider_route) != new.map(provider_route) {
+            changed_providers.insert(id.to_owned());
+        }
+    }
+    let mut changed_assistants = HashSet::new();
+    for id in indexed(old_snapshot, "assistants")
+        .into_iter()
+        .chain(indexed(new_snapshot, "assistants"))
+    {
+        let old = item(old_snapshot, "assistants", id)
+            .and_then(|assistant| assistant["modelProfileId"].as_str());
+        let new = item(new_snapshot, "assistants", id)
+            .and_then(|assistant| assistant["modelProfileId"].as_str());
+        if old != new {
+            changed_assistants.insert(id.to_owned());
+        }
+    }
+    (changed_models, changed_providers, changed_assistants)
+}
+
+fn provider_route(provider: &Value) -> (&Value, &Value, &Value, &Value, &Value, &Value) {
+    (
+        &provider["kind"],
+        &provider["baseUrl"],
+        &provider["apiKeyRef"],
+        &provider["enabled"],
+        &provider["deviceId"],
+        &provider["deviceLinkFingerprint"],
+    )
+}
+
+fn task_uses_changed_route(
+    connection: Option<&Connection>,
+    old_snapshot: &Value,
+    new_snapshot: &Value,
+    task: &Task,
+    changed_models: &HashSet<String>,
+    changed_providers: &HashSet<String>,
+    changed_assistants: &HashSet<String>,
+) -> bool {
+    if changed_assistants.contains(&task.assistant_id)
+        && connection
+            .and_then(|connection| store::agent_profile(connection, &task.assistant_id).ok())
+            .and_then(|profile| profile.map(|(profile, _)| profile.model_profile_id))
+            .flatten()
+            .is_none()
+    {
+        return true;
+    }
+    let mut model_ids = HashSet::new();
+    if !task.provenance.model_profile_id.is_empty() {
+        model_ids.insert(task.provenance.model_profile_id.clone());
+    }
+    if let Some(connection) = connection
+        && let Ok(Some((profile, _))) = store::agent_profile(connection, &task.assistant_id)
+        && let Some(id) = profile.model_profile_id
+    {
+        model_ids.insert(id);
+    }
+    for snapshot in [old_snapshot, new_snapshot] {
+        if let Some(id) = snapshot["assistants"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .find(|assistant| assistant["id"].as_str() == Some(task.assistant_id.as_str()))
+            .and_then(|assistant| assistant["modelProfileId"].as_str())
+        {
+            model_ids.insert(id.to_owned());
+        }
+    }
+    if model_ids.is_empty() {
+        // We cannot prove which model the active context captured.
+        return true;
+    }
+    model_ids.into_iter().any(|model_id| {
+        if changed_models.contains(&model_id) {
+            return true;
+        }
+        [old_snapshot, new_snapshot].into_iter().any(|snapshot| {
+            snapshot["models"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .find(|model| model["id"].as_str() == Some(model_id.as_str()))
+                .and_then(|model| model["providerId"].as_str())
+                .is_some_and(|provider_id| changed_providers.contains(provider_id))
+        })
+    })
 }
 
 /// The IANA time zone the agent reports and schedules in.
@@ -66,7 +377,7 @@ pub fn resolve(connection: &Connection, task: &Task) -> Result<RunContext, Strin
                 "This agent's model is no longer available. Choose another in its settings.",
             )
         })?;
-    let model: ModelProfile = serde_json::from_value(model_value.clone())
+    let mut model: ModelProfile = serde_json::from_value(model_value.clone())
         .map_err(|_| configuration_error("The agent's model settings are unreadable."))?;
     let provider_value = snapshot["providers"]
         .as_array()
@@ -80,8 +391,17 @@ pub fn resolve(connection: &Connection, task: &Task) -> Result<RunContext, Strin
             "The model's connection is turned off in Settings → Connections.",
         ));
     }
-    let provider: ProviderProfile = serde_json::from_value(provider_value)
+    let mut provider: ProviderProfile = serde_json::from_value(provider_value)
         .map_err(|_| configuration_error("The model's connection settings are unreadable."))?;
+    let location = route_location(&provider);
+    provider.transport_location = location.into();
+    provider.locality = match location {
+        "on-device" | "local-network" => "local",
+        "remote" => "remote",
+        _ => "unknown",
+    }
+    .into();
+    model.execution_location = location.into();
     let generation: GenerationOverrides =
         serde_json::from_value(assistant["generation"].clone()).unwrap_or_default();
     let project = match &task.project_id {
@@ -120,6 +440,65 @@ pub fn resolve(connection: &Connection, task: &Task) -> Result<RunContext, Strin
         timezone: timezone(connection),
         skills,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn provider(base_url: &str, kind: &str) -> ProviderProfile {
+        ProviderProfile {
+            id: "provider".into(),
+            name: "Provider".into(),
+            kind: kind.into(),
+            base_url: base_url.into(),
+            locality: "local".into(),
+            transport_location: "on-device".into(),
+            api_key_ref: None,
+            device_id: None,
+            device_link_fingerprint: None,
+        }
+    }
+
+    #[test]
+    fn route_location_is_derived_from_the_current_provider_endpoint() {
+        assert_eq!(
+            route_location(&provider("http://127.0.0.1:8080", "ollama")),
+            "on-device"
+        );
+        assert_eq!(
+            route_location(&provider("http://192.168.1.5:8080", "ollama")),
+            "local-network"
+        );
+        for reserved in [
+            "http://100.64.0.1:8080",
+            "http://192.0.2.1:8080",
+            "http://169.254.169.254:8080",
+            "http://168.63.129.16:8080",
+            "http://224.0.0.1:8080",
+            "http://[fd00:ec2::254]:8080",
+            "http://[fd20:ce::254]:8080",
+        ] {
+            assert_eq!(
+                route_location(&provider(reserved, "openai-compatible")),
+                "unknown",
+                "reserved or non-public provider route should remain unknown: {reserved}"
+            );
+        }
+        assert_eq!(
+            route_location(&provider("https://8.8.8.8/v1", "openai-compatible")),
+            "remote"
+        );
+        assert_eq!(
+            route_location(&provider("https://api.example.com/v1", "openai-compatible")),
+            "remote"
+        );
+        assert_eq!(
+            route_location(&provider("not a url", "openai-compatible")),
+            "unknown"
+        );
+        assert_eq!(route_location(&provider("", "juniper-local")), "on-device");
+    }
 }
 
 /// The tools this task may see: enabled for the agent, available on this
@@ -259,7 +638,7 @@ pub fn instructions(context: &RunContext, task: &Task, lineage: &str) -> Result<
                 root.label,
                 root.id,
                 if root.access == "read-write" {
-                    "read and write, each write approved"
+                    "read and write; the host checks each write against your settings and shows the proposed change before approval when required"
                 } else {
                     "read only"
                 }

@@ -20,6 +20,18 @@ if (!research) {
 }
 const candidates = JSON.parse(readFileSync(join(research, 'candidate-artifacts.json'), 'utf8'))
 const popularity = JSON.parse(readFileSync(join(research, 'popularity-snapshot.json'), 'utf8'))
+const licenseSnapshot = JSON.parse(
+  readFileSync(join(research, 'license-terms-snapshot.json'), 'utf8'),
+)
+const gemmaTerms = licenseSnapshot.licenses?.gemma
+if (
+  !gemmaTerms ||
+  typeof gemmaTerms.lastModified !== 'string' ||
+  !/^[a-f0-9]{64}$/.test(gemmaTerms.sha256)
+) {
+  throw new Error('Gemma terms need dated fingerprint metadata with a SHA-256 hash.')
+}
+const gemmaTermsRevision = `gemma-terms-${gemmaTerms.lastModified}-sha256-${gemmaTerms.sha256}`
 const catalogPath = 'config/models/catalog.json'
 const catalog = JSON.parse(readFileSync(catalogPath, 'utf8'))
 
@@ -46,9 +58,9 @@ const SELECTION = [
     id: 'qwen3-4b',
     name: 'Qwen3 4B',
     description:
-      'A capable mid-size Qwen3 model for chat, reasoning, and tool use on laptops with 8 GB or more.',
-    useCases: ['Everyday chat', 'Reasoning', 'Tools'],
-    tags: ['general', 'reasoning', 'tools'],
+      'A capable mid-size Qwen3 model for everyday chat and reasoning on laptops with 8 GB or more.',
+    useCases: ['Everyday chat', 'Reasoning'],
+    tags: ['general', 'reasoning'],
     license: APACHE,
     alternative: true,
   },
@@ -58,8 +70,8 @@ const SELECTION = [
     name: 'Qwen3 4B Instruct 2507',
     description:
       'The July 2025 non-thinking Qwen3 4B update: direct answers without a reasoning phase, with long-context support.',
-    useCases: ['Everyday chat', 'Writing', 'Tools'],
-    tags: ['general', 'tools'],
+    useCases: ['Everyday chat', 'Writing'],
+    tags: ['general'],
     license: APACHE,
   },
   {
@@ -67,9 +79,9 @@ const SELECTION = [
     id: 'qwen3-8b',
     name: 'Qwen3 8B',
     description:
-      'A strong general Qwen3 model for chat, reasoning, coding help, and agent tasks on machines with 16 GB.',
-    useCases: ['Everyday chat', 'Reasoning', 'Coding', 'Tools'],
-    tags: ['general', 'reasoning', 'coding', 'tools'],
+      'A strong general Qwen3 model for chat, reasoning, and coding help on machines with 16 GB.',
+    useCases: ['Everyday chat', 'Reasoning', 'Coding'],
+    tags: ['general', 'reasoning', 'coding'],
     license: APACHE,
   },
   {
@@ -78,7 +90,7 @@ const SELECTION = [
     name: 'Qwen3 14B',
     description:
       'The largest Qwen3 dense model in the catalog; better answers at the cost of memory and speed.',
-    useCases: ['Reasoning', 'Writing', 'Coding', 'Tools'],
+    useCases: ['Reasoning', 'Writing', 'Coding'],
     tags: ['general', 'reasoning', 'large'],
     license: APACHE,
   },
@@ -155,6 +167,7 @@ const SELECTION = [
     tags: ['general', 'fast', 'small'],
     license: 'Gemma Terms of Use',
     licenseUrl: 'https://ai.google.dev/gemma/terms',
+    licenseTermsRevision: gemmaTermsRevision,
     acceptance: true,
     alternative: true,
   },
@@ -168,6 +181,7 @@ const SELECTION = [
     tags: ['general'],
     license: 'Gemma Terms of Use',
     licenseUrl: 'https://ai.google.dev/gemma/terms',
+    licenseTermsRevision: gemmaTermsRevision,
     acceptance: true,
   },
   {
@@ -234,9 +248,8 @@ const SELECTION = [
     release: 'ibm-granite/granite-4.0-micro',
     id: 'granite-4.0-micro',
     name: 'Granite 4.0 Micro',
-    description:
-      'IBM’s 3B Granite 4.0 instruct model for business writing, summaries, and tool use.',
-    useCases: ['Writing', 'Summaries', 'Tools'],
+    description: 'IBM’s 3B Granite 4.0 instruct model for business writing and summaries.',
+    useCases: ['Writing', 'Summaries'],
     tags: ['general'],
     license: APACHE,
   },
@@ -246,7 +259,7 @@ const SELECTION = [
     name: 'Granite 4.0 H Tiny',
     description:
       'IBM’s hybrid Mamba-transformer mixture-of-experts model (7B total, about 1B active) with a light memory footprint for long inputs.',
-    useCases: ['Summaries', 'Long documents', 'Tools'],
+    useCases: ['Summaries', 'Long documents'],
     tags: ['general'],
     license: APACHE,
   },
@@ -267,8 +280,6 @@ const SELECTION = [
     useCases: ['Reasoning', 'Everyday chat'],
     tags: ['reasoning'],
     license: 'NVIDIA Open Model License',
-    licenseUrl:
-      'https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-open-model-license/',
     acceptance: true,
   },
 ]
@@ -329,6 +340,11 @@ for (const choice of SELECTION) {
   const smallest = Math.min(...artifacts.map((artifact) => artifact.sizeBytes))
   const estimate = memory(smallest, research.parameterCount, research.architecture)
   const rank = popular.get(choice.release)
+  const licenseUrl = choice.licenseUrl ?? research.licenseUrl
+  const originalLicensePrefix = `https://huggingface.co/${research.originalRepo}/blob/main/`
+  const pinnedLicenseUrl = licenseUrl.startsWith(originalLicensePrefix)
+    ? `${originalLicensePrefix.replace('/blob/main/', `/blob/${research.originalRevision}/`)}${licenseUrl.slice(originalLicensePrefix.length)}`
+    : licenseUrl
   generated.push({
     id: choice.id,
     displayName: choice.name,
@@ -344,8 +360,13 @@ for (const choice of SELECTION) {
     originalModel: `https://huggingface.co/${research.originalRepo}`,
     originalRevision: research.originalRevision,
     license: choice.license,
-    licenseUrl: choice.licenseUrl ?? research.licenseUrl,
-    ...(choice.acceptance ? { licenseAcceptance: 'required' } : {}),
+    licenseUrl: pinnedLicenseUrl,
+    ...(choice.acceptance
+      ? {
+          licenseAcceptance: 'required',
+          licenseTermsRevision: choice.licenseTermsRevision ?? research.originalRevision,
+        }
+      : {}),
     attribution: `${research.displayName} by ${research.organization}; GGUF ${
       research.quantizer === research.organization
         ? 'published by the developer'

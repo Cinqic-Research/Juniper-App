@@ -1,6 +1,8 @@
 # ADR 0025: Host-owned agent runtime
 
-Status: Proposed for review on the "Fixing Up A Little" branch (draft PR #49).
+Status: Proposed; qualification is blocked pending the independent evidence
+gates recorded in `docs/qualification/pr49-independent-review-2026-10-15.md`
+(draft PR #49).
 
 ## Context
 
@@ -15,10 +17,14 @@ answered in one request) cannot hold work that waits for a person.
 
 - **The native host owns agent work.** Tasks, events, actions, approvals,
   grants, artifacts, sources, projects, schedules, skills, and plugins live in
-  SQLite schema v5 tables that only the host writes. None of these tables
+  SQLite schema v6 tables that only the host writes. The agent tables were
+  introduced in v5; v6 adds schedule-finalization recovery and a unique
+  constraint for dispatched schedule runs. None of these tables
   references a snapshot table by foreign key.
-- **Migration.** It runs in one transaction. Before it runs, the existing
-  database is copied with `VACUUM INTO` to `juniper.db.schema-v4.backup`.
+- **Migration.** Each schema change runs in one transaction. Before the v4-to-v5
+  agent migration, the database is copied with `VACUUM INTO` to
+  `juniper.db.schema-v4.backup`; before the v5-to-v6 schedule migration, it is
+  copied to `juniper.db.schema-v5.backup`.
 - **One worker.** A single worker runs a bounded loop: observe, plan, act,
   inspect, finish. It commits after every model turn and tool result, has
   explicit budgets and per-cause retries, and follows a documented transition

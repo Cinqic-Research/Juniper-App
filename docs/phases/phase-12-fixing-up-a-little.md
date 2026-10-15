@@ -1,9 +1,11 @@
 # Phase 12: Fixing Up A Little (2026-10-15)
 
-Status: `CANDIDATE - PENDING INDEPENDENT REVIEW`. Implemented by Claude Opus
-5.5 under the owner's directive of 2026-10-15. The work is in draft PR #49,
-which is left unmerged for an independent model review. The checks recorded
-here are the implementer's own, plus CI; none of them is independent review.
+Status: `BLOCKED - INDEPENDENT REVIEW`. Implemented by Claude Opus 5.5 under
+the owner's directive of 2026-10-15, then independently inspected and repaired
+for PR #49. The candidate remains draft and unmerged because required exact-
+source large-transfer evidence and independent real-app workflow evidence are
+not available. See `docs/qualification/pr49-independent-review-2026-10-15.md`
+for the review disposition and limits.
 
 ## Objective
 
@@ -42,9 +44,9 @@ Evidence types:
 | Area                | Implementation                                                                                               | Evidence                                                                                                                                                                                                                                                                                                                                                                                                                                              | Remaining                                                                                                                                                                                              |
 | ------------------- | ------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Catalog coverage    | `config/models/catalog.json`, `scripts/catalog-from-research.mjs`, `docs/research/model-catalog-2026-10-15/` | Unit: ten top-ranked eligible releases present (`catalog::tests`, `model-catalog.test.ts`); every URL pinned to a revision, size, and SHA-256. Live: all 32 downloadable artifacts other than the pre-existing gpt-oss-20b downloaded from their pinned URLs, matched size and SHA-256, loaded, and answered a factual question; 19 made a well-formed tool call in a one-request smoke check. Table: `docs/qualification/catalog-live-2026-10-15.md` | Windows and Android not exercised; capabilities stay unknown except where measured                                                                                                                     |
-| Model lifecycle     | `managed_models.rs` (journal, ranges, bundles, locks, queue, no 2 GiB cap)                                   | Fixture: resume, ignored or wrong range, corrupt, oversize, truncated, bundle publish, locks, journal mismatch. Live: Qwen3 4B Q4_K_M (2.50 GB, above 2 GiB) paused after 234,591,188 bytes, resumed from Hugging Face with an exact range, and verified                                                                                                                                                                                              | Disk full is classified but not exercised on a real full disk                                                                                                                                          |
+| Model lifecycle     | `managed_models.rs` (journal, ranges, bundles, locks, queue, no 2 GiB cap)                                   | Fixture: resume, ignored or wrong range, corrupt, oversize, truncated, bundle publish, locks, journal mismatch. Live: Qwen3 4B Q4_K_M (2.50 GB, above 2 GiB) paused after 234,591,188 bytes, resumed, and verified. The live Range/Content-Range headers were not retained; exact-range behavior is covered by fixtures                                                                                                                               | Disk full is classified but not exercised on a real full disk                                                                                                                                          |
 | Agent runtime       | `src-tauri/src/agent/`                                                                                       | Fixture: 8 end-to-end runner tests (deliverable with an approved write, denial and stale approval, citations and budgets, delegation and cancellation, restart reconciliation, questions and unknown tools, MCP approval chain, schedule from conversation). Live: see `docs/qualification/agent-live-2026-10-15.md`                                                                                                                                  | Quality depends on the model                                                                                                                                                                           |
-| Persistence         | `storage.rs` v5                                                                                              | Unit: upgrade keeps a restorable backup; an interrupted migration leaves v4 intact; a stale snapshot cannot touch tasks or approvals. Live: a copy of a real rc.33 database (v4: 1 assistant, 7 chats, 3 models) upgraded to v5 with every count and the settings unchanged and the backup kept (`storage::tests::live_upgrade_of_a_real_database_copy`)                                                                                              |
+| Persistence         | `storage.rs` v6 (v4→v5 agent tables; v5→v6 schedule recovery)                                                | Unit: v4 upgrade keeps a restorable backup; v5 upgrade adds schedule recovery and a unique schedule-run index; an interrupted v5 migration leaves v4 intact; duplicate v5 schedule ids fail closed and keep the backup. Live: a copy of a real rc.33 database (v4: 1 assistant, 7 chats, 3 models) upgraded to v5 with every count and setting unchanged; this does not verify the later v5-to-v6 migration.                                          | —                                                                                                                                                                                                      |
 | Workspace           | `agent/workspace.rs` (cap-std)                                                                               | Unit: traversal, absolute, and drive paths refused; symlinks inside and out refused; version-bound atomic writes; a concurrent edit is detected                                                                                                                                                                                                                                                                                                       | Windows reparse points are covered only by cap-std, not tested here                                                                                                                                    |
 | Sandbox             | `agent/sandbox.rs` (bubblewrap)                                                                              | Unit with a real bwrap: no home folder, no environment, no network, read-only `/usr`, read-only project, CPU limit, cancellation kills children; on bubblewrap without `--size`, `/tmp` lives in the quota-watched work folder (forced-path test)                                                                                                                                                                                                     | Linux only; Windows and Android show it as unavailable                                                                                                                                                 |
 | Web                 | `agent/web.rs`                                                                                               | Unit: address policy (v4, v6, mapped, NAT64, 6to4), URL refusals, HTML reduction. Live: Wikipedia search and page read; metadata, localhost, and 10.x refused; a public redirect to loopback refused                                                                                                                                                                                                                                                  | Brave and SearXNG providers not exercised live                                                                                                                                                         |
@@ -76,6 +78,9 @@ were fixed in `1100ea1` and `c069c22`; the list is in that commit message.
 - **Catalog.** Models with model-specific licenses require acceptance in
   Juniper. Gated upstream repositories are not used; downloads come from
   reputable public GGUF conversions, recorded per entry.
+  Gemma's mutable terms page has no preserved historical response bytes;
+  Juniper links the current terms, asks again before every Gemma download, and
+  does not store acceptance for that page.
 - **Model quality.** Small models may call tools poorly or not at all. The
   catalog's live table records each model's single-request tool-call smoke.
   Models are not marked qualified for agent work.
@@ -83,7 +88,9 @@ were fixed in `1100ea1` and `c069c22`; the list is in that commit message.
 ## Recovery commands
 
 ```bash
-# Restore the pre-v5 database (stop Juniper first):
+# To roll back the latest v5-to-v6 migration, stop Juniper and restore its v5 backup:
+cp ~/.local/share/com.cinqic.juniper/juniper.db.schema-v5.backup ~/.local/share/com.cinqic.juniper/juniper.db
+# To roll back the original rc.33 v4-to-v5 agent migration instead:
 cp ~/.local/share/com.cinqic.juniper/juniper.db.schema-v4.backup ~/.local/share/com.cinqic.juniper/juniper.db
 # Regenerate catalog entries from research:
 node scripts/catalog-from-research.mjs docs/research/model-catalog-2026-10-15
@@ -91,4 +98,7 @@ node scripts/catalog-from-research.mjs docs/research/model-catalog-2026-10-15
 
 ## Reviewer and approval status
 
-`CANDIDATE - PENDING INDEPENDENT REVIEW`. Implementer self-checks and CI only.
+`BLOCKED - INDEPENDENT REVIEW`. The repairs and local validation are recorded
+in the independent review report. The live catalog table above remains the
+implementer's own evidence; it was not reproduced against an identified source
+revision. Do not treat this phase as approved or merged.

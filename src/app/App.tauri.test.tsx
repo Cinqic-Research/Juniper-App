@@ -157,6 +157,56 @@ describe('Juniper native startup', () => {
     )
   })
 
+  it('does not acknowledge an approved memory until its snapshot is durable', async () => {
+    const change = {
+      id: 'outbox-1',
+      assistantId: 'assistant-1',
+      operation: 'save',
+      payload: { content: 'Remember the project codename.' },
+      createdAt: '2026-10-15T12:00:00Z',
+    }
+    const outbox = [change]
+    const saveAttempts: AppData[] = []
+    const durableSnapshots: AppData[] = []
+    installTauri((command, args) => {
+      if (command === 'load_app_data') return storedStateWithOllama()
+      if (command === 'memory_changes') return outbox
+      if (command === 'save_app_data') {
+        const snapshot = args?.data as AppData
+        saveAttempts.push(snapshot)
+        if (snapshot.memories.some((memory) => memory.id === 'memory-agent-outbox-1')) {
+          throw new Error('DATABASE_ERROR: simulated disk failure')
+        }
+        durableSnapshots.push(snapshot)
+      }
+      return null
+    })
+
+    await mountApp()
+
+    expect(outbox).toEqual([change])
+    expect(
+      saveAttempts.some((snapshot) =>
+        snapshot.memories.some((memory) => memory.id === 'memory-agent-outbox-1'),
+      ),
+    ).toBe(true)
+    expect(
+      durableSnapshots.some((snapshot) =>
+        snapshot.memories.some((memory) => memory.id === 'memory-agent-outbox-1'),
+      ),
+    ).toBe(false)
+    expect(commands).not.toContain('memory_changes_applied')
+    expect(
+      invocations.some(
+        (call) =>
+          call.command === 'save_app_data' &&
+          (call.args?.data as AppData).memories.some(
+            (memory) => memory.id === 'memory-agent-outbox-1',
+          ),
+      ),
+    ).toBe(true)
+  })
+
   it('reports frontend readiness to the native host once stored state is hydrated', async () => {
     installTauri(() => null)
 

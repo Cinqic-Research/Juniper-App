@@ -148,6 +148,7 @@ describe('Juniper application shell', () => {
   it('keeps every pre-redesign surface reachable from the new navigation', async () => {
     await mount(settingsFor())
     await click(buttonByText(document.querySelector('.sidebar-nav')!, 'Models'))
+    await click(container.querySelector<HTMLInputElement>('.segmented input[value="all"]')!)
     expect(container.textContent).toContain('SmolLM2 135M Instruct')
     expect(container.textContent).toContain('From your connections')
     expect(container.textContent).toContain('Hosted reviewer model')

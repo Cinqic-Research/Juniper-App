@@ -174,7 +174,6 @@ function JuniperApp() {
         const changes = await agentApi.memoryChanges()
         if (changes.length === 0) return
         update((current) => applyMemoryChanges(current, changes))
-        await agentApi.memoryChangesApplied(changes.map((change) => change.id))
       } catch {
         // Retried on the next agent event.
       } finally {

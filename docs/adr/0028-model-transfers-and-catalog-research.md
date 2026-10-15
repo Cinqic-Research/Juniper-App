@@ -52,9 +52,13 @@ snapshot (`docs/research/model-catalog-<date>/`) by
 
 ## Consequences
 
-The catalog grows from 5 to 28 entries (33 artifacts), and the snapshot's ten
-most-downloaded eligible releases are all present. Each artifact's live
-evidence (download, verification, load, chat, tool-call smoke on the bundled
-llama.cpp build) is recorded per artifact in
-`docs/qualification/catalog-live-2026-10-15.md`. Artifacts keep
-`qualification: package-only` unless capabilities were measured.
+The dated snapshot includes 28 model records and 33 artifacts, and the
+snapshot's ten most-downloaded eligible releases are present. A per-artifact
+summary of the reported live download, verification, load, chat, and tool-call
+smoke runs on the bundled llama.cpp build is in
+`docs/qualification/catalog-live-2026-10-15.md`. The raw JSONL is external to
+this checkout, so the checked-in report is not a standalone reproduction
+package. The live-resume row also lacks the exact outgoing `Range` and received
+`Content-Range` headers; exact-range handling is covered by fixture tests, not
+that live record. Artifacts keep `qualification: package-only` unless
+capabilities were measured.

@@ -1,4 +1,4 @@
-//! Native persistence for agent state (schema v5). Every task change is a
+//! Native persistence for agent state (schema v6). Every task change is a
 //! revision-checked write; a writer holding a stale revision is refused
 //! instead of overwriting newer progress.
 
@@ -247,6 +247,22 @@ pub fn list_tasks(
         .map_err(db_error)
 }
 
+/// Every task that may still be resumed or continued, including child tasks
+/// waiting for approval or input. Route changes must account for persisted
+/// contexts as well as currently executing tasks.
+pub fn nonterminal_tasks(connection: &Connection) -> StoreResult<Vec<Task>> {
+    let mut statement = connection
+        .prepare(&format!(
+            "SELECT {TASK_COLUMNS} FROM tasks WHERE status NOT IN ('completed', 'failed', 'cancelled') ORDER BY created_at ASC"
+        ))
+        .map_err(db_error)?;
+    statement
+        .query_map([], task_from_row)
+        .map_err(db_error)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(db_error)
+}
+
 pub fn children(connection: &Connection, parent_id: &str) -> StoreResult<Vec<Task>> {
     let mut statement = connection
         .prepare(&format!(
@@ -311,6 +327,63 @@ pub fn add_event(
     Ok(())
 }
 
+/// Commits an action outcome, its event, and the task checkpoint together.
+/// A crash cannot leave a successful side effect recorded without the
+/// matching transcript result and pending-call cursor.
+pub fn checkpoint_tool_result(
+    connection: &Connection,
+    task: &Task,
+    action: Option<(&str, &str, &Value)>,
+    summary: &str,
+    detail: Option<Value>,
+) -> StoreResult<Task> {
+    let transaction = connection.unchecked_transaction().map_err(db_error)?;
+    if let Some((action_id, status, result)) = action {
+        let changed = transaction
+            .execute(
+                "UPDATE task_actions SET status = ?1, result = ?2, updated_at = ?3 WHERE id = ?4",
+                params![status, result.to_string(), now(), action_id],
+            )
+            .map_err(db_error)?;
+        if changed != 1 {
+            return Err("ACTION_NOT_FOUND: The tool action could not be checkpointed.".into());
+        }
+    }
+    add_event(&transaction, &task.id, "action", summary, detail)?;
+    let mut committed = task.clone();
+    save_task(&transaction, &mut committed)?;
+    transaction.commit().map_err(db_error)?;
+    Ok(committed)
+}
+
+/// Creates a delegated task and advances its parent to the child wait state
+/// in one transaction. A restart cannot leave a runnable orphan child.
+pub fn checkpoint_child_spawn(
+    connection: &Connection,
+    parent: &Task,
+    child: &Task,
+) -> StoreResult<Task> {
+    let transaction = connection.unchecked_transaction().map_err(db_error)?;
+    insert_task(&transaction, child)?;
+    add_event(&transaction, &child.id, "status", "Queued", None)?;
+    add_event(
+        &transaction,
+        &parent.id,
+        "child",
+        "Started a delegated subtask",
+        Some(json!({ "taskId": child.id })),
+    )?;
+    let mut committed = parent.clone();
+    transition(
+        &transaction,
+        &mut committed,
+        TaskStatus::Queued,
+        Some("Waiting for a subtask.".into()),
+    )?;
+    transaction.commit().map_err(db_error)?;
+    Ok(committed)
+}
+
 pub fn events(connection: &Connection, task_id: &str, limit: u32) -> StoreResult<Vec<TaskEvent>> {
     let mut statement = connection
         .prepare("SELECT id, task_id, kind, summary, detail, created_at FROM (SELECT * FROM task_events WHERE task_id = ?1 ORDER BY id DESC LIMIT ?2) ORDER BY id")
@@ -371,6 +444,20 @@ pub fn set_action(
         .execute(
             "UPDATE task_actions SET status = ?1, result = COALESCE(?2, result), updated_at = ?3 WHERE id = ?4",
             params![status, result.map(Value::to_string), now(), action_id],
+        )
+        .map_err(db_error)?;
+    Ok(())
+}
+
+pub fn set_action_binding(
+    connection: &Connection,
+    action_id: &str,
+    binding: &str,
+) -> StoreResult<()> {
+    connection
+        .execute(
+            "UPDATE task_actions SET binding = ?1, updated_at = ?2 WHERE id = ?3",
+            params![binding, now(), action_id],
         )
         .map_err(db_error)?;
     Ok(())
@@ -512,6 +599,38 @@ pub fn pending_approvals(connection: &Connection) -> StoreResult<Vec<Approval>> 
         .map_err(db_error)
 }
 
+#[derive(Clone, Copy)]
+pub enum ApprovalClosure {
+    Deadline,
+    TaskEnded,
+}
+
+/// Closes a pending approval either after its deadline or because its task
+/// ended. Deadline closure is checked against SQLite's clock and malformed
+/// timestamps fail closed.
+pub fn close_approval(
+    connection: &Connection,
+    id: &str,
+    closure: ApprovalClosure,
+) -> StoreResult<bool> {
+    let (decision, deadline_gate) = match closure {
+        ApprovalClosure::Deadline => (
+            "expired",
+            "AND COALESCE(julianday(expires_at) <= julianday('now'), 1)",
+        ),
+        ApprovalClosure::TaskEnded => ("task-ended", ""),
+    };
+    let changed = connection
+        .execute(
+            &format!(
+                "UPDATE approvals SET status = 'expired', decision = ?1, decided_at = ?2 WHERE id = ?3 AND status = 'pending' {deadline_gate}"
+            ),
+            params![decision, now(), id],
+        )
+        .map_err(db_error)?;
+    Ok(changed == 1)
+}
+
 /// Records a decision on a still-pending approval. A decided, expired, or
 /// stale approval cannot be decided again.
 pub fn decide_approval(
@@ -520,13 +639,28 @@ pub fn decide_approval(
     status: &str,
     decision: &str,
 ) -> StoreResult<()> {
+    if !matches!(status, "approved" | "denied") {
+        return Err("INVALID_INPUT: Approval decisions must approve or deny.".into());
+    }
     let changed = connection
         .execute(
-            "UPDATE approvals SET status = ?1, decision = ?2, decided_at = ?3 WHERE id = ?4 AND status = 'pending'",
+            "UPDATE approvals SET status = ?1, decision = ?2, decided_at = ?3 WHERE id = ?4 AND status = 'pending' AND julianday(expires_at) > julianday('now')",
             params![status, decision, now(), id],
         )
         .map_err(db_error)?;
     if changed != 1 {
+        let expired: bool = connection
+            .query_row(
+                "SELECT status = 'pending' AND COALESCE(julianday(expires_at) <= julianday('now'), 1) FROM approvals WHERE id = ?1",
+                [id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(db_error)?
+            .unwrap_or(false);
+        if expired {
+            return Err("APPROVAL_EXPIRED: This approval request has expired.".into());
+        }
         return Err("APPROVAL_NOT_PENDING: This approval request is no longer pending.".into());
     }
     Ok(())
@@ -985,15 +1119,6 @@ pub fn memory_outbox(connection: &Connection) -> StoreResult<Vec<Value>> {
         .map_err(db_error)
 }
 
-pub fn acknowledge_memory_changes(connection: &Connection, ids: &[String]) -> StoreResult<()> {
-    for id in ids {
-        connection
-            .execute("DELETE FROM memory_outbox WHERE id = ?1", [id])
-            .map_err(db_error)?;
-    }
-    Ok(())
-}
-
 // ---------------------------------------------------------------- recovery
 
 /// After a restart nothing is executing: running tasks become interrupted,
@@ -1031,6 +1156,7 @@ pub fn recover_after_restart(connection: &Connection) -> StoreResult<usize> {
     if uncertain > 0 {
         add_inbox_note(connection, uncertain)?;
     }
+    super::schedule::reconcile_terminal_runs(connection)?;
     Ok(running.len())
 }
 

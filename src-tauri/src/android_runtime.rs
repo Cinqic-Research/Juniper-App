@@ -241,7 +241,8 @@ pub async fn stream_chat<R: Runtime>(
         .catalog_id
         .clone()
         .unwrap_or_else(|| request.model.model_id.clone());
-    let (model_path, _) = managed_models::path_for_catalog(&app, &catalog_id, None)?;
+    let (model_path, _) =
+        managed_models::path_for_catalog(&app, &catalog_id, request.model.artifact_id.as_deref())?;
     // The Android JNI tokenizes text with special parsing; Juniper 1 is refused there (A-02).
     let mut model_file = std::fs::File::open(&model_path)
         .map_err(|_| "The managed model file is unavailable.".to_owned())?;

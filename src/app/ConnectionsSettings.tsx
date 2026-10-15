@@ -44,7 +44,9 @@ export function ConnectionsSettings({ data, update }: { data: AppData; update: U
     const url = baseUrl.trim()
     if (!trimmedName || !url) return
     const providerId = editing?.id ?? uid('provider')
-    const apiKeyRef = apiKey.trim() ? (editing?.apiKeyRef ?? uid('credential')) : editing?.apiKeyRef
+    // Rotate to a new secure-vault reference so an active run that captured
+    // the previous URL can never read the replacement key for that route.
+    const apiKeyRef = apiKey.trim() ? uid('credential') : editing?.apiKeyRef
     if (apiKeyRef && apiKey.trim()) {
       try {
         await saveProviderCredential(apiKeyRef, apiKey.trim())
@@ -83,6 +85,15 @@ export function ConnectionsSettings({ data, update }: { data: AppData; update: U
       providers: current.providers.some((item) => item.id === provider.id)
         ? current.providers.map((item) => (item.id === provider.id ? provider : item))
         : [...current.providers, provider],
+      models: current.models.map((model) =>
+        model.providerId === provider.id
+          ? {
+              ...model,
+              locality: provider.locality,
+              executionLocation: transport,
+            }
+          : model,
+      ),
     }))
     setApiKey('')
     setFormOpen(false)

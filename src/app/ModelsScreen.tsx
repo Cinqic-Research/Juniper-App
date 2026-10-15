@@ -27,7 +27,10 @@ import {
 import {
   MODEL_CATALOG,
   formatBytes,
+  isRecommendedModel,
   isImportOnly,
+  licenseAcceptanceValue,
+  recommendModel,
   recommendModels,
   runtimeOptionsForModel,
   type CatalogArtifact,
@@ -64,7 +67,10 @@ const LICENSE_ACCEPTED_KEY = 'juniper.licenseAccepted.'
 
 function licenseAccepted(entry: CatalogModel): boolean {
   try {
-    return localStorage.getItem(LICENSE_ACCEPTED_KEY + entry.id) === entry.license
+    const acceptance = licenseAcceptanceValue(entry)
+    return (
+      acceptance !== null && localStorage.getItem(LICENSE_ACCEPTED_KEY + entry.id) === acceptance
+    )
   } catch {
     return false
   }
@@ -72,7 +78,9 @@ function licenseAccepted(entry: CatalogModel): boolean {
 
 function rememberLicense(entry: CatalogModel) {
   try {
-    localStorage.setItem(LICENSE_ACCEPTED_KEY + entry.id, entry.license)
+    const acceptance = licenseAcceptanceValue(entry)
+    if (acceptance === null) return
+    localStorage.setItem(LICENSE_ACCEPTED_KEY + entry.id, acceptance)
   } catch {
     // Acceptance is asked again next time.
   }
@@ -230,10 +238,14 @@ export function ModelsScreen({
   )
   const visible = useMemo(() => {
     const normalized = query.trim().toLowerCase()
+    const selectedById = new Map<string, ModelRecommendation>()
     const filtered = recommendations.filter((item) => {
+      const artifact = artifactFor(item)
+      const selectedRecommendation = device ? recommendModel(item.model, device, artifact.id) : item
+      selectedById.set(item.model.id, selectedRecommendation)
       if (family && item.model.family !== family) return false
       if (purpose && !item.model.tags.includes(purpose)) return false
-      if (size && sizeBand(item.artifact.sizeBytes) !== size) return false
+      if (size && sizeBand(artifact.sizeBytes) !== size) return false
       if (licenseFilter === 'open' && !OPEN_LICENSES.includes(item.model.license)) return false
       if (licenseFilter === 'terms' && OPEN_LICENSES.includes(item.model.license)) return false
       if (view === 'popular' && !item.model.popularity) return false
@@ -247,7 +259,7 @@ export function ModelsScreen({
         ].some((value) => value.toLowerCase().includes(normalized))
       if (!matches) return false
       if (view === 'installed') return managedIds.has(item.model.id)
-      if (view === 'recommended') return item.fit !== 'not-recommended' || item.storageSafe
+      if (view === 'recommended') return isRecommendedModel(selectedRecommendation)
       return true
     })
     return view === 'popular'
@@ -256,8 +268,28 @@ export function ModelsScreen({
             (left.model.popularity?.eligibleRank ?? 999) -
             (right.model.popularity?.eligibleRank ?? 999),
         )
-      : filtered
-  }, [family, licenseFilter, managedIds, purpose, query, recommendations, size, view])
+      : view === 'recommended'
+        ? [...filtered].sort((left, right) => {
+            const leftRecommendation = selectedById.get(left.model.id) ?? left
+            const rightRecommendation = selectedById.get(right.model.id) ?? right
+            return (
+              rightRecommendation.score - leftRecommendation.score ||
+              leftRecommendation.artifact.sizeBytes - rightRecommendation.artifact.sizeBytes
+            )
+          })
+        : filtered
+  }, [
+    artifactFor,
+    device,
+    family,
+    licenseFilter,
+    managedIds,
+    purpose,
+    query,
+    recommendations,
+    size,
+    view,
+  ])
 
   const externalModels = data.models.filter((model) => isExternalModel(data, model))
 
@@ -336,9 +368,32 @@ export function ModelsScreen({
       return
     }
     if (entry.licenseAcceptance === 'required' && !licenseAccepted(entry)) {
+      const termsFingerprint = entry.licenseTermsRevision?.includes('-sha256-')
       const accepted = await dialogs.confirm({
         title: `Accept the ${entry.license}?`,
-        message: `${entry.displayName} is distributed under the ${entry.license} (${entry.licenseUrl}). Its developer requires you to accept these terms before use. Juniper’s own Apache-2.0 license does not apply to the model.`,
+        message: (
+          <>
+            <p>
+              {entry.displayName} is distributed under the {entry.license}. Review the terms before
+              downloading. Juniper’s own Apache-2.0 license does not apply to the model.
+            </p>
+            <p>
+              <a href={entry.licenseUrl} target="_blank" rel="noreferrer">
+                Review the {entry.license}
+              </a>
+            </p>
+            {termsFingerprint ? (
+              <p>
+                Catalog fingerprint: {entry.licenseTermsRevision}. It identifies a reported response
+                hash, but the historical response is not bundled and cannot be verified against the
+                linked page. Review the linked page before each download; Juniper does not save
+                acceptance for these mutable terms.
+              </p>
+            ) : (
+              <p>Terms revision: {entry.licenseTermsRevision}.</p>
+            )}
+          </>
+        ),
         confirmLabel: 'Accept and download',
       })
       if (!accepted) return
@@ -612,11 +667,13 @@ export function ModelsScreen({
           const entry = recommendation.model
           const profile = data.models.find((model) => model.catalogId === entry.id)
           const artifact = artifactFor(recommendation)
-          const readyArtifact = entry.artifacts.find((item) => readyArtifacts.has(item.id))
+          const selectedRecommendation = device
+            ? recommendModel(entry, device, artifact.id)
+            : recommendation
           return (
             <CatalogModelCard
               key={entry.id}
-              recommendation={recommendation}
+              recommendation={selectedRecommendation}
               artifact={artifact}
               readyArtifactIds={readyArtifacts}
               onSelectArtifact={(id) => setChoice((current) => ({ ...current, [entry.id]: id }))}
@@ -639,7 +696,7 @@ export function ModelsScreen({
               }
               onUnload={() => void unload()}
               onPause={() => controller.current?.abort()}
-              onMakeDefault={() => registerManagedModel(entry, readyArtifact ?? artifact, true)}
+              onMakeDefault={() => registerManagedModel(entry, artifact, true)}
               onRemove={() => void remove(entry)}
             />
           )
@@ -956,8 +1013,8 @@ function CatalogModelCard({
       <p className="muted small">
         {model.organization} · {parameterLabel(model.parameterCount)} parameters · {model.license}
         {model.licenseAcceptance === 'required' ? ' (accept before download)' : ''} · needs about{' '}
-        {formatBytes(model.minimumRecommendedRamBytes)}–{formatBytes(model.recommendedRamBytes)}{' '}
-        memory (estimate)
+        {formatBytes(recommendation.memory.minimum)}–
+        {formatBytes(recommendation.memory.recommended)} for this file (estimate)
       </p>
       {model.popularity && (
         <p className="muted small">
@@ -988,6 +1045,14 @@ function CatalogModelCard({
       {!recommendation.storageSafe && (
         <p className="warning-line">
           <Icon name="info" size={16} /> Not enough free storage for a safe download.
+        </p>
+      )}
+      {!recommendation.artifactCompatible && (
+        <p className="warning-line">
+          <Icon name="info" size={16} />
+          {recommendation.artifactCompatibilityKnown
+            ? 'This artifact is not supported on this device’s platform or architecture.'
+            : 'Device architecture could not be determined, so compatibility cannot be confirmed.'}
         </p>
       )}
       {importOnly && !installed && (
@@ -1070,15 +1135,21 @@ function CatalogModelCard({
             <button
               className="button primary"
               onClick={onDownload}
-              disabled={!importOnly && !recommendation.storageSafe}
+              disabled={
+                !recommendation.artifactCompatible || (!importOnly && !recommendation.storageSafe)
+              }
             >
-              {importOnly
-                ? 'Import verified file…'
-                : recommendation.storageSafe
-                  ? managedState === 'partial'
-                    ? 'Resume download'
-                    : `Download · ${formatBytes(artifact.sizeBytes)}`
-                  : 'Not enough storage'}
+              {!recommendation.artifactCompatible
+                ? recommendation.artifactCompatibilityKnown
+                  ? 'Not available on this device'
+                  : 'Compatibility unknown'
+                : importOnly
+                  ? 'Import verified file…'
+                  : recommendation.storageSafe
+                    ? managedState === 'partial'
+                      ? 'Resume download'
+                      : `Download · ${formatBytes(artifact.sizeBytes)}`
+                    : 'Not enough storage'}
             </button>
             {managedState && (
               <button className="button ghost" onClick={onRemove}>
@@ -1128,12 +1199,23 @@ function CatalogModelCard({
             <dd>{artifact.qualification}</dd>
           </div>
           <div>
-            <dt>Context</dt>
+            <dt>Upstream maximum context</dt>
             <dd>{model.contextLength.toLocaleString()} tokens</dd>
           </div>
+          {artifact.runtimeId === 'llama.cpp' && (
+            <div>
+              <dt>Juniper local context limit</dt>
+              <dd>{Math.min(model.contextLength, 16_384).toLocaleString()} tokens</dd>
+            </div>
+          )}
           <div>
             <dt>License</dt>
-            <dd>{model.license}</dd>
+            <dd>
+              {model.license}
+              {model.licenseTermsRevision
+                ? ` · ${model.licenseTermsRevision.includes('-sha256-') ? 'reported terms fingerprint (unverified)' : 'terms'} ${model.licenseTermsRevision}`
+                : ''}
+            </dd>
           </div>
           <div>
             <dt>Source</dt>

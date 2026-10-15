@@ -49,6 +49,16 @@ pub fn run() {
             std::fs::create_dir_all(&data_dir).map_err(|error| {
                 startup::stage_failed("create-app-data-dir", Some(&data_dir), &error)
             })?;
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            {
+                let lock_path = data_dir.join("agent-runtime.lock");
+                app.state::<AppState>()
+                    .agent
+                    .acquire_runtime_lock(&lock_path)
+                    .map_err(|error| {
+                        startup::stage_failed("agent-runtime-lock", Some(&lock_path), &error)
+                    })?;
+            }
             let database = data_dir.join("juniper.db");
             storage::initialize(&database)
                 .map_err(|error| startup::stage_failed("open-database", Some(&database), &error))?;
@@ -130,7 +140,6 @@ pub fn run() {
             agent::commands::artifact_export,
             agent::commands::inbox_mark_read,
             agent::commands::memory_changes,
-            agent::commands::memory_changes_applied,
             agent::commands::skills_list,
             agent::commands::skill_set_enabled,
             agent::commands::skill_remove,

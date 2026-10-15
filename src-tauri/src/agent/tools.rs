@@ -32,6 +32,9 @@ pub struct Prepared {
     /// The state the preview describes; part of the approval binding.
     pub target: Value,
     pub preview: String,
+    /// The exact search provider previewed and approved. It is not re-read
+    /// from mutable settings when the action resumes.
+    pub search_provider: Option<super::web::Provider>,
 }
 
 /// A host-authored result.
@@ -304,6 +307,7 @@ pub fn prepare(
         scope: json!({}),
         target: json!({}),
         preview: String::new(),
+        search_provider: None,
         spec,
     };
     match call.name.as_str() {
@@ -363,16 +367,21 @@ pub fn prepare(
             );
         }
         "web.search" => {
+            let provider = super::web::provider(connection);
             prepared.preview = format!(
                 "Send this search to {}: “{}”",
-                super::web::provider_label(connection),
+                super::web::provider_label_for(&provider),
                 argument(call, "query")
             );
+            prepared.target = super::web::provider_approval_target(&provider);
+            prepared.scope = json!({ "destination": prepared.target });
+            prepared.search_provider = Some(provider);
         }
         "web.fetch" => {
             let url = super::web::checked_url(argument(call, "url"))?;
             prepared.preview = format!("Open this public web page: {url}");
             prepared.target = json!({ "url": url.to_string() });
+            prepared.scope = json!({ "url": url.to_string() });
         }
         "memory.save" => {
             prepared.preview = format!("Save this memory: “{}”", argument(call, "content"));
@@ -424,10 +433,10 @@ pub fn prepare(
             );
         }
         name if name.starts_with("mcp.") => {
-            let (scope, preview) = super::mcp::prepare(connection, call)?;
+            let (scope, preview, target) = super::mcp::prepare(connection, call)?;
             prepared.capability = super::mcp::capability(call)?;
-            prepared.scope = scope.clone();
-            prepared.target = scope;
+            prepared.scope = scope;
+            prepared.target = target;
             prepared.preview = preview;
         }
         _ => {}
@@ -881,10 +890,20 @@ async fn execute_inner(
                 format!("Created the schedule “{}”", schedule.spec.title),
             ))
         }
-        "web.search" => super::web::search_tool(execution, call).await,
+        "web.search" => {
+            let provider = prepared.search_provider.as_ref().ok_or_else(|| {
+                fail(
+                    "SEARCH_NOT_CONFIGURED",
+                    "The approved provider is unavailable.",
+                )
+            })?;
+            super::web::search_tool(execution, call, provider).await
+        }
         "web.fetch" => super::web::fetch_tool(execution, call).await,
         "code.python" | "code.run" => super::sandbox::run_tool(execution, call).await,
-        name if name.starts_with("mcp.") => super::mcp::call_tool(execution, call).await,
+        name if name.starts_with("mcp.") => {
+            super::mcp::call_tool(execution, call, &prepared.target).await
+        }
         _ => Err(fail("UNKNOWN_TOOL", "This host tool is not available.")),
     }
 }

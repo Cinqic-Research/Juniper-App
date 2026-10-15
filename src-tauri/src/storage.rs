@@ -5,7 +5,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-pub const SCHEMA_VERSION: i64 = 5;
+pub const SCHEMA_VERSION: i64 = 6;
 
 const INITIAL_SCHEMA: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -358,8 +358,16 @@ CREATE VIRTUAL TABLE IF NOT EXISTS doc_chunks USING fts5(
 );
 "#;
 
+/// Retry-safe schedule settlement and idempotent task dispatch. This is a
+/// separate migration so databases already at v5 receive the new constraints.
+const MIGRATION_V6: &str = r#"
+ALTER TABLE schedule_runs ADD COLUMN finalized_at TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS tasks_schedule_run_id_unique
+    ON tasks(schedule_run_id) WHERE schedule_run_id IS NOT NULL;
+"#;
+
 fn migrate(connection: &Connection) -> Result<()> {
-    debug_assert_eq!(SCHEMA_VERSION, 5);
+    debug_assert_eq!(SCHEMA_VERSION, 6);
     connection.pragma_update(None, "foreign_keys", "ON")?;
     let transaction = connection.unchecked_transaction()?;
     transaction.execute_batch(INITIAL_SCHEMA)?;
@@ -413,6 +421,13 @@ fn migrate(connection: &Connection) -> Result<()> {
         transaction.execute_batch(MIGRATION_V5)?;
         transaction.execute(
             "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(5, datetime('now'))",
+            [],
+        )?;
+    }
+    if version < 6 {
+        transaction.execute_batch(MIGRATION_V6)?;
+        transaction.execute(
+            "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(6, datetime('now'))",
             [],
         )?;
     }
@@ -613,8 +628,63 @@ pub fn save_app_data_with_paths(
             });
         }
     }
-    let payload = serde_json::to_string(&persisted).unwrap_or_else(|_| "{}".into());
     let transaction = connection.unchecked_transaction()?;
+    let mut memory_change_ids = Vec::new();
+    {
+        let mut statement = transaction.prepare(
+            "SELECT id, assistant_id, operation, payload, created_at FROM memory_outbox ORDER BY created_at, id",
+        )?;
+        let changes = statement
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    serde_json::from_str::<Value>(&row.get::<_, String>(3)?).map_err(|error| {
+                        rusqlite::Error::FromSqlConversionFailure(3, Type::Text, Box::new(error))
+                    })?,
+                    row.get::<_, String>(4)?,
+                ))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        if !changes.is_empty() {
+            let memories = persisted
+                .as_object_mut()
+                .ok_or_else(|| rusqlite::Error::InvalidQuery)?
+                .entry("memories")
+                .or_insert_with(|| json!([]))
+                .as_array_mut()
+                .ok_or_else(|| rusqlite::Error::InvalidQuery)?;
+            for (id, assistant_id, operation, payload, created_at) in changes {
+                let memory_id = format!("memory-agent-{id}");
+                match operation.as_str() {
+                    "save" => {
+                        if let Some(content) = payload["content"].as_str().filter(|s| !s.is_empty())
+                            && !memories.iter().any(|memory| memory["id"] == memory_id)
+                        {
+                            memories.push(json!({
+                                "id": memory_id,
+                                "assistantId": assistant_id,
+                                "content": content,
+                                "source": "agent-task",
+                                "enabled": true,
+                                "createdAt": created_at,
+                                "updatedAt": created_at,
+                            }));
+                        }
+                    }
+                    "delete" => {
+                        if let Some(target_id) = payload["id"].as_str() {
+                            memories.retain(|memory| memory["id"] != target_id);
+                        }
+                    }
+                    _ => return Err(rusqlite::Error::InvalidQuery),
+                }
+                memory_change_ids.push(id);
+            }
+        }
+    }
+    let payload = serde_json::to_string(&persisted).unwrap_or_else(|_| "{}".into());
     transaction.execute(
         "INSERT INTO app_state(id, payload, updated_at) VALUES('singleton', ?1, datetime('now')) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload, updated_at=excluded.updated_at",
         params![payload],
@@ -830,6 +900,9 @@ pub fn save_app_data_with_paths(
             ],
         )?;
     }
+    for id in memory_change_ids {
+        transaction.execute("DELETE FROM memory_outbox WHERE id = ?1", [id])?;
+    }
     transaction.commit()
 }
 
@@ -929,6 +1002,81 @@ mod tests {
     use super::*;
 
     #[test]
+    fn approved_memory_outbox_is_applied_and_acknowledged_with_the_snapshot() -> Result<()> {
+        let path = std::env::temp_dir().join(format!(
+            "juniper-memory-outbox-test-{}.db",
+            uuid::Uuid::new_v4()
+        ));
+        let snapshot = json!({
+            "assistants": [{
+                "id": "assistant-1",
+                "schemaVersion": 2,
+                "createdAt": "2026-10-15T00:00:00Z",
+                "updatedAt": "2026-10-15T00:00:00Z"
+            }],
+            "memories": [],
+            "settings": {}
+        });
+        save_app_data_with_paths(&path, &snapshot, &HashMap::new())?;
+        let connection = super::connection(&path)?;
+        connection.execute(
+            "INSERT INTO memory_outbox(id, assistant_id, operation, payload, created_at) VALUES('change-1', 'assistant-1', 'save', ?1, '2026-10-15T12:00:00Z')",
+            [json!({ "content": "Remember the project codename." }).to_string()],
+        )?;
+        drop(connection);
+
+        // The renderer has not yet seen the approved change; it saves its
+        // existing snapshot. The native transaction must include the outbox
+        // change in both app_state and the memories projection before acking.
+        save_app_data_with_paths(&path, &snapshot, &HashMap::new())?;
+        let saved = load_app_data(&path)?.expect("snapshot exists");
+        assert_eq!(
+            saved["memories"][0],
+            json!({
+                "id": "memory-agent-change-1",
+                "assistantId": "assistant-1",
+                "content": "Remember the project codename.",
+                "source": "agent-task",
+                "enabled": true,
+                "createdAt": "2026-10-15T12:00:00Z",
+                "updatedAt": "2026-10-15T12:00:00Z"
+            })
+        );
+        let connection = super::connection(&path)?;
+        let outbox_count: i64 =
+            connection.query_row("SELECT COUNT(*) FROM memory_outbox", [], |row| row.get(0))?;
+        assert_eq!(outbox_count, 0);
+        let projected: i64 = connection.query_row(
+            "SELECT COUNT(*) FROM memories WHERE id = 'memory-agent-change-1'",
+            [],
+            |row| row.get(0),
+        )?;
+        assert_eq!(projected, 1);
+
+        connection.execute(
+            "INSERT INTO memory_outbox(id, assistant_id, operation, payload, created_at) VALUES('change-2', 'assistant-1', 'save', ?1, '2026-10-15T12:01:00Z')",
+            [json!({ "content": "Second approved memory." }).to_string()],
+        )?;
+        connection.execute_batch(
+            "CREATE TRIGGER fail_memory_outbox_ack BEFORE DELETE ON memory_outbox BEGIN SELECT RAISE(ABORT, 'simulated acknowledgement failure'); END;",
+        )?;
+        drop(connection);
+        assert!(save_app_data_with_paths(&path, &snapshot, &HashMap::new()).is_err());
+        let loaded_after_failure = load_app_data(&path)?.expect("prior snapshot remains");
+        assert_eq!(
+            loaded_after_failure["memories"].as_array().unwrap().len(),
+            1
+        );
+        let connection = super::connection(&path)?;
+        let remaining: i64 =
+            connection.query_row("SELECT COUNT(*) FROM memory_outbox", [], |row| row.get(0))?;
+        assert_eq!(remaining, 1);
+        drop(connection);
+        std::fs::remove_file(path).ok();
+        Ok(())
+    }
+
+    #[test]
     fn migration_creates_schema_and_enables_foreign_keys() -> Result<()> {
         let connection = Connection::open_in_memory()?;
         migrate(&connection)?;
@@ -962,7 +1110,7 @@ mod tests {
     }
 
     #[test]
-    fn migration_preserves_a_v1_database_and_adds_v2_through_v5_state() -> Result<()> {
+    fn migration_preserves_a_v1_database_and_adds_v2_through_v6_state() -> Result<()> {
         let connection = Connection::open_in_memory()?;
         connection.execute_batch(
             r#"
@@ -1456,6 +1604,115 @@ mod tests {
         Ok(())
     }
 
+    fn v5_database(path: &Path) -> Result<()> {
+        v4_database(path)?;
+        let connection = Connection::open(path)?;
+        connection.execute_batch(MIGRATION_V5)?;
+        connection.execute(
+            "INSERT INTO schema_migrations(version, applied_at) VALUES(5, '2026-01-01')",
+            [],
+        )?;
+        Ok(())
+    }
+
+    #[test]
+    fn upgrading_an_existing_v5_database_adds_schedule_recovery_schema_and_backup() -> Result<()> {
+        let root = std::env::temp_dir().join(format!("juniper-v5-to-v6-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).expect("directory");
+        let path = root.join("juniper.db");
+        v5_database(&path)?;
+
+        initialize(&path)?;
+
+        let backup = migration_backup_path(&path, 5);
+        assert!(
+            backup.is_file(),
+            "the v5 database is backed up before upgrade"
+        );
+        let backed_up_version: i64 = Connection::open(&backup)?.query_row(
+            "SELECT MAX(version) FROM schema_migrations",
+            [],
+            |row| row.get(0),
+        )?;
+        assert_eq!(backed_up_version, 5);
+
+        let migrated = open(&path)?;
+        let version: i64 =
+            migrated.query_row("SELECT MAX(version) FROM schema_migrations", [], |row| {
+                row.get(0)
+            })?;
+        assert_eq!(version, 6);
+        assert!(
+            migrated
+                .query_row::<String, _, _>(
+                    "SELECT sql FROM sqlite_master WHERE type='index' AND name='tasks_schedule_run_id_unique'",
+                    [],
+                    |row| row.get(0),
+                )
+                .is_ok()
+        );
+        assert!(
+            migrated
+                .query_row::<String, _, _>(
+                    "SELECT name FROM pragma_table_info('schedule_runs') WHERE name='finalized_at'",
+                    [],
+                    |row| row.get(0),
+                )
+                .is_ok()
+        );
+        let payload: String = migrated.query_row(
+            "SELECT payload FROM app_state WHERE id = 'singleton'",
+            [],
+            |row| row.get(0),
+        )?;
+        assert!(payload.contains("v4-user-data"));
+        drop(migrated);
+        std::fs::remove_dir_all(root).ok();
+        Ok(())
+    }
+
+    #[test]
+    fn v6_unique_index_failure_keeps_duplicate_v5_tasks_and_schema_unchanged() -> Result<()> {
+        let root =
+            std::env::temp_dir().join(format!("juniper-v6-conflict-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).expect("directory");
+        let path = root.join("juniper.db");
+        v5_database(&path)?;
+        Connection::open(&path)?.execute_batch(
+            "INSERT INTO tasks(id, root_id, assistant_id, schedule_run_id, title, goal, status, budget, usage, provenance, created_at, updated_at)
+             VALUES('task-1', 'task-1', 'assistant-1', 'run-1', 'One', 'Goal', 'queued', '{}', '{}', '{}', 'x', 'x'),
+                   ('task-2', 'task-2', 'assistant-1', 'run-1', 'Two', 'Goal', 'queued', '{}', '{}', '{}', 'x', 'x');",
+        )?;
+
+        assert!(initialize(&path).is_err());
+
+        let connection = Connection::open(&path)?;
+        let version: i64 =
+            connection.query_row("SELECT MAX(version) FROM schema_migrations", [], |row| {
+                row.get(0)
+            })?;
+        let tasks: i64 =
+            connection.query_row("SELECT COUNT(*) FROM tasks", [], |row| row.get(0))?;
+        let has_finalized_at: i64 = connection.query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('schedule_runs') WHERE name='finalized_at'",
+            [],
+            |row| row.get(0),
+        )?;
+        assert_eq!(version, 5);
+        assert_eq!(
+            tasks, 2,
+            "the failed migration must preserve both task rows"
+        );
+        assert_eq!(
+            has_finalized_at, 0,
+            "the failed migration rolls back as a unit"
+        );
+        assert!(migration_backup_path(&path, 5).is_file());
+        drop(connection);
+        std::fs::remove_dir_all(root).ok();
+        Ok(())
+    }
+
     #[test]
     fn upgrading_a_v4_database_keeps_a_restorable_backup_and_the_user_data() -> Result<()> {
         let root = std::env::temp_dir().join(format!("juniper-v5-{}", uuid::Uuid::new_v4()));
@@ -1482,7 +1739,7 @@ mod tests {
             migrated.query_row("SELECT MAX(version) FROM schema_migrations", [], |row| {
                 row.get(0)
             })?;
-        assert_eq!(version, 5);
+        assert_eq!(version, 6);
         // A second start neither re-backs-up nor fails.
         initialize(&path)?;
         std::fs::remove_dir_all(root).ok();

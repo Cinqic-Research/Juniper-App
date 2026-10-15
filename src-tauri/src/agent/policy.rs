@@ -224,7 +224,7 @@ pub fn builtin_tools() -> Vec<ToolSpec> {
         spec(
             "workspace.write",
             "Write a project file",
-            "Create or replace a text file in a granted read-write project folder. To edit an existing file, pass the version from workspace.read; the write is refused if the file changed. The user sees a diff before anything is written.",
+            "Create or replace a text file in a granted read-write project folder. To edit an existing file, pass the version from workspace.read; the write is refused if the file changed. When approval is required, Juniper shows the proposed diff before writing. Project autonomy or a standing grant can allow the write without an approval preview.",
             Risk::ProjectWrite,
             object(
                 json!({
@@ -437,16 +437,25 @@ pub fn granted(context: &DecisionContext<'_>, capability: &str) -> bool {
             && grant.capability == capability
             && grant.assistant_id == context.assistant_id
             && (grant.project_id.is_none() || grant.project_id.as_deref() == context.project_id)
-            && grant
-                .expires_at
-                .as_deref()
-                .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
-                .is_none_or(|expires| expires > now)
-            && scope_covers(&grant.scope, &context.scope)
+            && match grant.expires_at.as_deref() {
+                None => true,
+                Some(value) => {
+                    chrono::DateTime::parse_from_rfc3339(value).is_ok_and(|expires| expires > now)
+                }
+            }
+            && scope_covers(capability, &grant.scope, &context.scope)
     })
 }
 
-fn scope_covers(granted: &Value, requested: &Value) -> bool {
+fn scope_covers(capability: &str, granted: &Value, requested: &Value) -> bool {
+    // Network destinations and plugin identities are security boundaries. A
+    // legacy empty/subset grant must not become a wildcard after endpoints or
+    // executable identities are added to the requested scope.
+    if capability.starts_with("mcp:") || matches!(capability, "web.search" | "web.fetch") {
+        return requested
+            .as_object()
+            .is_some_and(|fields| !fields.is_empty() && granted == requested);
+    }
     match granted.as_object() {
         None => true,
         Some(fields) if fields.is_empty() => true,
@@ -473,9 +482,10 @@ pub fn decide(risk: Risk, capability: &str, context: &DecisionContext<'_>) -> De
                 return Decision::Allow;
             }
             // "Within projects" lets writes inside the task's own granted
-            // folders proceed; every write is still shown in the activity
-            // with its diff. Network, code, and plugins always ask, so data
-            // read from a project cannot leave the device unseen.
+            // folders proceed without an approval prompt. The tool action is
+            // recorded in task activity, but the activity entry is not a diff
+            // preview. Network, code, and plugins ask unless an applicable
+            // standing permission covers that exact capability.
             let preset_allows = context.profile.autonomy == "project"
                 && matches!(risk, Risk::ProjectWrite)
                 && context.project_id.is_some();
@@ -492,13 +502,13 @@ pub fn decide(risk: Risk, capability: &str, context: &DecisionContext<'_>) -> De
 pub fn preset_description(preset: &str) -> &'static str {
     match preset {
         "project" => {
-            "Reads and changes files in the task’s granted read-write project folders without asking (each change is listed with its diff). Asks before any web request, code run, plugin call, or memory change."
+            "Reads and changes files in the task’s granted read-write project folders without asking. Project writes are recorded in task activity; Juniper shows a diff when it asks for approval. Asks before a web request, code run, or plugin call unless a matching standing permission exists; schedule changes and memory changes always ask."
         }
         "custom" => {
-            "Uses only the standing permissions you granted. Asks before anything else that writes, runs code, uses the network, or uses a plugin."
+            "Uses only the standing permissions you granted. Asks before anything else that writes, runs code, uses the network, or uses a plugin. Schedule changes and memory changes always ask."
         }
         _ => {
-            "Reads granted project folders and uses safe local tools. Asks before every file change, web request, code run, plugin call, or memory change."
+            "Reads granted project folders and uses safe local tools. Asks before every file change, web request, code run, or plugin call unless a matching standing permission exists; schedule changes and memory changes always ask."
         }
     }
 }
@@ -522,8 +532,13 @@ pub fn model_schema(schema: &Value) -> Value {
 
 /// Binds an approval to the exact call and to the state it was previewed
 /// against, so a change in either makes the approval stale.
-pub fn binding(tool: &str, arguments: &Value, target: &Value) -> String {
-    let canonical = json!({ "tool": tool, "arguments": canonical_json(arguments), "target": canonical_json(target) });
+pub fn binding(tool: &str, arguments: &Value, target: &Value, identity: &Value) -> String {
+    let canonical = json!({
+        "tool": tool,
+        "arguments": canonical_json(arguments),
+        "target": canonical_json(target),
+        "identity": canonical_json(identity),
+    });
     format!("{:x}", Sha256::digest(canonical.to_string().as_bytes()))
 }
 
@@ -631,6 +646,19 @@ mod tests {
     }
 
     #[test]
+    fn malformed_grant_expiration_fails_closed() {
+        let profile = AgentProfile::default_for("agent-1");
+        let mut malformed = grant("web", json!({}), false);
+        malformed.expires_at = Some("not-a-timestamp".into());
+        let grants = [malformed];
+        let ctx = context(&profile, &grants, json!({}));
+        assert_eq!(
+            decide(Risk::Network, "web", &ctx),
+            Decision::Ask { standing: true }
+        );
+    }
+
+    #[test]
     fn a_plugin_grant_does_not_survive_a_changed_tool_set() {
         let profile = AgentProfile::default_for("agent-1");
         let grants = [grant(
@@ -646,6 +674,50 @@ mod tests {
         let changed = context(&profile, &grants, json!({ "toolsDigest": "bbb" }));
         assert_eq!(
             decide(Risk::Plugin, "mcp:server-1:search", &changed),
+            Decision::Ask { standing: true }
+        );
+    }
+
+    #[test]
+    fn legacy_or_changed_destination_grants_do_not_authorize_plugins_or_web() {
+        let profile = AgentProfile::default_for("agent-1");
+        let legacy_plugin = grant(
+            "mcp:server-1:search",
+            json!({ "server": "server-1", "toolsDigest": "aaa" }),
+            false,
+        );
+        let legacy_plugin_grants = [legacy_plugin];
+        let changed_plugin = context(
+            &profile,
+            &legacy_plugin_grants,
+            json!({ "server": "server-1", "toolsDigest": "aaa", "targetDigest": "new-binary" }),
+        );
+        assert_eq!(
+            decide(Risk::Plugin, "mcp:server-1:search", &changed_plugin),
+            Decision::Ask { standing: true }
+        );
+
+        let wildcard_web = grant("web.search", json!({}), false);
+        let wildcard_web_grants = [wildcard_web];
+        let changed_search = context(
+            &profile,
+            &wildcard_web_grants,
+            json!({ "destination": { "provider": "searxng", "baseUrl": "https://new.example/" } }),
+        );
+        assert_eq!(
+            decide(Risk::Network, "web.search", &changed_search),
+            Decision::Ask { standing: true }
+        );
+
+        let old_page = grant("web.fetch", json!({ "url": "https://old.example/" }), false);
+        let old_page_grants = [old_page];
+        let changed_page = context(
+            &profile,
+            &old_page_grants,
+            json!({ "url": "https://new.example/" }),
+        );
+        assert_eq!(
+            decide(Risk::Network, "web.fetch", &changed_page),
             Decision::Ask { standing: true }
         );
     }
@@ -667,29 +739,72 @@ mod tests {
 
     #[test]
     fn bindings_change_with_arguments_or_target_state_but_not_key_order() {
+        let identity = json!({
+            "taskId": "task-1",
+            "rootId": "root-1",
+            "assistantId": "agent-1",
+            "projectId": "project-1",
+            "actionId": "action-1",
+        });
         let a = binding(
             "workspace.write",
             &json!({"path": "a", "content": "x"}),
             &json!({"version": "1"}),
+            &identity,
         );
         let reordered = binding(
             "workspace.write",
             &json!({"content": "x", "path": "a"}),
             &json!({"version": "1"}),
+            &identity,
         );
         let changed_target = binding(
             "workspace.write",
             &json!({"path": "a", "content": "x"}),
             &json!({"version": "2"}),
+            &identity,
         );
         let changed_args = binding(
             "workspace.write",
             &json!({"path": "a", "content": "y"}),
             &json!({"version": "1"}),
+            &identity,
         );
         assert_eq!(a, reordered);
         assert_ne!(a, changed_target);
         assert_ne!(a, changed_args);
+        let other_task = json!({
+            "taskId": "task-2",
+            "rootId": "root-1",
+            "assistantId": "agent-1",
+            "projectId": "project-1",
+            "actionId": "action-1",
+        });
+        let other_project = json!({
+            "taskId": "task-1",
+            "rootId": "root-1",
+            "assistantId": "agent-1",
+            "projectId": "project-2",
+            "actionId": "action-1",
+        });
+        assert_ne!(
+            a,
+            binding(
+                "workspace.write",
+                &json!({"path": "a", "content": "x"}),
+                &json!({"version": "1"}),
+                &other_task,
+            )
+        );
+        assert_ne!(
+            a,
+            binding(
+                "workspace.write",
+                &json!({"path": "a", "content": "x"}),
+                &json!({"version": "1"}),
+                &other_project,
+            )
+        );
     }
 
     #[test]
@@ -719,6 +834,25 @@ mod tests {
             decide(Risk::ProjectWrite, "workspace.write", &outside),
             Decision::Ask { standing: true }
         );
+    }
+
+    #[test]
+    fn project_preset_description_does_not_promise_a_diff_for_every_write() {
+        let description = preset_description("project");
+        assert!(description.contains("recorded in task activity"));
+        assert!(description.contains("shows a diff when it asks for approval"));
+        assert!(description.contains("unless a matching standing permission exists"));
+        assert!(description.contains("memory changes always ask"));
+        assert!(description.contains("schedule changes"));
+        assert!(!description.contains("each change is listed with its diff"));
+    }
+
+    #[test]
+    fn ask_first_description_accounts_for_existing_standing_permissions() {
+        let description = preset_description("ask");
+        assert!(description.contains("unless a matching standing permission exists"));
+        assert!(description.contains("memory changes always ask"));
+        assert!(description.contains("schedule changes"));
     }
 
     #[test]

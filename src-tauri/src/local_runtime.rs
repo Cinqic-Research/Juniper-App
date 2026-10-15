@@ -220,6 +220,9 @@ impl LocalRuntime {
                             })
                         })?,
                 };
+                if !catalog::supports_current_device(&artifact) {
+                    return Err("LOCAL_MODEL_UNSUPPORTED: This model artifact does not support this device.".into());
+                }
                 let profile = qualified_profile(&artifact)?;
                 (
                     artifact.id.clone(),

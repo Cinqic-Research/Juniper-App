@@ -11,7 +11,7 @@ This page describes how the runtime works.
 | ----------------------------------------------------------- | ----------------------------------------------------------------- |
 | Task scheduling, lifecycle, budgets, retries                | Rust (`src-tauri/src/agent/runner.rs`)                            |
 | Tool dispatch, permission decisions, approvals, grants      | Rust (`agent/tools.rs`, `agent/policy.rs`)                        |
-| Durable state: tasks, events, actions, approvals, artifacts | Rust, SQLite schema v5 (`agent/store.rs`)                         |
+| Durable state: tasks, events, actions, approvals, artifacts | Rust, SQLite schema v6 (`agent/store.rs`)                         |
 | Agent identity: name, avatar, personality, model, memory    | The existing assistant profile, edited in Settings › Assistants   |
 | Agent working settings: tools, skills, autonomy, budgets    | A native agent profile per assistant (`agent_profiles`, schema 1) |
 | Presentation and user intents                               | React (`src/app/AgentScreen.tsx`, `AgentManage.tsx`)              |
@@ -85,6 +85,11 @@ The transcript is committed after every model turn and every tool result.
 **Restart recovery.** On startup:
 
 - Running tasks become `interrupted`, and `started` actions become `uncertain`.
+- A committed schedule claim with no linked task is dispatched again; scheduled
+  task creation is idempotent by schedule-run id, and reminders commit their
+  inbox item and run completion together.
+- A delegated child and its parent's durable wait cursor commit together, so a
+  crash cannot leave a queued child that the parent does not know about.
 - On resume, a `workspace.write` is reconciled by comparing the file with the
   intended content.
 - Any other uncertain action is reported to the model as "outcome unknown". It
@@ -105,6 +110,9 @@ The transcript is committed after every model turn and every tool result.
 Other per-turn limits:
 
 - At most 8 tool calls are processed per model turn.
+- The active-time budget bounds model and tool calls and is checked between
+  calls. If a call times out, its outcome is recorded as uncertain and the
+  remaining calls from that model turn do not run.
 - Tool results are cut to 24,000 characters.
 - Older tool results are shortened (and labelled as shortened) once the
   transcript passes 60,000 characters.
@@ -118,11 +126,14 @@ implementer, or reviewer.
 
 - **Tools.** The child gets the parent's offered tools intersected with the
   role's list. A reviewer has no write tools.
-- **Budget.** The child's budget is carved from the parent's remainder, and the
-  parent is charged the child's full token allowance up front, so delegation
-  never enlarges the total.
+- **Budget.** Each child is capped at half of the parent's remaining steps,
+  tool calls, tokens, time, and artifact allowance. When joined, the parent is
+  charged the child's actual use in each dimension; delegation cannot enlarge
+  the parent's limits.
 - **Context.** The child sees only the objective and the context the parent
   passed, framed as data. It does not see the parent's conversation.
+- **Recovery.** Creating the child and moving the parent to its child-wait
+  cursor are one transaction.
 - **Execution.** Children run on the same single worker, so local inference
   stays one at a time.
 - **Joining.** The parent resumes when every child has finished and receives
@@ -138,6 +149,12 @@ They run **while Juniper is running**; there is no background service.
   minute after the gap. A time that occurs twice runs once.
 - **Claiming.** Each due run is claimed with a compare-and-swap on `next_run_at`
   and recorded under a unique (schedule, scheduled time, attempt) key.
+- **Dispatch recovery.** Committed `started` runs without a linked task are
+  retried by the worker after restart, so the claim/dispatch gap does not lose
+  an occurrence.
+- **Process ownership.** One Juniper process may own an Agent data directory at
+  a time. A native file lock prevents another instance from recovering or
+  mutating the same task database concurrently.
 - **Missed runs.** After the computer was off, only the latest missed run runs
   (policy `run-once`), or it is skipped (`skip`). A backlog is never replayed.
 - **Overlap.** A run is skipped while the previous one is unfinished.

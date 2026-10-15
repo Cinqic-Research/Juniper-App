@@ -102,7 +102,6 @@ export const agentApi = {
   exportArtifact: (artifactId: string) => invoke<boolean>('artifact_export', { artifactId }),
   markRead: (ids: number[]) => invoke<void>('inbox_mark_read', { ids }),
   memoryChanges: () => invoke<MemoryChange[]>('memory_changes'),
-  memoryChangesApplied: (ids: string[]) => invoke<void>('memory_changes_applied', { ids }),
 
   skills: () => invoke<Skill[]>('skills_list'),
   setSkillEnabled: (skillId: string, enabled: boolean) =>

@@ -1,6 +1,6 @@
 //! Versioned contracts for agent profiles, projects, tasks, events, actions,
 //! approvals, artifacts, sources, and grants. These shapes cross the IPC
-//! boundary in camelCase and are persisted as JSON in the v5 tables.
+//! boundary in camelCase and are persisted as JSON in the v6 tables.
 
 use crate::providers::{TranscriptMessage, TranscriptToolCall};
 use serde::{Deserialize, Serialize};

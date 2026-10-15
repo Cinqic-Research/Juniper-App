@@ -5,7 +5,7 @@ use futures_util::StreamExt;
 use reqwest::header::{CONTENT_LENGTH, CONTENT_RANGE, HeaderValue, RANGE};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 #[cfg(unix)]
@@ -383,7 +383,19 @@ pub fn path_for_catalog<R: Runtime>(
         Some(id) => vec![select_artifact(&entry, Some(id))?],
         None => entry.artifacts.iter().collect(),
     };
+    if candidates.is_empty()
+        || candidates
+            .iter()
+            .all(|artifact| !catalog::supports_current_device(artifact))
+    {
+        return Err(
+            "LOCAL_MODEL_UNSUPPORTED: This model artifact does not support this device.".into(),
+        );
+    }
     for artifact in candidates {
+        if !catalog::supports_current_device(artifact) {
+            continue;
+        }
         if !artifact_ready(&directory, artifact)? {
             continue;
         }
@@ -494,8 +506,9 @@ async fn download_file<R: Runtime>(
             );
         }
         let response = tokio::select! {
-            response = request.send() => response.map_err(|_| "MODEL_DOWNLOAD_ERROR: The model source did not respond. Check your connection.".to_owned())?,
+            biased;
             _ = cancellation.wait() => return Err("MODEL_DOWNLOAD_CANCELLED: Download paused; you can resume it later.".into()),
+            response = request.send() => response.map_err(|_| "MODEL_DOWNLOAD_ERROR: The model source did not respond. Check your connection.".to_owned())?,
         };
         let status = response.status();
         let resumed = match status {
@@ -565,11 +578,12 @@ async fn download_file<R: Runtime>(
         let mut stream = response.bytes_stream();
         loop {
             let next = tokio::select! {
-                next = tokio::time::timeout(IDLE_TIMEOUT, stream.next()) => next.map_err(|_| "MODEL_DOWNLOAD_ERROR: The download stalled. It will resume from where it stopped.".to_owned())?,
+                biased;
                 _ = cancellation.wait() => {
                     let _ = output.flush();
                     return Err("MODEL_DOWNLOAD_CANCELLED: Download paused; you can resume it later.".into());
                 }
+                next = tokio::time::timeout(IDLE_TIMEOUT, stream.next()) => next.map_err(|_| "MODEL_DOWNLOAD_ERROR: The download stalled. It will resume from where it stopped.".to_owned())?,
             };
             let Some(chunk) = next else { break };
             let chunk = chunk.map_err(|_| "MODEL_DOWNLOAD_ERROR: The connection was interrupted. It will resume from where it stopped.".to_owned())?;
@@ -620,6 +634,11 @@ pub async fn download<R: Runtime>(
 ) -> Result<(), String> {
     let entry = catalog::find(catalog_id)?;
     let artifact = select_artifact(&entry, artifact_id)?.clone();
+    if !catalog::supports_current_device(&artifact) {
+        return Err(
+            "MODEL_ARTIFACT_UNSUPPORTED: This artifact does not support this device.".into(),
+        );
+    }
     if is_import_only(&artifact) {
         return Err(
             "MODEL_IMPORT_ONLY: Juniper has no download source for this model. Import a copy of the verified file instead.".into(),
@@ -662,8 +681,9 @@ pub(crate) async fn download_artifact<R: Runtime>(
     }
     emit_progress(&app, request_id, "queued", 0, artifact.size_bytes, None);
     let _slot = tokio::select! {
-        slot = download_slots().acquire() => slot.map_err(|_| "MODEL_DOWNLOAD_ERROR: The download queue is unavailable.".to_owned())?,
+        biased;
         _ = cancellation.wait() => return Err("MODEL_DOWNLOAD_CANCELLED: Download cancelled before it started.".into()),
+        slot = download_slots().acquire() => slot.map_err(|_| "MODEL_DOWNLOAD_ERROR: The download queue is unavailable.".to_owned())?,
     };
     let journal_file = journal_path(&directory, &artifact)?;
     let journal = journal_for(&artifact);
@@ -786,8 +806,6 @@ pub(crate) async fn download_artifact<R: Runtime>(
     match &layout {
         Layout::Single { file, partial } => {
             fs::rename(partial, file).map_err(|error| format!("MODEL_INSTALL_ERROR: {error}"))?;
-            // Juniper wrote and hashed these bytes itself; nothing else holds the file.
-            write_record(file, current_record(file, artifact.sha256.as_deref()));
         }
         Layout::Bundle { folder, staging } => {
             write_atomically(
@@ -796,10 +814,6 @@ pub(crate) async fn download_artifact<R: Runtime>(
                     .map_err(|error| error.to_string())?
                     .as_bytes(),
             )?;
-            for file in &artifact.files {
-                let path = staging.join(&file.path);
-                write_record(&path, current_record(&path, Some(&file.sha256)));
-            }
             if folder.exists() {
                 fs::remove_dir_all(folder)
                     .map_err(|error| format!("MODEL_INSTALL_ERROR: {error}"))?;
@@ -841,13 +855,11 @@ pub fn is_import_only(artifact: &CatalogArtifact) -> bool {
     artifact.source_url.is_none() && artifact.files.iter().all(|file| file.url.is_none())
 }
 
-/// Hashing a multi-gigabyte model takes minutes on a hard disk, so a
-/// successful verification may be recorded beside the file. Unix trusts it
-/// only while size, modification time, and change time are stable and a probe
-/// shows that the filesystem distinguishes rapid changes. Other platforms
-/// rehash because the portable API exposes only a restorable modification
-/// time. The record itself is no stronger than its data file.
-#[derive(Debug, PartialEq, Serialize, serde::Deserialize)]
+/// A successful verification may be cached for this process while file size,
+/// modification time, and change time remain stable. The cache is deliberately
+/// memory-only: a writable sidecar cannot establish the identity of model
+/// bytes across process restarts.
+#[derive(Debug, Clone, PartialEq, Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct VerificationRecord {
     sha256: String,
@@ -923,6 +935,11 @@ fn record_path(path: &Path) -> PathBuf {
     path.with_extension("gguf.verified")
 }
 
+fn verified_cache() -> &'static Mutex<HashMap<PathBuf, VerificationRecord>> {
+    static VERIFIED: OnceLock<Mutex<HashMap<PathBuf, VerificationRecord>>> = OnceLock::new();
+    VERIFIED.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
 fn current_record(path: &Path, sha256: Option<&str>) -> Option<VerificationRecord> {
     let metadata = fs::symlink_metadata(path).ok()?;
     if !metadata.file_type().is_file() {
@@ -941,14 +958,6 @@ fn current_record(path: &Path, sha256: Option<&str>) -> Option<VerificationRecor
     })
 }
 
-fn write_record(path: &Path, record: Option<VerificationRecord>) {
-    if let Some(record) = record
-        && let Ok(text) = serde_json::to_string(&record)
-    {
-        let _ = fs::write(record_path(path), text);
-    }
-}
-
 /// Whether the regular file at `path` has exactly this size and SHA-256.
 /// Qualified native artifacts are always hashed: a neighboring verification
 /// record is writable data, so it cannot establish their pinned identity.
@@ -963,6 +972,10 @@ fn verify_against(
     sha256: Option<&str>,
     use_cache: bool,
 ) -> Result<bool, String> {
+    // Legacy versions wrote user-writable receipts. They never authorize a
+    // cache hit, and are discarded even when this inexpensive preflight
+    // rejects the file before hashing it.
+    let _ = fs::remove_file(record_path(path));
     let link_metadata = fs::symlink_metadata(path).map_err(|error| error.to_string())?;
     if link_metadata.file_type().is_symlink() || !link_metadata.file_type().is_file() {
         return Ok(false);
@@ -971,16 +984,17 @@ fn verify_against(
     if metadata.len() != size_bytes {
         return Ok(false);
     }
-    let recorded = fs::read_to_string(record_path(path))
-        .ok()
-        .and_then(|text| serde_json::from_str::<VerificationRecord>(&text).ok());
     let before = current_record(path, sha256);
     if use_cache
         && before
             .as_ref()
             .is_some_and(|record| record.changed_nanos.is_some())
-        && recorded == before
         && ctime_is_precise_enough(path)
+        && verified_cache()
+            .lock()
+            .ok()
+            .and_then(|cache| cache.get(path).cloned())
+            == before
     {
         return Ok(true);
     }
@@ -991,9 +1005,13 @@ fn verify_against(
     // hashed; it is neither trusted now nor recorded.
     let unchanged = before.is_some() && before == current_record(path, sha256);
     if use_cache && verified && unchanged && ctime_is_precise_enough(path) {
-        write_record(path, before);
+        if let (Some(record), Ok(mut cache)) = (before, verified_cache().lock()) {
+            cache.insert(path.to_owned(), record);
+        }
     } else {
-        let _ = fs::remove_file(record_path(path));
+        if let Ok(mut cache) = verified_cache().lock() {
+            cache.remove(path);
+        }
     }
     Ok(verified && unchanged)
 }
@@ -1020,6 +1038,11 @@ pub async fn import<R: Runtime>(
 ) -> Result<(), String> {
     let entry = catalog::find(catalog_id)?;
     let artifact = select_artifact(&entry, artifact_id)?.clone();
+    if !catalog::supports_current_device(&artifact) {
+        return Err(
+            "MODEL_ARTIFACT_UNSUPPORTED: This artifact does not support this device.".into(),
+        );
+    }
     if artifact.files.len() != 1 {
         return Err("MODEL_IMPORT_ERROR: This download has several files; import supports single-file models.".into());
     }
@@ -1125,10 +1148,6 @@ pub async fn import<R: Runtime>(
     }
     fs::rename(&partial_file, &final_file)
         .map_err(|error| format!("MODEL_INSTALL_ERROR: {error}"))?;
-    write_record(
-        &final_file,
-        current_record(&final_file, Some(&expected_sha)),
-    );
     emit_progress(&app, request_id, "ready", total, total, None);
     crate::commands::record_runtime_log(
         state,
@@ -1299,27 +1318,18 @@ mod tests {
     }
 
     #[test]
-    fn a_verification_record_is_trusted_only_for_the_unchanged_file() {
+    fn ordinary_catalog_verification_ignores_a_forged_sidecar() {
         let root =
             std::env::temp_dir().join(format!("juniper-record-test-{}", uuid::Uuid::new_v4()));
         fs::create_dir_all(&root).expect("test directory should be created");
         let path = root.join("model.gguf");
         fs::write(&path, b"model").expect("model written");
-        let artifact = artifact_for_test(5, &format!("{:x}", Sha256::digest(b"model")));
-        assert!(verify_file(&path, &artifact).expect("verify"));
-        assert!(verify_file(&path, &artifact).expect("repeat verify"));
-        let original_modified = fs::metadata(&path)
-            .expect("metadata should exist")
-            .modified()
-            .expect("modification time should exist");
-        fs::write(&path, b"MODEL").expect("model replaced");
-        File::options()
-            .write(true)
-            .open(&path)
-            .expect("model should open")
-            .set_times(fs::FileTimes::new().set_modified(original_modified))
-            .expect("original modification time should be restored");
-        assert!(!verify_file(&path, &artifact).expect("verify"));
+        let expected = format!("{:x}", Sha256::digest(b"RIGHT_MODEL"));
+        let artifact = artifact_for_test(11, &expected);
+        let record = current_record(&path, Some(&expected)).expect("record fixture");
+        fs::write(record_path(&path), serde_json::to_vec(&record).unwrap())
+            .expect("forged writable receipt");
+        assert!(!verify_file(&path, &artifact).expect("ordinary catalog verification"));
         assert!(!record_path(&path).exists());
         fs::remove_dir_all(root).expect("cleanup");
     }
@@ -1335,7 +1345,9 @@ mod tests {
         let expected = format!("{:x}", Sha256::digest(b"RIGHT_MODEL"));
         // A distributor can write a receipt with the expected digest and the
         // wrong file's real timestamps. Those timestamps do not prove hashing.
-        write_record(&path, current_record(&path, Some(&expected)));
+        let forged = current_record(&path, Some(&expected)).expect("record fixture");
+        fs::write(record_path(&path), serde_json::to_vec(&forged).unwrap())
+            .expect("forged writable receipt");
         assert!(!verify_expected(&path, 11, &expected).expect("verify"));
         fs::write(&path, b"RIGHT_MODEL").expect("correct model");
         assert!(verify_expected(&path, 11, &expected).expect("verify correct bytes"));

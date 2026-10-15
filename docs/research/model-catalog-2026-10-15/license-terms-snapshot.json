@@ -1,0 +1,13 @@
+{
+  "snapshotDate": "2026-10-15",
+  "licenses": {
+    "gemma": {
+      "title": "Gemma Terms of Use",
+      "url": "https://ai.google.dev/gemma/terms",
+      "lastModified": "2026-04-01",
+      "representation": "Recorded SHA-256 fingerprint reported for an HTTPS response fetched on 2026-10-15. The response bytes are not included or independently reproducible; this fingerprint is not an immutable copy of the terms.",
+      "responseBytes": 144414,
+      "sha256": "971c1f26bda668f56567a7545df993d297b6f331ce9d2ad677ee0dee588ff86f"
+    }
+  }
+}

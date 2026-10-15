@@ -223,6 +223,77 @@ pub fn next_occurrence(spec: &ScheduleSpec, after: DateTime<Utc>) -> Option<Date
     }
 }
 
+/// The latest occurrence at or before `at`, constrained to the claimed
+/// occurrence. The schedule row stores the next due time, so this is used to
+/// collapse a missed backlog into its most recent occurrence.
+fn latest_due_occurrence(
+    spec: &ScheduleSpec,
+    at: DateTime<Utc>,
+    first_due: DateTime<Utc>,
+) -> Option<DateTime<Utc>> {
+    let zone: Tz = spec.timezone.parse().ok()?;
+    if let Rule::Interval { minutes } = &spec.rule {
+        let anchor = spec
+            .anchor
+            .as_deref()
+            .and_then(|value| DateTime::parse_from_rfc3339(value).ok())
+            .map(|value| value.with_timezone(&Utc))
+            .unwrap_or(first_due);
+        let step = Duration::minutes(i64::from(*minutes));
+        if anchor > at {
+            return None;
+        }
+        let elapsed = (at - anchor).num_seconds() / step.num_seconds();
+        let occurrence = anchor.checked_add_signed(step * elapsed as i32)?;
+        return (occurrence >= first_due).then_some(occurrence);
+    }
+    let local_date = at.with_timezone(&zone).date_naive();
+    let candidate = match &spec.rule {
+        Rule::Once { at } => {
+            let local = NaiveDateTime::parse_from_str(at, "%Y-%m-%dT%H:%M").ok()?;
+            Some(resolve_local(zone, local.date(), local.time()))
+        }
+        Rule::Daily { time } => {
+            let time = parse_time(time).ok()?;
+            (0..=1)
+                .map(|offset| resolve_local(zone, local_date - Duration::days(offset), time))
+                .find(|instant| *instant <= at)
+        }
+        Rule::Weekly { days, time } => {
+            let time = parse_time(time).ok()?;
+            (0..=7)
+                .map(|offset| local_date - Duration::days(offset))
+                .filter(|date| days.contains(&(date.weekday().number_from_monday() as u8)))
+                .map(|date| resolve_local(zone, date, time))
+                .find(|instant| *instant <= at)
+        }
+        Rule::Monthly { day, time } => {
+            let time = parse_time(time).ok()?;
+            let (mut year, mut month) = (local_date.year(), local_date.month());
+            (0..=1).find_map(|_| {
+                let date = NaiveDate::from_ymd_opt(
+                    year,
+                    month,
+                    u32::from(*day).min(last_day(year, month)),
+                )?;
+                let occurrence = resolve_local(zone, date, time);
+                if occurrence <= at {
+                    Some(occurrence)
+                } else {
+                    (year, month) = if month == 1 {
+                        (year - 1, 12)
+                    } else {
+                        (year, month - 1)
+                    };
+                    None
+                }
+            })
+        }
+        Rule::Interval { .. } => unreachable!(),
+    }?;
+    (candidate >= first_due).then_some(candidate)
+}
+
 pub fn upcoming(spec: &ScheduleSpec, from: DateTime<Utc>, count: usize) -> Vec<DateTime<Utc>> {
     let mut found = Vec::new();
     let mut cursor = from;
@@ -419,21 +490,28 @@ pub fn claim_due(
         if scheduled > now {
             continue;
         }
-        let schedule = get(connection, &id)?;
+        let transaction = connection.unchecked_transaction().map_err(db_error)?;
+        let schedule = get(&transaction, &id)?;
         let following = next_occurrence(&schedule.spec, now).map(|instant| instant.to_rfc3339());
         // Compare-and-swap: only the claimant that still sees the old value
         // advances the schedule, so an occurrence is claimed once.
-        let changed = connection
+        let changed = transaction
             .execute(
                 "UPDATE schedules SET next_run_at = ?1, updated_at = ?2 WHERE id = ?3 AND next_run_at = ?4",
                 params![following, store::now(), id, next_run_at],
             )
             .map_err(db_error)?;
         if changed != 1 {
+            transaction.rollback().map_err(db_error)?;
             continue;
         }
         let missed = now - scheduled > Duration::minutes(GRACE_MINUTES);
-        let overlapping: bool = connection
+        let occurrence = if missed && schedule.spec.missed_policy == "run-once" {
+            latest_due_occurrence(&schedule.spec, now, scheduled).unwrap_or(scheduled)
+        } else {
+            scheduled
+        };
+        let overlapping: bool = transaction
             .query_row(
                 "SELECT EXISTS(SELECT 1 FROM schedule_runs r JOIN tasks t ON t.id = r.task_id WHERE r.schedule_id = ?1 AND t.status NOT IN ('completed', 'failed', 'cancelled'))",
                 [&id],
@@ -464,19 +542,21 @@ pub fn claim_due(
             )
         };
         let run_id = store::new_id("run");
-        let inserted = connection
+        let inserted = transaction
             .execute(
                 "INSERT OR IGNORE INTO schedule_runs(id, schedule_id, scheduled_for, attempt, status, created_at, updated_at, detail) VALUES(?1, ?2, ?3, 1, ?4, ?5, ?5, ?6)",
-                params![run_id, id, scheduled.to_rfc3339(), status, store::now(), missed.then_some("Ran late: Juniper was not running at the scheduled time.")],
+                params![run_id, id, occurrence.to_rfc3339(), status, store::now(), missed.then_some("Ran late: Juniper was not running at the scheduled time.")],
             )
             .map_err(db_error)?;
         if inserted != 1 {
+            transaction.commit().map_err(db_error)?;
             continue;
         }
+        transaction.commit().map_err(db_error)?;
         let claim = match claim {
             Claim::Run { scheduled_for, .. } => Claim::Run {
                 run_id,
-                scheduled_for,
+                scheduled_for: if missed { occurrence } else { scheduled_for },
             },
             skipped => skipped,
         };
@@ -492,6 +572,7 @@ pub fn tick<R: Runtime>(app: &AppHandle<R>, connection: &Connection, now: DateTi
     if state.agent.is_stopped() {
         return;
     }
+    let _ = reconcile_terminal_runs(connection);
     let Ok(claimed) = claim_due(connection, now) else {
         return;
     };
@@ -506,16 +587,48 @@ pub fn tick<R: Runtime>(app: &AppHandle<R>, connection: &Connection, now: DateTi
                     reason,
                 );
             }
-            Claim::Run {
-                run_id,
-                scheduled_for,
-            } => {
-                let _ = start_run(connection, &schedule, &run_id, scheduled_for);
-                state.agent.wake.notify_one();
-            }
+            Claim::Run { .. } => {}
         }
         super::notify(app, None, "schedule");
     }
+    if dispatch_pending(connection).unwrap_or(0) > 0 {
+        state.agent.wake.notify_one();
+    }
+}
+
+/// Replays committed schedule claims that did not finish dispatching before
+/// a crash. `start_run` is idempotent for both agent tasks and reminders.
+fn dispatch_pending(connection: &Connection) -> Result<usize, String> {
+    let pending = {
+        let mut statement = connection
+            .prepare("SELECT id, schedule_id, scheduled_for FROM schedule_runs WHERE status = 'started' AND task_id IS NULL ORDER BY created_at")
+            .map_err(db_error)?;
+        statement
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                ))
+            })
+            .map_err(db_error)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(db_error)?
+    };
+    let mut dispatched = 0;
+    for (run_id, schedule_id, scheduled_for) in pending {
+        let schedule = get(connection, &schedule_id)?;
+        let scheduled_for = DateTime::parse_from_rfc3339(
+            scheduled_for
+                .strip_prefix("manual:")
+                .unwrap_or(&scheduled_for),
+        )
+        .map_err(|_| "SCHEDULE_RUN_INVALID: A pending occurrence has an invalid time.".to_owned())?
+        .with_timezone(&Utc);
+        start_run(connection, &schedule, &run_id, scheduled_for)?;
+        dispatched += 1;
+    }
+    Ok(dispatched)
 }
 
 /// Starts one claimed run: a deterministic reminder goes straight to the
@@ -527,17 +640,51 @@ pub fn start_run(
     scheduled_for: DateTime<Utc>,
 ) -> Result<(), String> {
     if schedule.spec.action == "reminder" {
+        let transaction = connection.unchecked_transaction().map_err(db_error)?;
+        let exists: bool = transaction
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM schedule_runs WHERE id = ?1 AND status = 'completed')",
+                [run_id],
+                |row| row.get(0),
+            )
+            .map_err(db_error)?;
+        if exists {
+            return Ok(());
+        }
         store::add_inbox(
-            connection,
+            &transaction,
             None,
             "reminder",
             &schedule.spec.title,
             &schedule.spec.prompt,
         )?;
+        let changed = transaction
+            .execute(
+                "UPDATE schedule_runs SET status = 'completed', updated_at = ?1 WHERE id = ?2 AND status = 'started' AND task_id IS NULL",
+                params![store::now(), run_id],
+            )
+            .map_err(db_error)?;
+        if changed != 1 {
+            return Err(
+                "SCHEDULE_RUN_CHANGED: This schedule occurrence is no longer pending.".into(),
+            );
+        }
+        transaction.commit().map_err(db_error)?;
+        return Ok(());
+    }
+    if let Some(task_id) = connection
+        .query_row(
+            "SELECT id FROM tasks WHERE schedule_run_id = ?1",
+            [run_id],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(db_error)?
+    {
         connection
             .execute(
-                "UPDATE schedule_runs SET status = 'completed', updated_at = ?1 WHERE id = ?2",
-                params![store::now(), run_id],
+                "UPDATE schedule_runs SET task_id = ?1, status = 'running', updated_at = ?2 WHERE id = ?3 AND task_id IS NULL",
+                params![task_id, store::now(), run_id],
             )
             .map_err(db_error)?;
         return Ok(());
@@ -576,61 +723,115 @@ pub fn start_run(
     }
 }
 
-/// Records a run's end. A failed occurrence is retried only if it changed
-/// nothing outside Juniper, so a retry never repeats a side effect.
-pub fn finish_run(connection: &Connection, run_id: &str, status: TaskStatus) {
-    let _ = connection.execute(
-        "UPDATE schedule_runs SET status = ?1, updated_at = ?2 WHERE id = ?3",
-        params![status.as_str(), store::now(), run_id],
-    );
-    if status != TaskStatus::Failed {
-        return;
+/// Settles a terminal task and records its retry claim in one transaction.
+/// `finalized_at` makes startup reconciliation idempotent, including recovery
+/// of legacy v5 rows interrupted between status update and retry insertion.
+fn finalize_terminal_run(
+    connection: &Connection,
+    run_id: &str,
+    status: TaskStatus,
+) -> Result<(), String> {
+    if !status.is_terminal() {
+        return Ok(());
     }
-    let run: Option<(String, String, i64, Option<String>)> = connection
+    let transaction = connection.unchecked_transaction().map_err(db_error)?;
+    let run: Option<(String, String, i64, Option<String>, Option<String>)> = transaction
         .query_row(
-            "SELECT schedule_id, scheduled_for, attempt, task_id FROM schedule_runs WHERE id = ?1",
+            "SELECT schedule_id, scheduled_for, attempt, task_id, finalized_at FROM schedule_runs WHERE id = ?1",
             [run_id],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
         )
         .optional()
-        .ok()
-        .flatten();
-    let Some((schedule_id, scheduled_for, attempt, task_id)) = run else {
-        return;
+        .map_err(db_error)?;
+    let Some((schedule_id, scheduled_for, attempt, task_id, finalized_at)) = run else {
+        transaction.commit().map_err(db_error)?;
+        return Ok(());
     };
-    let Ok(schedule) = get(connection, &schedule_id) else {
-        return;
-    };
-    if attempt as u32 > schedule.spec.retry_limit || !schedule.enabled {
-        return;
+    if finalized_at.is_some() {
+        transaction.commit().map_err(db_error)?;
+        return Ok(());
     }
-    let changed_something: bool = connection
-        .query_row(
-            "SELECT EXISTS(SELECT 1 FROM task_actions a JOIN tasks t ON t.id = a.task_id WHERE t.root_id = ?1 AND a.status IN ('succeeded', 'uncertain', 'started') AND (a.tool IN ('workspace.write', 'memory.save', 'code.python', 'code.run', 'schedule.create') OR a.tool LIKE 'mcp.%'))",
-            [task_id.unwrap_or_default()],
-            |row| row.get(0),
-        )
-        .unwrap_or(true);
-    if changed_something {
-        return;
-    }
-    let retry_id = store::new_id("run");
-    let inserted = connection
+
+    let now = store::now();
+    transaction
         .execute(
-            "INSERT OR IGNORE INTO schedule_runs(id, schedule_id, scheduled_for, attempt, status, created_at, updated_at, detail) VALUES(?1, ?2, ?3, ?4, 'started', ?5, ?5, 'Retry of a failed occurrence that changed nothing')",
-            params![retry_id, schedule_id, scheduled_for, attempt + 1, store::now()],
+            "UPDATE schedule_runs SET status = ?1, finalized_at = ?2, updated_at = ?2 WHERE id = ?3 AND finalized_at IS NULL",
+            params![status.as_str(), now, run_id],
         )
-        .unwrap_or(0);
-    if inserted == 1
-        && let Ok(scheduled) = DateTime::parse_from_rfc3339(&scheduled_for)
+        .map_err(db_error)?;
+
+    if status == TaskStatus::Failed
+        && let Some(task_id) = task_id.as_deref()
     {
-        let _ = start_run(
-            connection,
-            &schedule,
-            &retry_id,
-            scheduled.with_timezone(&Utc),
-        );
+        let schedule = get(&transaction, &schedule_id)?;
+        if schedule.enabled
+            && attempt > 0
+            && (attempt as u64) <= u64::from(schedule.spec.retry_limit)
+        {
+            let root_id: Option<String> = transaction
+                .query_row(
+                    "SELECT root_id FROM tasks WHERE id = ?1",
+                    [task_id],
+                    |row| row.get(0),
+                )
+                .optional()
+                .map_err(db_error)?;
+            let changed_something = if let Some(root_id) = root_id {
+                transaction
+                    .query_row(
+                        "SELECT EXISTS(SELECT 1 FROM task_actions a JOIN tasks t ON t.id = a.task_id WHERE t.root_id = ?1 AND a.status IN ('succeeded', 'uncertain', 'started') AND (a.tool IN ('workspace.write', 'memory.save', 'code.python', 'code.run', 'schedule.create') OR a.tool LIKE 'mcp.%'))",
+                        [root_id],
+                        |row| row.get::<_, bool>(0),
+                    )
+                    .map_err(db_error)?
+            } else {
+                true
+            };
+            if !changed_something && let Some(next_attempt) = attempt.checked_add(1) {
+                let retry_id = store::new_id("run");
+                transaction
+                    .execute(
+                        "INSERT OR IGNORE INTO schedule_runs(id, schedule_id, scheduled_for, attempt, status, created_at, updated_at, detail) VALUES(?1, ?2, ?3, ?4, 'started', ?5, ?5, 'Retry of a failed occurrence that changed nothing')",
+                        params![retry_id, schedule_id, scheduled_for, next_attempt, now],
+                    )
+                    .map_err(db_error)?;
+            }
+        }
     }
+    transaction.commit().map_err(db_error)
+}
+
+/// Finishes a task-backed run. A retry claim remains pending for `tick` to
+/// dispatch, so a crash cannot lose the task between claim and creation.
+pub fn finish_run(connection: &Connection, run_id: &str, status: TaskStatus) -> Result<(), String> {
+    finalize_terminal_run(connection, run_id, status)
+}
+
+/// Reconciles terminal tasks whose schedule bookkeeping was interrupted by a
+/// crash. The finalization marker and retry row are committed together.
+pub fn reconcile_terminal_runs(connection: &Connection) -> Result<usize, String> {
+    let pending = {
+        let mut statement = connection
+            .prepare(
+                "SELECT r.id, t.status FROM schedule_runs r JOIN tasks t ON t.id = r.task_id WHERE r.finalized_at IS NULL AND t.status IN ('completed', 'failed', 'cancelled') ORDER BY r.updated_at, r.id",
+            )
+            .map_err(db_error)?;
+        statement
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })
+            .map_err(db_error)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(db_error)?
+    };
+    let mut reconciled = 0;
+    for (run_id, task_status) in pending {
+        let status = TaskStatus::parse(&task_status)
+            .ok_or_else(|| format!("SCHEDULE_RUN_INVALID: Unknown task status {task_status:?}."))?;
+        finalize_terminal_run(connection, &run_id, status)?;
+        reconciled += 1;
+    }
+    Ok(reconciled)
 }
 
 /// Starts an occurrence now, outside the rule ("Run now").
@@ -802,6 +1003,127 @@ mod tests {
         (path, connection)
     }
 
+    fn terminal_scheduled_task(
+        connection: &Connection,
+        retry_limit: u32,
+        scheduled_for: &str,
+        uncertain_side_effect: bool,
+    ) -> (Schedule, String, String) {
+        let mut agent_spec = spec(
+            Rule::Daily {
+                time: "09:00".into(),
+            },
+            "UTC",
+        );
+        agent_spec.action = "agent-task".into();
+        agent_spec.retry_limit = retry_limit;
+        let schedule = save(
+            connection,
+            None,
+            agent_spec,
+            true,
+            0,
+            utc("2026-10-15T00:00:00Z"),
+        )
+        .unwrap();
+        let run_id = store::new_id("run");
+        let task_id = store::new_id("task");
+        connection
+            .execute(
+                "INSERT INTO schedule_runs(id, schedule_id, scheduled_for, attempt, status, task_id, created_at, updated_at) VALUES(?1, ?2, ?3, 1, 'running', ?4, ?5, ?5)",
+                params![run_id, schedule.id, scheduled_for, task_id, store::now()],
+            )
+            .unwrap();
+        connection
+            .execute(
+                "INSERT INTO tasks(id, root_id, assistant_id, schedule_run_id, title, goal, status, budget, usage, provenance, created_at, updated_at) VALUES(?1, ?1, 'a', ?2, 'Scheduled task', 'Goal', 'failed', '{}', '{}', '{}', ?3, ?3)",
+                params![task_id, run_id, store::now()],
+            )
+            .unwrap();
+        if uncertain_side_effect {
+            connection
+                .execute(
+                    "INSERT INTO task_actions(id, task_id, step, call_id, tool, arguments, binding, status, created_at, updated_at) VALUES(?1, ?2, 1, 'call-1', 'mcp.send', '{}', '', 'uncertain', ?3, ?3)",
+                    params![store::new_id("action"), task_id, store::now()],
+                )
+                .unwrap();
+        }
+        (schedule, run_id, task_id)
+    }
+
+    #[test]
+    fn terminal_run_and_retry_claim_reconcile_atomically_and_idempotently() {
+        let (path, connection) = database();
+        let (_, run_id, _) =
+            terminal_scheduled_task(&connection, 1, "2026-10-15T09:00:00+00:00", false);
+        connection
+            .execute_batch(
+                "CREATE TRIGGER reject_retry BEFORE INSERT ON schedule_runs WHEN NEW.attempt = 2 BEGIN SELECT RAISE(ABORT, 'simulated retry insert failure'); END;",
+            )
+            .unwrap();
+        assert!(finish_run(&connection, &run_id, TaskStatus::Failed).is_err());
+        let (status, finalized_at): (String, Option<String>) = connection
+            .query_row(
+                "SELECT status, finalized_at FROM schedule_runs WHERE id = ?1",
+                [&run_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(status, "running", "the failed transaction must roll back");
+        assert!(finalized_at.is_none());
+
+        connection
+            .execute_batch("DROP TRIGGER reject_retry;")
+            .unwrap();
+        // Startup recovery handles both the terminal task and the old crash
+        // window, then a second pass leaves the retry claim unchanged.
+        assert_eq!(store::recover_after_restart(&connection).unwrap(), 0);
+        assert_eq!(store::recover_after_restart(&connection).unwrap(), 0);
+        let retry_count: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM schedule_runs WHERE attempt = 2",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(retry_count, 1);
+        let (status, finalized_at): (String, Option<String>) = connection
+            .query_row(
+                "SELECT status, finalized_at FROM schedule_runs WHERE id = ?1",
+                [&run_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(status, "failed");
+        assert!(finalized_at.is_some());
+        std::fs::remove_file(path).ok();
+    }
+
+    #[test]
+    fn terminal_reconciliation_never_retries_an_uncertain_side_effect() {
+        let (path, connection) = database();
+        let (_, run_id, _) =
+            terminal_scheduled_task(&connection, 1, "2026-10-16T09:00:00+00:00", true);
+        finish_run(&connection, &run_id, TaskStatus::Failed).unwrap();
+        let retries: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM schedule_runs WHERE attempt > 1",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(retries, 0);
+        let status: String = connection
+            .query_row(
+                "SELECT status FROM schedule_runs WHERE id = ?1",
+                [&run_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(status, "failed");
+        std::fs::remove_file(path).ok();
+    }
+
     #[test]
     fn an_occurrence_is_claimed_once_and_a_backlog_is_not_replayed() {
         let (path, connection) = database();
@@ -835,13 +1157,58 @@ mod tests {
         let reopened = utc("2026-10-18T12:00:00Z");
         let claimed = claim_due(&connection, reopened).unwrap();
         assert_eq!(claimed.len(), 1);
-        assert!(matches!(claimed[0].1, Claim::Run { .. }));
+        assert!(matches!(
+            claimed[0].1,
+            Claim::Run { scheduled_for, .. } if scheduled_for == utc("2026-10-18T09:00:00Z")
+        ));
         let after = get(&connection, &schedule.id).unwrap();
         assert_eq!(
             after.next_run_at.as_deref(),
             Some("2026-10-19T09:00:00+00:00")
         );
         assert!(claim_due(&connection, reopened).unwrap().is_empty());
+        std::fs::remove_file(path).ok();
+    }
+
+    #[test]
+    fn failed_occurrence_insert_does_not_advance_the_schedule() {
+        let (path, connection) = database();
+        let schedule = save(
+            &connection,
+            None,
+            spec(
+                Rule::Daily {
+                    time: "09:00".into(),
+                },
+                "UTC",
+            ),
+            true,
+            0,
+            utc("2026-10-15T00:00:00Z"),
+        )
+        .unwrap();
+        connection
+            .execute_batch(
+                "CREATE TRIGGER fail_schedule_run BEFORE INSERT ON schedule_runs BEGIN SELECT RAISE(ABORT, 'simulated run-row failure'); END;",
+            )
+            .unwrap();
+        assert!(claim_due(&connection, utc("2026-10-15T09:01:00Z")).is_err());
+        assert_eq!(
+            get(&connection, &schedule.id)
+                .unwrap()
+                .next_run_at
+                .as_deref(),
+            Some("2026-10-15T09:00:00+00:00")
+        );
+        connection
+            .execute_batch("DROP TRIGGER fail_schedule_run;")
+            .unwrap();
+        assert_eq!(
+            claim_due(&connection, utc("2026-10-15T09:01:00Z"))
+                .unwrap()
+                .len(),
+            1
+        );
         std::fs::remove_file(path).ok();
     }
 
@@ -880,6 +1247,116 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM tasks", [], |row| row.get(0))
             .unwrap();
         assert_eq!(tasks, 0);
+        std::fs::remove_file(path).ok();
+    }
+
+    #[test]
+    fn a_committed_reminder_claim_is_replayed_once_after_dispatch_interruption() {
+        let (path, connection) = database();
+        let schedule = save(
+            &connection,
+            None,
+            spec(
+                Rule::Daily {
+                    time: "09:00".into(),
+                },
+                "UTC",
+            ),
+            true,
+            0,
+            utc("2026-10-15T00:00:00Z"),
+        )
+        .unwrap();
+        let run_id = store::new_id("run");
+        connection
+            .execute(
+                "INSERT INTO schedule_runs(id, schedule_id, scheduled_for, attempt, status, created_at, updated_at) VALUES(?1, ?2, ?3, 1, 'started', ?4, ?4)",
+                params![run_id, schedule.id, "2026-10-15T09:00:00+00:00", store::now()],
+            )
+            .unwrap();
+
+        assert_eq!(dispatch_pending(&connection).unwrap(), 1);
+        assert_eq!(dispatch_pending(&connection).unwrap(), 0);
+        let reminders: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM inbox WHERE kind = 'reminder' AND title = ?1",
+                [&schedule.spec.title],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(reminders, 1);
+        std::fs::remove_file(path).ok();
+    }
+
+    #[test]
+    fn a_committed_agent_claim_recovers_after_task_creation_before_run_link() {
+        let (path, connection) = database();
+        let mut agent_spec = spec(
+            Rule::Daily {
+                time: "09:00".into(),
+            },
+            "UTC",
+        );
+        agent_spec.action = "agent-task".into();
+        agent_spec.assistant_id = "assistant-1".into();
+        let schedule = save(
+            &connection,
+            None,
+            agent_spec,
+            true,
+            0,
+            utc("2026-10-15T00:00:00Z"),
+        )
+        .unwrap();
+        connection
+            .execute(
+                "INSERT INTO app_state(id, payload, updated_at) VALUES('singleton', ?1, ?2)",
+                params![
+                    json!({ "assistants": [{ "id": "assistant-1" }] }).to_string(),
+                    store::now()
+                ],
+            )
+            .unwrap();
+        let run_id = store::new_id("run");
+        connection
+            .execute(
+                "INSERT INTO schedule_runs(id, schedule_id, scheduled_for, attempt, status, created_at, updated_at) VALUES(?1, ?2, ?3, 1, 'started', ?4, ?4)",
+                params![run_id, schedule.id, "2026-10-15T09:00:00+00:00", store::now()],
+            )
+            .unwrap();
+
+        assert_eq!(dispatch_pending(&connection).unwrap(), 1);
+        let task_id: String = connection
+            .query_row(
+                "SELECT task_id FROM schedule_runs WHERE id = ?1",
+                [&run_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        connection
+            .execute(
+                "UPDATE schedule_runs SET task_id = NULL, status = 'started' WHERE id = ?1",
+                [&run_id],
+            )
+            .unwrap();
+
+        assert_eq!(dispatch_pending(&connection).unwrap(), 1);
+        let linked_task: String = connection
+            .query_row(
+                "SELECT task_id FROM schedule_runs WHERE id = ?1",
+                [&run_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let task_count: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM tasks WHERE schedule_run_id = ?1",
+                [&run_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(linked_task, task_id);
+        assert_eq!(task_count, 1);
         std::fs::remove_file(path).ok();
     }
 
