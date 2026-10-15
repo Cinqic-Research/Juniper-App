@@ -18,6 +18,8 @@ mod live_catalog;
 mod live_gpt_oss;
 #[cfg(all(test, target_os = "linux"))]
 mod live_juniper1;
+#[cfg(all(test, target_os = "linux"))]
+mod live_services;
 #[cfg(not(target_os = "android"))]
 mod local_runtime;
 mod managed_models;

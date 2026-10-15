@@ -1372,6 +1372,24 @@ pub async fn call_tool(
     ))
 }
 
+/// One tool call outside a task, for live checks.
+#[cfg(test)]
+pub(crate) async fn call_for_tests(
+    plugin: &Plugin,
+    tool: &str,
+    arguments: Value,
+) -> Result<Value, ToolError> {
+    let connected = connect(plugin, true).await?;
+    rpc(
+        &connected,
+        "tools/call",
+        json!({ "name": tool, "arguments": arguments }),
+        Some(tool),
+        &crate::commands::Cancellation::default(),
+    )
+    .await
+}
+
 pub fn summary(plugin: &Plugin) -> Value {
     json!({
         "id": plugin.id,
