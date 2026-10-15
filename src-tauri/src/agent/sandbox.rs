@@ -6,8 +6,11 @@
 //! A working folder or virtual environment alone is not a sandbox, so on
 //! platforms without a verified sandbox this capability is unavailable.
 
-use super::tools::{Execution, Outcome, ToolError, create_artifact};
+#[cfg(target_os = "linux")]
+use super::tools::create_artifact;
+use super::tools::{Execution, Outcome, ToolError};
 use crate::providers::TranscriptToolCall;
+#[cfg(target_os = "linux")]
 use serde_json::json;
 
 #[cfg(target_os = "linux")]

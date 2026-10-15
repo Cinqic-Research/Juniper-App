@@ -61,6 +61,7 @@ impl Paths {
         self.data.join("agent").join("artifacts")
     }
 
+    #[cfg(target_os = "linux")]
     pub fn sandboxes(&self) -> PathBuf {
         self.data.join("agent").join("sandbox")
     }

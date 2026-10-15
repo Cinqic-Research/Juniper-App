@@ -1424,7 +1424,7 @@ pub async fn call_tool(
 }
 
 /// One tool call outside a task, for live checks.
-#[cfg(test)]
+#[cfg(all(test, target_os = "linux"))]
 pub(crate) async fn call_for_tests(
     plugin: &Plugin,
     tool: &str,
@@ -1556,6 +1556,7 @@ mod tests {
         b[0].description = "changed".into();
         assert_ne!(digest_tools(&a), digest_tools(&b));
     }
+    #[cfg(unix)]
     fn fixture() -> String {
         format!(
             "{}/tests/fixtures/mcp_fixture_server.py",
@@ -1563,12 +1564,14 @@ mod tests {
         )
     }
 
+    #[cfg(unix)]
     fn database() -> std::path::PathBuf {
         let path = std::env::temp_dir().join(format!("juniper-mcp-{}.db", uuid::Uuid::new_v4()));
         crate::storage::initialize(&path).unwrap();
         path
     }
 
+    #[cfg(unix)]
     fn stdio(era: &str) -> PluginConfig {
         PluginConfig {
             name: format!("Fixture {era}"),

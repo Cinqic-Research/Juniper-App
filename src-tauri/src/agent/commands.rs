@@ -1122,28 +1122,36 @@ pub async fn skill_import<R: Runtime>(
     app: AppHandle<R>,
     state: State<'_, AppState>,
 ) -> Result<Option<Value>, String> {
-    let (sender, receiver) = tokio::sync::oneshot::channel();
-    app.dialog()
-        .file()
-        .set_title("Choose a skill folder (containing SKILL.md)")
-        .pick_folder(move |selected| {
-            let _ = sender.send(selected);
-        });
-    let Some(selected) = receiver
-        .await
-        .map_err(|_| "The folder picker closed unexpectedly.".to_owned())?
-    else {
-        return Ok(None);
-    };
-    let folder = selected
-        .into_path()
-        .map_err(|_| "Select a local folder.".to_owned())?;
-    let skill = tokio::task::spawn_blocking(move || super::skills::read_folder(&folder))
-        .await
-        .map_err(|_| "SKILL_INVALID: Reading the skill stopped unexpectedly.".to_owned())??;
-    let connection = state.agent.connection()?;
-    let skill = super::skills::import(&connection, skill)?;
-    Ok(Some(super::skills::summary(&skill)))
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        let _ = (app, state);
+        Err("SKILL_IMPORT_UNAVAILABLE: Importing skill folders is available on desktop.".to_owned())
+    }
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        let (sender, receiver) = tokio::sync::oneshot::channel();
+        app.dialog()
+            .file()
+            .set_title("Choose a skill folder (containing SKILL.md)")
+            .pick_folder(move |selected| {
+                let _ = sender.send(selected);
+            });
+        let Some(selected) = receiver
+            .await
+            .map_err(|_| "The folder picker closed unexpectedly.".to_owned())?
+        else {
+            return Ok(None);
+        };
+        let folder = selected
+            .into_path()
+            .map_err(|_| "Select a local folder.".to_owned())?;
+        let skill = tokio::task::spawn_blocking(move || super::skills::read_folder(&folder))
+            .await
+            .map_err(|_| "SKILL_INVALID: Reading the skill stopped unexpectedly.".to_owned())??;
+        let connection = state.agent.connection()?;
+        let skill = super::skills::import(&connection, skill)?;
+        Ok(Some(super::skills::summary(&skill)))
+    }
 }
 
 #[tauri::command]
