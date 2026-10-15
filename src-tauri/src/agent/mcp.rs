@@ -1651,6 +1651,7 @@ mod tests {
             });
             assert_eq!(echoed.unwrap()["content"][0]["text"], "echo: hi", "{era}");
             let _ = child.kill();
+            let _ = child.wait();
         }
         std::fs::remove_file(path).ok();
     }
