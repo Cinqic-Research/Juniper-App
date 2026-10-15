@@ -5,7 +5,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-pub const SCHEMA_VERSION: i64 = 4;
+pub const SCHEMA_VERSION: i64 = 5;
 
 const INITIAL_SCHEMA: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -137,8 +137,229 @@ CREATE TABLE IF NOT EXISTS device_link_peers (
 );
 "#;
 
+/// Agent, project, schedule, skill, and plugin state. The native host is the
+/// only writer of these tables: `save_app_data` deletes and rebuilds the
+/// snapshot projections above, so nothing here references them by foreign
+/// key, and a stale interface snapshot can never delete or rewrite task
+/// activity or approvals.
+const MIGRATION_V5: &str = r#"
+CREATE TABLE IF NOT EXISTS agent_profiles (
+    assistant_id TEXT PRIMARY KEY,
+    payload TEXT NOT NULL,
+    revision INTEGER NOT NULL DEFAULT 1,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS agent_settings (
+    id TEXT PRIMARY KEY CHECK(id = 'singleton'),
+    payload TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS projects (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    instructions TEXT NOT NULL DEFAULT '',
+    archived INTEGER NOT NULL DEFAULT 0,
+    payload TEXT NOT NULL DEFAULT '{}',
+    revision INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS project_roots (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    path TEXT NOT NULL,
+    label TEXT NOT NULL,
+    access TEXT NOT NULL CHECK(access IN ('read', 'read-write')),
+    created_at TEXT NOT NULL,
+    revoked_at TEXT
+);
+CREATE TABLE IF NOT EXISTS tasks (
+    id TEXT PRIMARY KEY,
+    parent_id TEXT REFERENCES tasks(id) ON DELETE CASCADE,
+    root_id TEXT NOT NULL,
+    depth INTEGER NOT NULL DEFAULT 0,
+    role TEXT,
+    assistant_id TEXT NOT NULL,
+    project_id TEXT,
+    schedule_run_id TEXT,
+    title TEXT NOT NULL,
+    goal TEXT NOT NULL,
+    status TEXT NOT NULL CHECK(status IN ('queued', 'running', 'waiting-input', 'waiting-approval', 'paused', 'interrupted', 'completed', 'failed', 'cancelled')),
+    status_reason TEXT,
+    current_action TEXT,
+    plan TEXT NOT NULL DEFAULT '[]',
+    budget TEXT NOT NULL,
+    usage TEXT NOT NULL,
+    provenance TEXT NOT NULL,
+    transcript TEXT NOT NULL DEFAULT '[]',
+    pending TEXT,
+    result TEXT,
+    revision INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    finished_at TEXT
+);
+CREATE INDEX IF NOT EXISTS tasks_status ON tasks(status, created_at);
+CREATE INDEX IF NOT EXISTS tasks_parent ON tasks(parent_id);
+CREATE TABLE IF NOT EXISTS task_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL,
+    summary TEXT NOT NULL,
+    detail TEXT,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS task_events_task ON task_events(task_id, id);
+CREATE TABLE IF NOT EXISTS task_actions (
+    id TEXT PRIMARY KEY,
+    task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    step INTEGER NOT NULL,
+    call_id TEXT NOT NULL,
+    tool TEXT NOT NULL,
+    arguments TEXT NOT NULL,
+    binding TEXT NOT NULL,
+    status TEXT NOT NULL CHECK(status IN ('proposed', 'awaiting-approval', 'approved', 'denied', 'started', 'succeeded', 'failed', 'uncertain', 'cancelled')),
+    result TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(task_id, call_id)
+);
+CREATE TABLE IF NOT EXISTS approvals (
+    id TEXT PRIMARY KEY,
+    task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    action_id TEXT NOT NULL REFERENCES task_actions(id) ON DELETE CASCADE,
+    tool TEXT NOT NULL,
+    capability TEXT NOT NULL,
+    preview TEXT NOT NULL,
+    binding TEXT NOT NULL,
+    standing_allowed INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL CHECK(status IN ('pending', 'approved', 'denied', 'expired', 'stale')),
+    decision TEXT,
+    created_at TEXT NOT NULL,
+    decided_at TEXT,
+    expires_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS grants (
+    id TEXT PRIMARY KEY,
+    assistant_id TEXT NOT NULL,
+    project_id TEXT,
+    capability TEXT NOT NULL,
+    scope TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL,
+    expires_at TEXT,
+    revoked_at TEXT
+);
+CREATE TABLE IF NOT EXISTS artifacts (
+    id TEXT PRIMARY KEY,
+    task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL,
+    project_id TEXT,
+    kind TEXT NOT NULL,
+    title TEXT NOT NULL,
+    file_name TEXT NOT NULL,
+    media_type TEXT NOT NULL,
+    size_bytes INTEGER NOT NULL,
+    sha256 TEXT NOT NULL,
+    source_ids TEXT NOT NULL DEFAULT '[]',
+    status TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS sources (
+    id TEXT PRIMARY KEY,
+    task_id TEXT REFERENCES tasks(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL,
+    title TEXT NOT NULL,
+    url TEXT,
+    final_url TEXT,
+    location TEXT,
+    retrieved_at TEXT NOT NULL,
+    content_sha256 TEXT,
+    excerpt TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS schedules (
+    id TEXT PRIMARY KEY,
+    assistant_id TEXT NOT NULL,
+    project_id TEXT,
+    title TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    next_run_at TEXT,
+    revision INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS schedule_runs (
+    id TEXT PRIMARY KEY,
+    schedule_id TEXT NOT NULL REFERENCES schedules(id) ON DELETE CASCADE,
+    scheduled_for TEXT NOT NULL,
+    attempt INTEGER NOT NULL DEFAULT 1,
+    status TEXT NOT NULL,
+    task_id TEXT,
+    lease_until TEXT,
+    detail TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(schedule_id, scheduled_for, attempt)
+);
+CREATE TABLE IF NOT EXISTS skills (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    digest TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 0,
+    bundled INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS plugins (
+    id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL CHECK(kind IN ('mcp-stdio', 'mcp-http')),
+    name TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 0,
+    revision INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS inbox (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id TEXT,
+    kind TEXT NOT NULL,
+    title TEXT NOT NULL,
+    body TEXT NOT NULL,
+    read INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS memory_outbox (
+    id TEXT PRIMARY KEY,
+    assistant_id TEXT NOT NULL,
+    operation TEXT NOT NULL CHECK(operation IN ('save', 'delete')),
+    payload TEXT NOT NULL,
+    task_id TEXT,
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS doc_files (
+    root_id TEXT NOT NULL REFERENCES project_roots(id) ON DELETE CASCADE,
+    path TEXT NOT NULL,
+    version TEXT NOT NULL,
+    size_bytes INTEGER NOT NULL,
+    modified_nanos INTEGER NOT NULL,
+    indexed_at TEXT NOT NULL,
+    PRIMARY KEY(root_id, path)
+);
+CREATE VIRTUAL TABLE IF NOT EXISTS doc_chunks USING fts5(
+    text,
+    project_id UNINDEXED,
+    root_id UNINDEXED,
+    path UNINDEXED,
+    version UNINDEXED,
+    start_offset UNINDEXED,
+    end_offset UNINDEXED,
+    tokenize = 'unicode61'
+);
+"#;
+
 fn migrate(connection: &Connection) -> Result<()> {
-    debug_assert_eq!(SCHEMA_VERSION, 4);
+    debug_assert_eq!(SCHEMA_VERSION, 5);
     connection.pragma_update(None, "foreign_keys", "ON")?;
     let transaction = connection.unchecked_transaction()?;
     transaction.execute_batch(INITIAL_SCHEMA)?;
@@ -188,18 +409,95 @@ fn migrate(connection: &Connection) -> Result<()> {
             [],
         )?;
     }
+    if version < 5 {
+        transaction.execute_batch(MIGRATION_V5)?;
+        transaction.execute(
+            "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(5, datetime('now'))",
+            [],
+        )?;
+    }
     transaction.commit()
 }
 
 fn connection(path: &Path) -> Result<Connection> {
     let connection = Connection::open(path)?;
+    // The agent runtime and interface saves write concurrently.
+    connection.busy_timeout(std::time::Duration::from_secs(5))?;
     migrate(&connection)?;
     Ok(connection)
 }
 
+/// Opens (and migrates) the database once at startup. An existing database
+/// on an older schema is first copied with `VACUUM INTO` beside the original,
+/// so a migration can be rolled back by restoring that file; the migration
+/// itself runs in one transaction and leaves the old schema intact on failure.
 pub fn initialize(path: &Path) -> Result<()> {
+    if let Some(version) = existing_version(path)?
+        && version < SCHEMA_VERSION
+    {
+        backup_before_migration(path, version)?;
+    }
     let _ = connection(path)?;
     Ok(())
+}
+
+fn existing_version(path: &Path) -> Result<Option<i64>> {
+    if !path.is_file() {
+        return Ok(None);
+    }
+    let connection = Connection::open(path)?;
+    let has_table: bool = connection.query_row(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'schema_migrations')",
+        [],
+        |row| row.get(0),
+    )?;
+    if !has_table {
+        return Ok(None);
+    }
+    connection
+        .query_row("SELECT MAX(version) FROM schema_migrations", [], |row| {
+            row.get(0)
+        })
+        .map(Some)
+}
+
+/// The backup path for a database migrating away from `version`.
+pub fn migration_backup_path(path: &Path, version: i64) -> PathBuf {
+    path.with_file_name(format!(
+        "{}.schema-v{version}.backup",
+        path.file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("juniper.db")
+    ))
+}
+
+fn backup_before_migration(path: &Path, version: i64) -> Result<()> {
+    let backup = migration_backup_path(path, version);
+    // An earlier interrupted attempt may have left a backup already; the
+    // first one taken from the unmigrated file is the one worth keeping.
+    if backup.exists() {
+        return Ok(());
+    }
+    let staging = backup.with_extension("backup.partial");
+    let _ = std::fs::remove_file(&staging);
+    let connection = Connection::open(path)?;
+    connection.execute(
+        "VACUUM INTO ?1",
+        params![staging.to_string_lossy().into_owned()],
+    )?;
+    drop(connection);
+    std::fs::rename(&staging, &backup).map_err(|error| {
+        rusqlite::Error::SqliteFailure(
+            rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_CANTOPEN),
+            Some(format!("could not keep the pre-migration backup: {error}")),
+        )
+    })
+}
+
+/// Opens the database for native agent state. Exposed so the agent store
+/// shares the one migration path.
+pub fn open(path: &Path) -> Result<Connection> {
+    connection(path)
 }
 
 pub fn load_app_data(path: &Path) -> Result<Option<Value>> {
@@ -664,7 +962,7 @@ mod tests {
     }
 
     #[test]
-    fn migration_preserves_a_v1_database_and_adds_v2_v3_and_v4_state() -> Result<()> {
+    fn migration_preserves_a_v1_database_and_adds_v2_through_v5_state() -> Result<()> {
         let connection = Connection::open_in_memory()?;
         connection.execute_batch(
             r#"
@@ -1140,6 +1438,119 @@ mod tests {
         assert_eq!(PathBuf::from(stored_path), attachment);
         std::fs::remove_file(database)?;
         std::fs::remove_file(attachment)?;
+        Ok(())
+    }
+    fn v4_database(path: &Path) -> Result<()> {
+        let connection = Connection::open(path)?;
+        connection.execute_batch(INITIAL_SCHEMA)?;
+        connection.execute_batch(
+            "ALTER TABLE conversations ADD COLUMN model_profile_id TEXT REFERENCES model_profiles(id);",
+        )?;
+        connection.execute_batch(MIGRATION_V2)?;
+        connection.execute_batch(MIGRATION_V3)?;
+        connection.execute_batch(MIGRATION_V4)?;
+        connection.execute_batch(
+            "INSERT INTO schema_migrations VALUES(2, 'x'), (3, 'x'), (4, 'x');
+             INSERT INTO app_state(id, payload, updated_at) VALUES('singleton', '{\"assistants\":[],\"marker\":\"v4-user-data\"}', 'x');",
+        )?;
+        Ok(())
+    }
+
+    #[test]
+    fn upgrading_a_v4_database_keeps_a_restorable_backup_and_the_user_data() -> Result<()> {
+        let root = std::env::temp_dir().join(format!("juniper-v5-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).expect("directory");
+        let path = root.join("juniper.db");
+        v4_database(&path)?;
+        initialize(&path)?;
+        let backup = migration_backup_path(&path, 4);
+        assert!(backup.is_file(), "a v4 backup is kept before migrating");
+        let restored = Connection::open(&backup)?;
+        let version: i64 =
+            restored.query_row("SELECT MAX(version) FROM schema_migrations", [], |row| {
+                row.get(0)
+            })?;
+        assert_eq!(version, 4, "the backup is the unmigrated database");
+        let migrated = open(&path)?;
+        let payload: String = migrated.query_row(
+            "SELECT payload FROM app_state WHERE id = 'singleton'",
+            [],
+            |row| row.get(0),
+        )?;
+        assert!(payload.contains("v4-user-data"));
+        let version: i64 =
+            migrated.query_row("SELECT MAX(version) FROM schema_migrations", [], |row| {
+                row.get(0)
+            })?;
+        assert_eq!(version, 5);
+        // A second start neither re-backs-up nor fails.
+        initialize(&path)?;
+        std::fs::remove_dir_all(root).ok();
+        Ok(())
+    }
+
+    #[test]
+    fn an_interrupted_v5_migration_leaves_the_v4_schema_untouched() -> Result<()> {
+        let root = std::env::temp_dir().join(format!("juniper-v5-fail-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).expect("directory");
+        let path = root.join("juniper.db");
+        v4_database(&path)?;
+        // A conflicting object makes the v5 batch fail part-way through.
+        Connection::open(&path)?.execute_batch("CREATE VIEW tasks AS SELECT 1 AS id;")?;
+        assert!(initialize(&path).is_err());
+        let connection = Connection::open(&path)?;
+        let version: i64 =
+            connection.query_row("SELECT MAX(version) FROM schema_migrations", [], |row| {
+                row.get(0)
+            })?;
+        assert_eq!(version, 4);
+        let agent_tables: i64 = connection.query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE name IN ('projects', 'agent_profiles')",
+            [],
+            |row| row.get(0),
+        )?;
+        assert_eq!(agent_tables, 0, "no part of v5 was committed");
+        let payload: String = connection.query_row(
+            "SELECT payload FROM app_state WHERE id = 'singleton'",
+            [],
+            |row| row.get(0),
+        )?;
+        assert!(payload.contains("v4-user-data"));
+        std::fs::remove_dir_all(root).ok();
+        Ok(())
+    }
+
+    #[test]
+    fn a_stale_interface_snapshot_cannot_touch_native_agent_state() -> Result<()> {
+        let path =
+            std::env::temp_dir().join(format!("juniper-v5-stale-{}.db", uuid::Uuid::new_v4()));
+        initialize(&path)?;
+        let connection = open(&path)?;
+        connection.execute_batch(
+            "INSERT INTO tasks(id, root_id, assistant_id, title, goal, status, budget, usage, provenance, created_at, updated_at)
+             VALUES('task-1', 'task-1', 'assistant-1', 'T', 'G', 'waiting-approval', '{}', '{}', '{}', 'x', 'x');
+             INSERT INTO task_actions(id, task_id, step, call_id, tool, arguments, binding, status, created_at, updated_at)
+             VALUES('action-1', 'task-1', 1, 'call-1', 'workspace.write', '{}', 'b', 'awaiting-approval', 'x', 'x');
+             INSERT INTO approvals(id, task_id, action_id, tool, capability, preview, binding, status, created_at, expires_at)
+             VALUES('approval-1', 'task-1', 'action-1', 'workspace.write', 'workspace.write', 'p', 'b', 'pending', 'x', 'x');",
+        )?;
+        drop(connection);
+        // An interface snapshot that knows nothing about the task, saved twice.
+        let snapshot = json!({"assistants": [], "providers": [], "models": [], "conversations": [], "memories": [], "permissions": [], "settings": {}});
+        save_app_data_with_paths(&path, &snapshot, &HashMap::new())?;
+        save_app_data_with_paths(&path, &snapshot, &HashMap::new())?;
+        let connection = open(&path)?;
+        let status: String = connection.query_row(
+            "SELECT status FROM approvals WHERE id = 'approval-1'",
+            [],
+            |row| row.get(0),
+        )?;
+        assert_eq!(status, "pending");
+        let tasks: i64 =
+            connection.query_row("SELECT COUNT(*) FROM tasks", [], |row| row.get(0))?;
+        assert_eq!(tasks, 1);
+        drop(connection);
+        std::fs::remove_file(path).ok();
         Ok(())
     }
 }
