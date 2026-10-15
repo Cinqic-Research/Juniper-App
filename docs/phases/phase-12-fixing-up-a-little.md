@@ -56,6 +56,12 @@ Evidence types:
 | UI                  | `AgentScreen.tsx`, `AgentManage.tsx`, `ModelsScreen.tsx`                                                     | Vitest: four destinations with Beta, approval intents only, once-only approvals, platform limits shown, Dark mode in onboarding                                                                                                                                                                                                                          | Rendered screenshots: see the final report                                         |
 | Regressions         | —                                                                                                            | `pnpm validate` passes (format, lint, types, Vitest, rustfmt, clippy `-D warnings`, cargo test, schemas, version, license, runtime contract, branding)                                                                                                                                                                                                   | Android build not run on this machine                                              |
 
+## Same-vendor review
+
+A read-only security review by a Claude subagent (same vendor, **not
+independent**) found eleven defects in the agent runtime and transfers. All
+were fixed in `1100ea1` and `c069c22`; the list is in that commit message.
+
 ## Known limitations
 
 - **Platforms.** Agent runs on desktop. Sandboxed code is Linux-only. On
