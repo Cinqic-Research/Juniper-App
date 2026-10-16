@@ -29,7 +29,7 @@ mkdir -p "$work/models"
 export JUNIPER_LIVE_SOURCE_COMMIT=$commit
 binary=$(cargo test --locked --manifest-path "$repo_root/src-tauri/Cargo.toml" --lib --no-run \
   --message-format=json 2>/dev/null |
-  node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{for(const l of s.split("\n")){try{const m=JSON.parse(l);if(m.profile?.test&&m.target?.kind?.includes("lib")&&m.executable)console.log(m.executable)}catch{}}})' |
+  node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{for(const l of s.split("\n")){try{const m=JSON.parse(l);if(m.profile?.test&&m.executable&&m.target?.src_path?.endsWith("src/lib.rs"))console.log(m.executable)}catch{}}})' |
   tail -1)
 [[ -x $binary ]] || {
   echo "The test build did not produce a binary." >&2
