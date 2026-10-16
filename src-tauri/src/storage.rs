@@ -1865,6 +1865,56 @@ mod tests {
         ] {
             assert_eq!(count(&before, key), count(&after, key), "{key}");
         }
+        // Restore rehearsal, as the phase report documents it: with Juniper
+        // stopped, copy the backup over the database (setting the upgraded
+        // file and any WAL/SHM sidecars aside first), then open it again.
+        let upgraded = root.join("juniper.db.upgraded");
+        std::fs::rename(&copy, &upgraded).expect("set the upgraded file aside");
+        for sidecar in ["juniper.db-wal", "juniper.db-shm"] {
+            let path = root.join(sidecar);
+            if path.exists() {
+                std::fs::rename(&path, root.join(format!("{sidecar}.upgraded")))
+                    .expect("set a sidecar aside");
+            }
+        }
+        std::fs::copy(&backup, &copy).expect("restore the backup");
+        let integrity: String =
+            Connection::open(&copy)?.query_row("PRAGMA integrity_check", [], |row| row.get(0))?;
+        let restored_version = existing_version(&copy)?;
+        let restored: Option<Value> = Connection::open(&copy)?
+            .query_row(
+                "SELECT payload FROM app_state WHERE id = 'singleton'",
+                [],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()?
+            .map(|text| serde_json::from_str(&text).expect("json"));
+        // Opening the restored file upgrades it again, as on the next launch.
+        initialize(&copy)?;
+        let reupgraded = load_app_data(&copy)?;
+        println!(
+            "{}",
+            json!({
+                "restore": {
+                    "integrity": integrity,
+                    "version": restored_version,
+                    "payloadEqualsOriginal": restored == before,
+                    "reupgradedVersion": existing_version(&copy)?,
+                    "reupgradedConversations": count(&reupgraded, "conversations"),
+                },
+                "sourceCommit": option_env!("JUNIPER_LIVE_SOURCE_COMMIT"),
+            })
+        );
+        assert_eq!(integrity, "ok");
+        assert_eq!(restored_version, before_version);
+        assert!(
+            restored == before,
+            "the restored payload differs from the original"
+        );
+        assert_eq!(
+            count(&reupgraded, "conversations"),
+            count(&before, "conversations")
+        );
         std::fs::remove_dir_all(root).ok();
         Ok(())
     }
