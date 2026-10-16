@@ -10,6 +10,11 @@
 //!   JUNIPER_LIVE_EVIDENCE=/path/evidence.jsonl \
 //!   [JUNIPER_LIVE_ARTIFACTS=id,id] [JUNIPER_LIVE_RESUME=artifact-id] \
 //!   cargo test --lib live_catalog -- --ignored --nocapture
+//!
+//! Build it with `JUNIPER_LIVE_SOURCE_COMMIT` set to the clean tree's commit
+//! (`scripts/live-transfer-check.sh` does this). Every record then names that
+//! commit, the SHA-256 of this harness and of the transfer code compiled in,
+//! and the SHA-256 of the test binary that ran.
 
 use crate::catalog;
 use crate::commands::Cancellation;
@@ -90,6 +95,20 @@ fn live_catalog() {
                 .replace('\n', " | ")
         })
         .unwrap_or_default();
+    let identity = {
+        use sha2::{Digest, Sha256};
+        let digest = |bytes: &[u8]| format!("{:x}", Sha256::digest(bytes));
+        let binary = std::env::current_exe()
+            .and_then(std::fs::read)
+            .expect("read the running test binary");
+        json!({
+            "sourceCommit": option_env!("JUNIPER_LIVE_SOURCE_COMMIT")
+                .expect("build with JUNIPER_LIVE_SOURCE_COMMIT set to the clean source commit"),
+            "harnessSha256": digest(include_str!("live_catalog.rs").as_bytes()),
+            "transferCodeSha256": digest(include_str!("managed_models.rs").as_bytes()),
+            "testBinarySha256": digest(&binary),
+        })
+    };
     let app = tauri::test::mock_app();
     let runtime = tokio::runtime::Runtime::new().expect("runtime");
     let client = reqwest::Client::builder()
@@ -113,6 +132,7 @@ fn live_catalog() {
                 "files": artifact.files.iter().map(|file| json!({"path": file.path, "sizeBytes": file.size_bytes, "sha256": file.sha256})).collect::<Vec<_>>(),
                 "sizeBytes": artifact.size_bytes,
                 "runtime": build,
+                "identity": identity,
                 "platform": format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH),
                 "startedAt": chrono::Utc::now().to_rfc3339(),
             });
