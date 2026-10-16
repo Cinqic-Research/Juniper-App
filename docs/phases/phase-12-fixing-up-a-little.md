@@ -98,6 +98,10 @@ node scripts/catalog-from-research.mjs docs/research/model-catalog-2026-10-15
 
 ## Reviewer and approval status
 
+Implementer-run evidence for the three review gates (exact-source transfers,
+copied-database restore, and native app workflows) is in
+`docs/qualification/pr49-gate-evidence-2026-10-16.md`. It is not independent.
+
 `BLOCKED - INDEPENDENT REVIEW`. The repairs and local validation are recorded
 in the independent review report. The live catalog table above remains the
 implementer's own evidence; it was not reproduced against an identified source

@@ -1,0 +1,2 @@
+{"assistants":[1,1],"backupKept":true,"conversations":[7,7],"fromVersion":4,"memories":[0,0],"models":[3,3],"settingsEqual":true,"toVersion":6}
+{"restore":{"integrity":"ok","payloadEqualsOriginal":true,"reupgradedConversations":7,"reupgradedVersion":6,"version":4},"sourceCommit":"59d3d447410e1a3181a183bc707e30dfd3b4a1e2"}
