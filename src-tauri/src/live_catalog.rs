@@ -95,6 +95,11 @@ fn live_catalog() {
                 .replace('\n', " | ")
         })
         .unwrap_or_default();
+    let source_commit = option_env!("JUNIPER_LIVE_SOURCE_COMMIT").unwrap_or_default();
+    assert!(
+        !source_commit.is_empty(),
+        "build with JUNIPER_LIVE_SOURCE_COMMIT set to the clean source commit"
+    );
     let identity = {
         use sha2::{Digest, Sha256};
         let digest = |bytes: &[u8]| format!("{:x}", Sha256::digest(bytes));
@@ -102,8 +107,7 @@ fn live_catalog() {
             .and_then(std::fs::read)
             .expect("read the running test binary");
         json!({
-            "sourceCommit": option_env!("JUNIPER_LIVE_SOURCE_COMMIT")
-                .expect("build with JUNIPER_LIVE_SOURCE_COMMIT set to the clean source commit"),
+            "sourceCommit": source_commit,
             "harnessSha256": digest(include_str!("live_catalog.rs").as_bytes()),
             "transferCodeSha256": digest(include_str!("managed_models.rs").as_bytes()),
             "testBinarySha256": digest(&binary),
