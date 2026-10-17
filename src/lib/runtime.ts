@@ -242,6 +242,22 @@ export async function downloadManagedModel(
   }
 }
 
+/**
+ * Whether the native host holds the user's acceptance of this model's license
+ * (true when the catalog requires none). The host refuses downloads and
+ * imports without it; this only decides whether to show the dialog.
+ */
+export async function modelLicenseAccepted(catalogId: string): Promise<boolean> {
+  if (!runningInTauri) return false
+  return invoke<boolean>('model_license_accepted', { catalogId })
+}
+
+/** Records acceptance in the native host after the user confirmed the dialog. */
+export async function acceptModelLicense(catalogId: string): Promise<void> {
+  if (!runningInTauri) throw new Error('Model licenses are recorded by the Juniper native runtime.')
+  await invoke('accept_model_license', { catalogId })
+}
+
 export async function cancelManagedModel(requestId: string): Promise<void> {
   if (runningInTauri) await invoke('cancel_managed_model', { requestId })
 }

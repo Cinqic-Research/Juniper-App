@@ -384,6 +384,20 @@ pub async fn download_managed_model(
     result
 }
 
+/// Whether the user accepted this catalog model's license (always true when
+/// the catalog requires no acceptance). The host decides; see model_licenses.
+#[tauri::command]
+pub fn model_license_accepted(app: AppHandle, catalog_id: String) -> Result<bool, String> {
+    crate::model_licenses::accepted(&app, &catalog_id)
+}
+
+/// Records acceptance after the user confirmed the license dialog. Download
+/// and import refuse `MODEL_LICENSE_NOT_ACCEPTED` without it.
+#[tauri::command]
+pub fn accept_model_license(app: AppHandle, catalog_id: String) -> Result<(), String> {
+    crate::model_licenses::accept(&app, &catalog_id)
+}
+
 #[tauri::command]
 pub fn cancel_managed_model(state: State<'_, AppState>, request_id: String) -> Result<(), String> {
     cancel_chat(state, request_id)

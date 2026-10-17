@@ -633,6 +633,7 @@ pub async fn download<R: Runtime>(
     cancellation: Cancellation,
 ) -> Result<(), String> {
     let entry = catalog::find(catalog_id)?;
+    crate::model_licenses::require(&app, &entry)?;
     let artifact = select_artifact(&entry, artifact_id)?.clone();
     if !catalog::supports_current_device(&artifact) {
         return Err(
@@ -1035,6 +1036,7 @@ pub async fn import<R: Runtime>(
     cancellation: Cancellation,
 ) -> Result<(), String> {
     let entry = catalog::find(catalog_id)?;
+    crate::model_licenses::require(&app, &entry)?;
     let artifact = select_artifact(&entry, artifact_id)?.clone();
     if !catalog::supports_current_device(&artifact) {
         return Err(

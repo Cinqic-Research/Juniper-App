@@ -24,12 +24,19 @@ llama.cpp cap of 16,384 tokens. Model entries are tagged for agent tools only
 when that artifact has an explicit tool-use qualification.
 
 Terms that require acceptance are tied to an immutable model-repository license
-revision where one is available. Juniper remembers that acceptance against the
-license name, URL, and revision. Gemma's terms are hosted at a mutable external
-URL, and the historical response body is not available, so its catalog hash
-cannot establish which exact text a user saw. Juniper links to the current
-terms, explains this limit, and asks again before each Gemma download without
-saving acceptance for future downloads.
+revision where one is available. The native host, not the webview, decides:
+`download_managed_model` and `import_managed_model` refuse
+`MODEL_LICENSE_NOT_ACCEPTED` unless the host holds an acceptance for that
+catalog id, recorded by `accept_model_license` after the user confirms the
+license dialog (`src-tauri/src/model_licenses.rs`). The record is kept in
+`model-licenses.json` in the app data directory, bound to the license name,
+URL, and revision, so a new revision asks again; it survives cleared webview
+storage. Gemma's terms are hosted at a mutable external URL, and the
+historical response body is not available, so its catalog hash cannot
+establish which exact text a user saw. Juniper links to the current terms,
+explains this limit, and asks again before each Gemma download or import: the
+host never saves that acceptance, and it covers only the next transfer in the
+running app.
 
 ## Download state machine
 

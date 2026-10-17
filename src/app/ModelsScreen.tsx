@@ -9,6 +9,7 @@ import type {
 } from '../types'
 import { defaultProvider, modelProfileFromDiscovery } from '../lib/defaults'
 import {
+  acceptModelLicense,
   deleteManagedModel,
   downloadManagedModel,
   getDeviceCapabilities,
@@ -18,6 +19,7 @@ import {
   getModelCatalog,
   importManagedModel,
   importNativeJuniper1Model,
+  modelLicenseAccepted,
   pickGguf,
   runningInTauri,
   runningOnAndroid,
@@ -29,7 +31,6 @@ import {
   formatBytes,
   isRecommendedModel,
   isImportOnly,
-  licenseAcceptanceValue,
   recommendModel,
   recommendModels,
   runtimeOptionsForModel,
@@ -61,29 +62,6 @@ interface TransferProgress {
   /** When the current transfer started and how much was already on disk, for speed. */
   startedAt: number
   startedBytes: number
-}
-
-const LICENSE_ACCEPTED_KEY = 'juniper.licenseAccepted.'
-
-function licenseAccepted(entry: CatalogModel): boolean {
-  try {
-    const acceptance = licenseAcceptanceValue(entry)
-    return (
-      acceptance !== null && localStorage.getItem(LICENSE_ACCEPTED_KEY + entry.id) === acceptance
-    )
-  } catch {
-    return false
-  }
-}
-
-function rememberLicense(entry: CatalogModel) {
-  try {
-    const acceptance = licenseAcceptanceValue(entry)
-    if (acceptance === null) return
-    localStorage.setItem(LICENSE_ACCEPTED_KEY + entry.id, acceptance)
-  } catch {
-    // Acceptance is asked again next time.
-  }
 }
 
 const OPEN_LICENSES = ['Apache-2.0', 'MIT']
@@ -362,43 +340,64 @@ export function ModelsScreen({
       }
     })
 
+  /**
+   * Shows the license dialog when the catalog requires acceptance and the
+   * native host has none on record, then records the acceptance in the host.
+   * The host, not this screen, refuses a transfer without it.
+   */
+  async function confirmLicense(entry: CatalogModel, action: 'download' | 'import') {
+    if (entry.licenseAcceptance !== 'required') return true
+    try {
+      if (await modelLicenseAccepted(entry.id)) return true
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not read the license record.')
+      return false
+    }
+    const termsFingerprint = entry.licenseTermsRevision?.includes('-sha256-')
+    const accepted = await dialogs.confirm({
+      title: `Accept the ${entry.license}?`,
+      message: (
+        <>
+          <p>
+            {entry.displayName} is distributed under the {entry.license}. Review the terms before{' '}
+            {action === 'download' ? 'downloading' : 'importing'}. Juniper’s own Apache-2.0 license
+            does not apply to the model.
+          </p>
+          <p>
+            <a href={entry.licenseUrl} target="_blank" rel="noreferrer">
+              Review the {entry.license}
+            </a>
+          </p>
+          {termsFingerprint ? (
+            <p>
+              Catalog fingerprint: {entry.licenseTermsRevision}. It identifies a reported response
+              hash, but the historical response is not bundled and cannot be verified against the
+              linked page. Review the linked page before each download or import; Juniper does not
+              save acceptance for these mutable terms.
+            </p>
+          ) : (
+            <p>Terms revision: {entry.licenseTermsRevision}.</p>
+          )}
+        </>
+      ),
+      confirmLabel: action === 'download' ? 'Accept and download' : 'Accept and import',
+    })
+    if (!accepted) return false
+    try {
+      await acceptModelLicense(entry.id)
+      return true
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not record the license choice.')
+      return false
+    }
+  }
+
   async function download(entry: CatalogModel, artifact: CatalogArtifact) {
     if (!runningInTauri) {
       setMessage('Model downloads are available in the Juniper desktop or Android app.')
       return
     }
-    if (entry.licenseAcceptance === 'required' && !licenseAccepted(entry)) {
-      const termsFingerprint = entry.licenseTermsRevision?.includes('-sha256-')
-      const accepted = await dialogs.confirm({
-        title: `Accept the ${entry.license}?`,
-        message: (
-          <>
-            <p>
-              {entry.displayName} is distributed under the {entry.license}. Review the terms before
-              downloading. Juniper’s own Apache-2.0 license does not apply to the model.
-            </p>
-            <p>
-              <a href={entry.licenseUrl} target="_blank" rel="noreferrer">
-                Review the {entry.license}
-              </a>
-            </p>
-            {termsFingerprint ? (
-              <p>
-                Catalog fingerprint: {entry.licenseTermsRevision}. It identifies a reported response
-                hash, but the historical response is not bundled and cannot be verified against the
-                linked page. Review the linked page before each download; Juniper does not save
-                acceptance for these mutable terms.
-              </p>
-            ) : (
-              <p>Terms revision: {entry.licenseTermsRevision}.</p>
-            )}
-          </>
-        ),
-        confirmLabel: 'Accept and download',
-      })
-      if (!accepted) return
-      rememberLicense(entry)
-    }
+    if (!(await confirmLicense(entry, 'download'))) return
     controller.current?.abort()
     const next = new AbortController()
     controller.current = next
@@ -432,6 +431,7 @@ export function ModelsScreen({
       setMessage('Model import is available in the Juniper desktop app.')
       return
     }
+    if (!(await confirmLicense(entry, 'import'))) return
     let selection
     try {
       selection = await pickGguf()

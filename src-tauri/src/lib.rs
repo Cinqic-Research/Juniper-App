@@ -25,6 +25,7 @@ mod live_services;
 #[cfg(not(target_os = "android"))]
 mod local_runtime;
 mod managed_models;
+mod model_licenses;
 mod providers;
 mod runtime_registry;
 mod startup;
@@ -80,6 +81,8 @@ pub fn run() {
             commands::runtime_registry,
             commands::managed_models,
             commands::download_managed_model,
+            commands::model_license_accepted,
+            commands::accept_model_license,
             commands::cancel_managed_model,
             commands::import_managed_model,
             commands::juniper1_models,

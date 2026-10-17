@@ -46,8 +46,9 @@ snapshot (`docs/research/model-catalog-<date>/`) by
 - The snapshot's eligibility rules were declared before ranking.
 - Every file's revision, size and SHA-256 come from the Hugging Face API, never
   from hand entry.
-- Models whose terms require it carry `licenseAcceptance: required`, and the
-  interface asks for acceptance before downloading.
+- Models whose terms require it carry `licenseAcceptance: required`; the
+  interface asks for acceptance, and the native host refuses a download or
+  import without a matching acceptance record (`model_licenses.rs`).
 - There is no automatic catalog update at startup.
 
 ## Consequences

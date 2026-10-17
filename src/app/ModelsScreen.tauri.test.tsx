@@ -140,4 +140,99 @@ describe('Models screen native integration', () => {
       saved.assistants.find((assistant) => assistant.id === 'assistant-juniper')?.modelProfileId,
     ).toBe(profile?.id)
   })
+
+  it('asks the native host about license acceptance and records it there, not in localStorage', async () => {
+    const gated = MODEL_CATALOG.models.find((model) => model.id === 'llama-3.2-1b-instruct')!
+    const data = initialAppData()
+    data.settings.onboardingComplete = true
+    const calls: Array<{ command: string; args?: Record<string, unknown> }> = []
+    let hostAccepted = false
+    localStorage.clear()
+    Object.defineProperty(window, '__TAURI_EVENT_PLUGIN_INTERNALS__', {
+      configurable: true,
+      value: { unregisterListener: () => undefined },
+    })
+    Object.defineProperty(window, '__TAURI_INTERNALS__', {
+      configurable: true,
+      value: {
+        transformCallback: () => 0,
+        invoke: async (command: string, args?: Record<string, unknown>) => {
+          calls.push({ command, args })
+          switch (command) {
+            case 'load_app_data':
+              return data
+            case 'model_catalog':
+              return MODEL_CATALOG.models
+            case 'device_capabilities':
+              return device
+            case 'managed_models':
+            case 'juniper1_models':
+              return []
+            case 'local_runtime_status':
+              return { state: 'idle' }
+            case 'system_info':
+              return { memory: '64 GiB' }
+            case 'model_license_accepted':
+              return hostAccepted
+            case 'accept_model_license':
+              hostAccepted = true
+              return null
+            case 'download_managed_model':
+              return hostAccepted ? null : Promise.reject(new Error('MODEL_LICENSE_NOT_ACCEPTED'))
+            default:
+              return null
+          }
+        },
+      },
+    })
+    const { default: App } = await import('./App')
+    container = document.createElement('div')
+    document.body.append(container)
+    await act(async () => {
+      root = createRoot(container!)
+      root.render(<App />)
+    })
+    const pause = () =>
+      act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 30))
+      })
+    await pause()
+    const modelsButton = Array.from(document.querySelectorAll('.sidebar-nav button')).find(
+      (button) => button.textContent?.includes('Models'),
+    )!
+    await act(async () => (modelsButton as HTMLButtonElement).click())
+    await pause()
+    const all = container.querySelector<HTMLInputElement>('.segmented input[value="all"]')!
+    await act(async () => all.click())
+    const card = () =>
+      Array.from(container!.querySelectorAll('article')).find(
+        (item) => item.querySelector('h3')?.textContent === gated.displayName,
+      )!
+    const primary = () => card().querySelector<HTMLButtonElement>('button.button.primary')!
+    await act(async () => primary().click())
+    await pause()
+    expect(calls.some((call) => call.command === 'model_license_accepted')).toBe(true)
+    expect(document.body.textContent).toContain(`Accept the ${gated.license}?`)
+    const accept = Array.from(document.querySelectorAll('button')).find(
+      (button) => button.textContent?.trim() === 'Accept and download',
+    )!
+    await act(async () => (accept as HTMLButtonElement).click())
+    await pause()
+    const order = calls
+      .map((call) => call.command)
+      .filter((command) => ['accept_model_license', 'download_managed_model'].includes(command))
+    expect(order).toEqual(['accept_model_license', 'download_managed_model'])
+    expect(calls.find((call) => call.command === 'accept_model_license')?.args).toEqual({
+      catalogId: gated.id,
+    })
+    expect(Object.keys(localStorage).some((key) => key.includes('licenseAccepted'))).toBe(false)
+
+    // Accepted in the host: no dialog the next time.
+    calls.length = 0
+    await act(async () => primary().click())
+    await pause()
+    expect(document.body.textContent).not.toContain('Accept and download')
+    expect(calls.some((call) => call.command === 'download_managed_model')).toBe(true)
+    expect(calls.some((call) => call.command === 'accept_model_license')).toBe(false)
+  })
 })
