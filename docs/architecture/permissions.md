@@ -47,7 +47,8 @@ interface before they are chosen. Standing permissions are listed under Agent â€
 Permissions, where each can be revoked; revocation pauses that agent's running
 tasks. Folder grants are added and removed only under Agent â€º Projects through
 the native folder picker; the host refuses the filesystem root, the home folder
-itself, Juniper's own data folder, and system folders.
+itself, hidden configuration folders under it (such as `~/.ssh` or
+`~/.config`), Juniper's own data folder, and system folders.
 
 A standing permission names one tool: allowing web searches does not allow page
 fetches. An approval shows everything it covers; a call whose arguments or diff

@@ -140,10 +140,22 @@ pub fn refused_root(
     if canonical.parent().is_none() {
         return Some("the whole file system");
     }
-    if let Some(home) = home
-        && home.starts_with(canonical)
-    {
-        return Some("your home folder (choose a project folder inside it)");
+    if let Some(home) = home {
+        if home.starts_with(canonical) {
+            return Some("your home folder (choose a project folder inside it)");
+        }
+        // Review F-12: a hidden folder under the home folder (~/.ssh,
+        // ~/.gnupg, ~/.config and everything in it, ~/.local/share,
+        // ~/.local/bin, ...) holds keys and start-up configuration, where
+        // names such as authorized_keys or fish/config.fish are ordinary
+        // files relative to the root.
+        if let Ok(inside) = canonical.strip_prefix(home)
+            && inside
+                .components()
+                .any(|component| component.as_os_str().to_string_lossy().starts_with('.'))
+        {
+            return Some("a hidden configuration folder in your home folder");
+        }
     }
     if app_data.starts_with(canonical) || canonical.starts_with(app_data) {
         return Some("Juniper's own data folder");
@@ -874,9 +886,29 @@ mod tests {
         assert!(refused("/home/someone/.local/share/com.cinqic.juniper/models").is_some());
         assert!(refused("/etc").is_some());
         assert!(refused("/usr/local/share").is_some());
+        // Hidden configuration folders under home, at any depth (F-12).
+        for hidden in [
+            "/home/someone/.ssh",
+            "/home/someone/.gnupg",
+            "/home/someone/.config",
+            "/home/someone/.config/autostart",
+            "/home/someone/.config/fish",
+            "/home/someone/.config/environment.d",
+            "/home/someone/.config/systemd/user",
+            "/home/someone/.local/share",
+            "/home/someone/.local/bin",
+            "/home/someone/.mozilla",
+            "/home/someone/code/.git",
+        ] {
+            assert!(refused(hidden).is_some(), "{hidden}");
+        }
         assert!(refused("/home/someone/projects/site").is_none());
+        assert!(refused("/home/someone/projects/site.v2").is_none());
         assert!(refused("/media/someone/disk/work").is_none());
-        assert!(refused("/home/someone/.local/share/other-app").is_none());
+        assert!(
+            refused("/home/someone/.local/share/other-app").is_some(),
+            "inside ~/.local"
+        );
         // The platform list exists and names real system folders here.
         #[cfg(target_os = "linux")]
         assert!(system_folders().contains(&PathBuf::from("/etc")));
