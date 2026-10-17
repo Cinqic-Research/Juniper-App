@@ -166,7 +166,7 @@ pub fn system_folders() -> Vec<PathBuf> {
             "ProgramData",
         ]
         .iter()
-        .filter_map(|name| std::env::var_os(name))
+        .filter_map(std::env::var_os)
         .map(PathBuf::from)
         .map(|path| std::fs::canonicalize(&path).unwrap_or(path))
         .collect()
