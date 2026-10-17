@@ -313,7 +313,9 @@ mod tests {
             .collect();
         ranks.sort_unstable();
         ranks.dedup();
-        assert_eq!(&ranks[..10], &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+        // Ranks 6 (Llama 3.2 1B) and 8 (Llama 3.1 8B) are third-party mirrors held
+        // from the 0.4.0-alpha.1 catalog (release gate G7).
+        assert_eq!(&ranks[..8], &[1, 2, 3, 4, 5, 7, 9, 10]);
     }
 
     #[test]
@@ -384,15 +386,33 @@ mod tests {
                 );
             }
         }
-        let gemma = models
+        let nemotron = models
             .iter()
-            .find(|model| model["id"] == "gemma-3-1b-it")
-            .expect("Gemma catalog entry exists");
-        assert!(
-            gemma["licenseTermsRevision"]
-                .as_str()
-                .unwrap()
-                .contains("-sha256-")
+            .find(|model| model["id"] == "nemotron-3-nano-4b")
+            .expect("Nemotron catalog entry exists");
+        assert_eq!(nemotron["licenseAcceptance"], "required");
+        assert_eq!(
+            nemotron["licenseTermsRevision"],
+            "dfaf35de3e30f1867dd8dbc38a7fc9fb52d3914f"
         );
+    }
+
+    #[test]
+    fn third_party_llama_and_gemma_mirrors_are_held_from_the_alpha_catalog() {
+        // Release gate G7 (0.4.0-alpha.1): no owner decision on the community GGUF
+        // mirrors, and no official GGUF Juniper can download, so these stay out.
+        let entries = entries().expect("catalog should parse");
+        for held in [
+            "llama-3.2-1b-instruct",
+            "llama-3.2-3b-instruct",
+            "llama-3.1-8b-instruct",
+            "gemma-3-1b-it",
+            "gemma-3-4b-it",
+        ] {
+            assert!(
+                entries.iter().all(|entry| entry.id != held),
+                "{held} is held from the alpha catalog"
+            );
+        }
     }
 }

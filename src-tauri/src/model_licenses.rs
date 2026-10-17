@@ -244,7 +244,9 @@ mod tests {
             .into_iter()
             .filter(required)
             .collect();
-        assert!(gated.len() >= 6, "Llama, Gemma and Nemotron entries");
+        // Llama 3.x and Gemma 3 are held from the 0.4.0-alpha.1 catalog (G7);
+        // Nemotron 3 Nano 4B still needs acceptance.
+        assert!(!gated.is_empty(), "the Nemotron entry needs acceptance");
         for entry in &gated {
             assert!(require_in(&directory, entry).is_err(), "{}", entry.id);
         }
