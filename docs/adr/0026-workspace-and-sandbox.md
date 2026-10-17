@@ -29,7 +29,12 @@ shell access.
   `pyproject.toml`, `setup.py`, `Cargo.toml`, `build.rs`, `CMakeLists.txt`,
   `Rakefile`, `Gemfile`, Gradle and Maven files, `meson.build`, Bazel `BUILD`
   and `WORKSPACE`, `Dockerfile` and Compose files, `Taskfile`, `Jenkinsfile`,
-  `configure`, and `*.sh`, `*.ps1`, `*.bat` scripts), `*.desktop` entries, and every other dot-file or dot-folder at
+  `configure`, `Vagrantfile`, `Procfile`, tool configuration that runs code
+  (`vite.config.*`, `webpack.config.*`, `eslint.config.*` and similar),
+  dependency manifests and lock files (`requirements*.txt`, `go.mod`,
+  `package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`, `Cargo.lock`,
+  `poetry.lock`, `composer.json` and similar), and `*.sh`, `*.fish`, `*.csh`,
+  `*.ps1`, `*.bat`, `*.nix`, `*.gradle`, `*.cmake` files), `*.desktop` entries, and every other dot-file or dot-folder at
   any depth can be written only through a per-call approval showing the diff:
   neither the "Within projects" preset nor a standing permission covers them,
   and no standing grant is offered. Residual risk: a project folder can still
