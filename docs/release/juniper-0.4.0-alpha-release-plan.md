@@ -104,7 +104,7 @@ production model.
    - a restore on a clean machine (not yet run by anyone).
 2. The owner records a decision on the third-party GGUF mirrors used for the
    Llama 3.x and Gemma 3 entries (review F-02 note) before those entries ship.
-   Done on 2026-10-17 by holding the entries: they are removed from the alpha
+   Handled on 2026-10-17 by holding the entries (no owner rights decision on the mirrors is recorded; the owner may lift the hold later): they are removed from the alpha
    catalog (gate G7 in the readiness review).
 3. On the merge commit: `pnpm validate` and `pnpm build` pass locally, and the
    `validation` workflow passes in full, including the

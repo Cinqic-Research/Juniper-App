@@ -4,22 +4,33 @@ display_name: Juniper 0.4.0-Alpha
 status: alpha
 release:
   tag: v0.4.0-alpha.1
-  commit: resolved-from-tag
-  url: derived-at-release
+  commit: 96ee95d384383f64bd958f282732fca780fbaddb
+  url: https://github.com/Cinqic-Research/Juniper-App/releases/tag/v0.4.0-alpha.1
   name: Juniper 0.4.0-Alpha
   prerelease: true
   make_latest: false
   overwrite_existing_release: forbidden
 publication:
-  state: ready-to-publish-from-tag
-  published_artifacts: not-yet-published
+  state: published
+  published_at: 2026-10-17T12:58:12Z
+  release_workflow_run: 39032524940
+  validation_run_on_release_commit: 39031231599
+  published_artifacts:
+    - name: Juniper-0.4.0-alpha.1-android-native-symbols.zip
+      sha256: ab783fb8dcd49398d2cd31859857dd70ebb8f3066d5c0b2d33d0476d35e0b792
+    - name: Juniper-0.4.0-alpha.1-android-universal.apk
+      sha256: 8b319798a1368392dbc55a0b2be575c63357493d3521b9c781574e4456346df4
+    - name: Juniper-0.4.0-alpha.1-linux-x86_64.AppImage
+      sha256: 71528f6da6ac52cdb09cdbe8f5308e4894ec8c8d5c61fb5e0539bcc64e6a8d5a
+    - name: Juniper-0.4.0-alpha.1-linux-x86_64.deb
+      sha256: 9fb1efa68906b1e54af5c7c183ebea979860d1d75b97f498ffc64ee5b6fef984
+    - name: Juniper-0.4.0-alpha.1-windows-x86_64.msi
+      sha256: 9477aecbac413310c7e52c6a7e456e0b943ba9f811a4eaccd517a1ca5847391d
   plan: docs/release/juniper-0.4.0-alpha-release-plan.md
   readiness_review: docs/release/juniper-0.4.0-alpha-readiness-review.md
   qualification_evidence: docs/qualification/0.4.0-alpha-qualification-2026-10-17
-  publication_record: written-after-the-release-workflow-publishes
-  remaining_before_tag:
-    - validation-workflow-green-on-the-exact-release-commit
-    - owner-creates-and-pushes-annotated-tag-v0.4.0-alpha.1
+  publication_record: docs/release/juniper-0.4.0-alpha-publication-record.md
+  remaining_before_tag: none (tag pushed 2026-10-17 after the validation run on the release commit)
 canonical_repository: https://github.com/Cinqic-Research/Juniper-App
 canonical_branch: main
 project_license: Apache-2.0

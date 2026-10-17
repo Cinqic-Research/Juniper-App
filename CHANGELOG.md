@@ -55,7 +55,9 @@ An alpha prerelease, not a stable release. Gates and evidence:
   import-only gpt-oss-20b. 0.3.0-rc.33 had four models below 1B.
 - **Held from this alpha:** Llama 3.2 1B Instruct, Llama 3.2 3B Instruct,
   Llama 3.1 8B Instruct, Gemma 3 1B IT and Gemma 3 4B IT. Their GGUF files come
-  from third-party mirrors and no owner decision on those mirrors is recorded;
+  from third-party mirrors of weights whose publishers attach their own licence terms, and no owner
+  decision on those specific mirrors is recorded (other catalog entries also use community
+  mirrors; the hold covers only Llama 3.x and Gemma 3);
   Meta publishes no GGUF, and Google's official GGUFs are gated on Hugging
   Face, which Juniper's account-free download cannot use. A GGUF you obtained
   yourself can still be imported. Detail:

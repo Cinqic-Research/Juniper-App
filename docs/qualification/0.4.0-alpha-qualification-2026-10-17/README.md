@@ -40,7 +40,6 @@ command, database write or page script was used to act.
 | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
 | `transfer-check.jsonl`        | G2 raw harness record (two lines, one per artifact), written by `scripts/live-transfer-check.sh`                                          |
 | `transfer-check-record.json`  | G2 annotated record: environment, commands, identity checks against `git show`, per-artifact results                                      |
-| `transfer-run.log`            | G2 script output (`transfer/run.log` in the original folder)                                                                              |
 | `ui-workflow-records.json`    | G3 record: build, launch, isolation, model, per-workflow steps, task ids, labels, outcomes, observations                                  |
 | `db-export.json`              | Read-only export of the isolated G3 database after the run                                                                                |
 | `scripted-provider.jsonl`     | Every request to the scripted OpenAI-compatible fixture provider used for G3 workflow (a), with its fixed reply                           |
@@ -77,3 +76,5 @@ unchanged: the saved-acceptance path still applies to Nemotron 3 Nano 4B, the
 remaining entry whose license must be accepted, and the mutable-terms path
 (never saved, asked on every transfer) now has no catalog entry and is covered
 by unit tests only.
+
+Not copied: the G2 script's console output (`transfer/run.log` in the original folder on FLOWBOX, `/home/cinqic/j1work/app-qual-evidence/`); the machine-readable `transfer-check.jsonl` and `transfer-check-record.json` carry the same results.
