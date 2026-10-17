@@ -56,6 +56,7 @@ These are deliberate exclusions in this release, not oversights:
 - **No arbitrary themes.** Appearance is limited to validated settings; Juniper never loads user CSS, scripts, or remote fonts.
 - **Android provider secrets use Android Keystore.** Juniper refuses to fall back to plaintext or SQLite storage; the instrumentation test exercises encrypt, decrypt, and deletion on an Android target.
 - **Android native local inference is Beta.** The candidate packages an in-process llama.cpp bridge for the managed, SHA-256-verified GGUF path on `arm64-v8a` (with `x86_64` reserved for emulator tests). The owner reports successful local model loading and inference on a physical Android phone. Build identity, device details, and the full lifecycle test record were not captured, so Beta promotion remains pending.
+- **Juniper 1 Base is research-only.** Cinqic's own base model is published as [Juniper 1 Base](https://github.com/Cinqic-Research/Juniper-1-Base) (model card: [CinqicX/juniper1-base](https://huggingface.co/CinqicX/juniper1-base)). It is not Juniper's default model and is not qualified for conversational use; the desktop app can import it only as a local research experiment ([ADR 0024](docs/adr/0024-juniper1-token-id-backend.md)).
 - **No iOS or macOS build.**
 - **No telemetry, analytics, crash reporting, or account.**
 

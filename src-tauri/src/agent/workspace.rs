@@ -110,11 +110,70 @@ const ASK_EVERY_TIME: &[&str] = &[
     "taskfile.yaml",
     "jenkinsfile",
     "configure",
+    // Dependency manifests and lock files: what an install fetches and runs
+    // (third review F-20).
+    "requirements.txt",
+    "requirements.in",
+    "constraints.txt",
+    "pipfile",
+    "pipfile.lock",
+    "poetry.lock",
+    "uv.lock",
+    "go.mod",
+    "go.sum",
+    "package-lock.json",
+    "npm-shrinkwrap.json",
+    "pnpm-lock.yaml",
+    "pnpm-workspace.yaml",
+    "yarn.lock",
+    ".yarnrc.yml",
+    "bun.lockb",
+    "cargo.lock",
+    "gemfile.lock",
+    "composer.json",
+    "composer.lock",
+    "cmakepresets.json",
+    "vagrantfile",
+    "procfile",
+    // Build wrappers and project files (PR #51 review F-24).
+    "gradlew",
+    "gradlew.bat",
+    "mvnw",
+    "mvnw.cmd",
+    "mix.exs",
+    "deno.json",
+    "deno.jsonc",
+    "sconstruct",
+    "sconscript",
+    "wscript",
+    "build.ninja",
 ];
-/// Names that start a family of build files (`Dockerfile.dev`).
-const ASK_EVERY_TIME_PREFIXES: &[&str] = &["dockerfile.", "containerfile."];
+/// Names that start a family of build or tool files: `Dockerfile.dev`,
+/// `Makefile.am`, `requirements-dev.txt`, `vite.config.ts`.
+const ASK_EVERY_TIME_PREFIXES: &[&str] = &[
+    "dockerfile.",
+    "containerfile.",
+    "makefile.",
+    "requirements-",
+    "requirements_",
+    "vite.config.",
+    "vitest.config.",
+    "webpack.config.",
+    "rollup.config.",
+    "esbuild.config.",
+    "babel.config.",
+    "jest.config.",
+    "eslint.config.",
+    "postcss.config.",
+    "tailwind.config.",
+    "next.config.",
+    "nuxt.config.",
+    "svelte.config.",
+    "astro.config.",
+];
 const ASK_EVERY_TIME_EXTENSIONS: &[&str] = &[
-    "mk", "desktop", "sh", "bash", "zsh", "ps1", "psm1", "bat", "cmd",
+    "mk", "desktop", "sh", "bash", "zsh", "fish", "csh", "tcsh", "ksh", "ps1", "psm1", "bat",
+    "cmd", "nix", "gradle", "cmake", "csproj", "fsproj", "vbproj", "sln", "props", "targets",
 ];
 
 fn lowercase_components(path: &Path) -> Vec<String> {
@@ -194,6 +253,33 @@ pub fn refused_root(
     }
     if system.iter().any(|folder| canonical.starts_with(folder)) {
         return Some("a system folder");
+    }
+    let names: Vec<String> = canonical
+        .components()
+        .filter_map(|component| match component {
+            std::path::Component::Normal(name) => Some(name.to_string_lossy().into_owned()),
+            _ => None,
+        })
+        .collect();
+    // Third review F-19: hidden folders outside the home folder too
+    // (another user's ~/.ssh, a disk's .ssh, /opt/.hidden).
+    if names.iter().any(|name| name.starts_with('.')) {
+        return Some("a hidden folder");
+    }
+    // Windows keeps per-user start-up programs and application settings
+    // under AppData (%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup).
+    if names
+        .iter()
+        .any(|name| name.eq_ignore_ascii_case("appdata"))
+    {
+        return Some("an application data folder");
+    }
+    // macOS keeps launch agents and application settings in ~/Library.
+    #[cfg(target_os = "macos")]
+    if let Some(home) = home
+        && canonical.starts_with(home.join("Library"))
+    {
+        return Some("an application data folder");
     }
     None
 }
@@ -905,6 +991,39 @@ mod tests {
             "scripts/setup.sh",
             "tools/install.ps1",
             "build.bat",
+            // Third review F-20.
+            "requirements.txt",
+            "requirements-dev.txt",
+            "go.mod",
+            "package-lock.json",
+            "pnpm-lock.yaml",
+            "yarn.lock",
+            "Cargo.lock",
+            "poetry.lock",
+            "flake.nix",
+            "shell.nix",
+            "app/build.gradle",
+            "deps.gradle",
+            "cmake/toolchain.cmake",
+            "CMakePresets.json",
+            "config.fish",
+            "login.csh",
+            "Makefile.am",
+            "Makefile.in",
+            "vite.config.ts",
+            "web/webpack.config.js",
+            "Vagrantfile",
+            "Procfile",
+            // PR #51 review F-24.
+            "gradlew",
+            "mvnw",
+            "src/App/App.csproj",
+            "Solution.sln",
+            "mix.exs",
+            "deno.json",
+            "SConstruct",
+            "wscript",
+            "build.ninja",
         ] {
             assert!(write_needs_approval(target), "{target}");
         }
@@ -915,6 +1034,8 @@ mod tests {
             "package.json.md",
             "build/output.txt",
             "docs/shell.md",
+            "docs/requirements.md",
+            "notes/config.txt",
         ] {
             assert!(!write_needs_approval(target), "{target}");
         }
@@ -959,6 +1080,19 @@ mod tests {
         assert!(refused("/home/someone/projects/site").is_none());
         assert!(refused("/home/someone/projects/site.v2").is_none());
         assert!(refused("/media/someone/disk/work").is_none());
+        // Third review F-19: hidden folders elsewhere, and Windows AppData.
+        for elsewhere in [
+            "/media/someone/disk/.ssh",
+            "/opt/.hidden",
+            "/home/other/.ssh",
+            "/srv/site/.git",
+            "/c/Users/someone/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup",
+            "/c/Users/someone/AppData/Local/Programs",
+        ] {
+            assert!(refused(elsewhere).is_some(), "{elsewhere}");
+        }
+        assert!(refused("/home/other/projects/site").is_none());
+        assert!(refused("/c/Users/someone/Documents/site").is_none());
         assert!(
             refused("/home/someone/.local/share/other-app").is_some(),
             "inside ~/.local"

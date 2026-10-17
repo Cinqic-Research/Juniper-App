@@ -13,9 +13,11 @@ shell access.
 - **Granting a folder.** A folder is granted to a project only through the
   native folder picker, read-only or read-write. The renderer never supplies a
   path. The host refuses (`ROOT_REFUSED`) the filesystem root, the home folder
-  itself or any folder containing it, any folder under the home folder whose
-  path passes through a hidden (dot) folder (`~/.ssh`, `~/.gnupg`, `~/.config`
-  and its subfolders, `~/.local/share`, `~/.local/bin`, …), Juniper's own data
+  itself or any folder containing it, any folder whose path passes through a
+  hidden (dot) folder, inside the home folder or not (`~/.ssh`, `~/.gnupg`,
+  `~/.config` and its subfolders, `~/.local/share`, another user's `.ssh`, a
+  disk's `.git`, …), any folder under a Windows `AppData` folder (which holds
+  the per-user Startup folder) or, on macOS, under `~/Library`, Juniper's own data
   folder or anything
   containing or inside it, and system folders (`/etc`, `/usr`, `/boot`,
   `/var/lib` and similar; on Windows the system, program and program-data
@@ -29,7 +31,12 @@ shell access.
   `pyproject.toml`, `setup.py`, `Cargo.toml`, `build.rs`, `CMakeLists.txt`,
   `Rakefile`, `Gemfile`, Gradle and Maven files, `meson.build`, Bazel `BUILD`
   and `WORKSPACE`, `Dockerfile` and Compose files, `Taskfile`, `Jenkinsfile`,
-  `configure`, and `*.sh`, `*.ps1`, `*.bat` scripts), `*.desktop` entries, and every other dot-file or dot-folder at
+  `configure`, `Vagrantfile`, `Procfile`, tool configuration that runs code
+  (`vite.config.*`, `webpack.config.*`, `eslint.config.*` and similar),
+  dependency manifests and lock files (`requirements*.txt`, `go.mod`,
+  `package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`, `Cargo.lock`,
+  `poetry.lock`, `composer.json` and similar), and `*.sh`, `*.fish`, `*.csh`,
+  `*.ps1`, `*.bat`, `*.nix`, `*.gradle`, `*.cmake` files), `*.desktop` entries, and every other dot-file or dot-folder at
   any depth can be written only through a per-call approval showing the diff:
   neither the "Within projects" preset nor a standing permission covers them,
   and no standing grant is offered. Residual risk: a project folder can still

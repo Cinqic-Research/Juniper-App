@@ -63,10 +63,14 @@ outcome is what the interface reports. The check is a deliberate heuristic:
 past-tense effect verbs (saved, wrote, edited, put, placed, generated,
 exported, copied, sent, posted, pushed, downloaded, scheduled, set a reminder,
 remembered, "is now in", …) in sentences that are not negated, hedged or
-questions, and that speak for the answer itself (first person, a sentence that
-starts with the verb, or a completed passive such as "has been saved to your
-folder"); sentences reporting a third party, or a passive carrying a citation
-marker such as `[S1]`, are not claims. A named project file (`src/main.rs`, or
+questions, and that speak for the answer itself (a first-person pronoun before
+the verb, a sentence that starts with the verb, or a passive such as "has been
+saved to your folder" or "the file is updated"). Sentences reporting a third
+party are not claims, nor are verb-initial participles ("Published in 2019, the
+study …"); a citation marker such as `[S1]` exempts a passive or verb-initial
+sentence only when it names nothing of the user's (no "your", no place word, no
+file path), so "… saved as `summary.md` in the project folder [S1]" is still a
+claim. Tokens such as `I/O`, `24/7` and `Node.js` are not file names. A named project file (`src/main.rs`, or
 an edited `config.toml`) needs a `workspace.write`; a Juniper document backs a
 named file only when it has exactly that file name. An answer phrased in a way
 the check does not recognise can still end as Completed; the interface's beta

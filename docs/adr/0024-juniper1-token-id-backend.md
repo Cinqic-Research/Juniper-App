@@ -8,10 +8,16 @@ Correction (2026-10-15): this was merged to `main` on 2026-10-14 as
 review on the PR. The reviews before merge were same-vendor (Claude) checks and
 are not independent review.
 
+Juniper 1 Base is a research-only base model, published as
+[Juniper 1 Base](https://github.com/Cinqic-Research/Juniper-1-Base) (model card: [CinqicX/juniper1-base](https://huggingface.co/CinqicX/juniper1-base)). It is not Juniper's default
+model and is not qualified for conversational use; the app offers it only as
+a local research import on desktop.
+
 ## Context
 
-Juniper 1 finding A-02 (Juniper-1-Train
-`docs/posttrain/a02_token_id_qualification.md`): llama.cpp's own text
+Juniper 1 finding A-02 (the token-ID qualification recorded in Cinqic's
+Juniper 1 development work; the public release is
+[Juniper 1 Base](https://github.com/Cinqic-Research/Juniper-1-Base) (model card: [CinqicX/juniper1-base](https://huggingface.co/CinqicX/juniper1-base))): llama.cpp's own text
 tokenizer for the exported Juniper 1 GGUF reproduced the canonical tokenizer
 (`j1tok`) on 0 of 200 validation documents, and with special-token parsing it
 turned literal `<|system|>` or `<|eot|>` text into control IDs. Juniper App
@@ -19,8 +25,8 @@ therefore refuses every Juniper 1 GGUF on its text paths (`gguf_guard`, merged
 in #45): the Ollama import, the desktop llama-server launch, and the Android
 JNI launch.
 
-The Python reference (Juniper-1-Data `j1data.jtok`, `j1data.protocol`,
-`j1data.runtime_client`) showed that llama-server b11270 (`748d4225b`) serves
+The Python reference implementation from the Juniper 1 data tooling
+(`j1data.jtok`, `j1data.protocol`, `j1data.runtime_client`; not public) showed that llama-server b11270 (`748d4225b`) serves
 the model correctly when the host does all tokenization and sends token IDs:
 an all-integer prompt on `/completion` is used verbatim, generated IDs come
 back in the non-streaming result, `logit_bias` works by integer ID, and IDs

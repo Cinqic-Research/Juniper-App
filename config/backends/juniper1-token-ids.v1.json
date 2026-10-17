@@ -3,7 +3,7 @@
   "backend": "juniper-chat-v1-token-ids",
   "ioContract": "token-ids-only",
   "protocol": "juniper-chat-v1",
-  "qualification": "Cinqic-Research/Juniper-1-Train docs/posttrain/a02_token_id_qualification.md (results/a02_token_id_qual_base.json, results/a02_token_id_qual_candidate.json); Juniper App live record docs/qualification/juniper1-token-id-2026-10-13/live-evidence.json",
+  "qualification": "Juniper 1 A-02 token-ID qualification (research-only base model, public release https://github.com/Cinqic-Research/Juniper-1-Base, model card https://huggingface.co/CinqicX/juniper1-base; not Juniper's default model); Juniper App live record docs/qualification/juniper1-token-id-2026-10-13/live-evidence.json",
   "tokenizer": {
     "id": "j1tok-24k",
     "file": "juniper1-j1tok-24k.tokenizer.json",
