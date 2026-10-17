@@ -135,6 +135,18 @@ const ASK_EVERY_TIME: &[&str] = &[
     "cmakepresets.json",
     "vagrantfile",
     "procfile",
+    // Build wrappers and project files (PR #51 review F-24).
+    "gradlew",
+    "gradlew.bat",
+    "mvnw",
+    "mvnw.cmd",
+    "mix.exs",
+    "deno.json",
+    "deno.jsonc",
+    "sconstruct",
+    "sconscript",
+    "wscript",
+    "build.ninja",
 ];
 /// Names that start a family of build or tool files: `Dockerfile.dev`,
 /// `Makefile.am`, `requirements-dev.txt`, `vite.config.ts`.
@@ -161,7 +173,7 @@ const ASK_EVERY_TIME_PREFIXES: &[&str] = &[
 ];
 const ASK_EVERY_TIME_EXTENSIONS: &[&str] = &[
     "mk", "desktop", "sh", "bash", "zsh", "fish", "csh", "tcsh", "ksh", "ps1", "psm1", "bat",
-    "cmd", "nix", "gradle", "cmake",
+    "cmd", "nix", "gradle", "cmake", "csproj", "fsproj", "vbproj", "sln", "props", "targets",
 ];
 
 fn lowercase_components(path: &Path) -> Vec<String> {
@@ -1002,6 +1014,16 @@ mod tests {
             "web/webpack.config.js",
             "Vagrantfile",
             "Procfile",
+            // PR #51 review F-24.
+            "gradlew",
+            "mvnw",
+            "src/App/App.csproj",
+            "Solution.sln",
+            "mix.exs",
+            "deno.json",
+            "SConstruct",
+            "wscript",
+            "build.ninja",
         ] {
             assert!(write_needs_approval(target), "{target}");
         }
