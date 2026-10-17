@@ -159,7 +159,10 @@ export function AgentScreen({
       />
       <p className="agent-beta-note">
         Beta: tasks run on this device while Juniper is running and stop when you quit it. Results
-        depend on the model; a task is marked complete only when the host saw it finish.
+        depend on the model; a task is marked complete only when the host saw it finish. “Needs
+        review” comes from a text check of the answer against the actions Juniper saw; an answer
+        that phrases a claim the check does not recognise can still be marked Completed, so read the
+        activity list for what was actually done.
         {overview?.stopped && <strong> Agent work is stopped. Nothing new will start.</strong>}
       </p>
       {loadError && (

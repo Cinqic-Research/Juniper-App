@@ -59,9 +59,18 @@ the claim, `claim: …` entries in `result.unverified`, a "Needs review" status
 event and inbox item, and a **Needs review** label in the interface; it is
 never shown as Completed. The lifecycle state stays the terminal `completed`
 (so schedules, follow-ups and the database constraint are unchanged); the
-outcome is what the interface reports. The check is a deliberate heuristic
-(past-tense effect verbs in sentences that are not negated, hedged or
-questions); it errs toward asking for review.
+outcome is what the interface reports. The check is a deliberate heuristic:
+past-tense effect verbs (saved, wrote, edited, put, placed, generated,
+exported, copied, sent, posted, pushed, downloaded, scheduled, set a reminder,
+remembered, "is now in", …) in sentences that are not negated, hedged or
+questions, and that speak for the answer itself (first person, a sentence that
+starts with the verb, or a completed passive such as "has been saved to your
+folder"); sentences reporting a third party, or a passive carrying a citation
+marker such as `[S1]`, are not claims. A named project file (`src/main.rs`, or
+an edited `config.toml`) needs a `workspace.write`; a Juniper document backs a
+named file only when it has exactly that file name. An answer phrased in a way
+the check does not recognise can still end as Completed; the interface's beta
+note says so, and the activity list shows what actually ran.
 
 ## The loop
 

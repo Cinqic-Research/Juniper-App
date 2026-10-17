@@ -90,15 +90,21 @@ fn action_checkpoint_status(call_name: &str, outcome: &Outcome) -> Option<&'stat
 
 /// What a final answer says the task did, by the kind of tool that would have
 /// had to do it. A heuristic, not a parser: it looks for past-tense effect
-/// verbs in sentences that are not negated, hedged, or questions.
+/// verbs in sentences that are not negated, hedged, or questions, and only
+/// where the answer speaks for itself ("I saved", "Saved …", "has been saved
+/// to your …"), not where it reports what someone else did.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Claim {
-    /// A file saved, written, or edited in a project folder or on disk.
+    /// A file saved, written, or edited in a project folder, on disk, or at
+    /// a path, or an existing file edited.
     FileWrite,
-    /// A file or document saved without saying where.
+    /// A file named only by its name (`config.toml`), created or saved. A
+    /// Juniper document backs it only when it has exactly that file name.
+    NamedFile,
+    /// A document saved without saying where.
     Document,
     Memory,
-    /// Sent, posted, uploaded, or otherwise delivered to someone else.
+    /// Sent, posted, uploaded, pushed, or otherwise delivered to someone else.
     Delivery,
     Download,
     Schedule,
@@ -107,7 +113,7 @@ enum Claim {
 impl Claim {
     fn describe(self) -> &'static str {
         match self {
-            Self::FileWrite => "saved or changed a file",
+            Self::FileWrite | Self::NamedFile => "saved or changed a file",
             Self::Document => "saved a document",
             Self::Memory => "saved a memory",
             Self::Delivery => "sent or posted something",
@@ -116,13 +122,23 @@ impl Claim {
         }
     }
 
-    /// Whether a succeeded action with this tool could have done it. Plugin
-    /// (MCP) tools have unknown effects, so they can back any claim except
-    /// a memory or a schedule, which only Juniper's own tools create.
-    fn backed_by(self, tool: &str) -> bool {
+    /// Whether this succeeded action could have done it. Plugin (MCP) tools
+    /// have unknown effects, so they can back any claim except a memory or a
+    /// schedule, which only Juniper's own tools create. `names` are the file
+    /// names the claim mentions.
+    fn backed_by(self, action: &TaskAction, names: &[String]) -> bool {
+        let tool = action.tool.as_str();
         let plugin = tool.starts_with("mcp.");
         match self {
             Self::FileWrite => tool == "workspace.write" || plugin,
+            Self::NamedFile => {
+                tool == "workspace.write"
+                    || plugin
+                    || (tool == "artifact.create"
+                        && action.arguments["fileName"].as_str().is_some_and(|file| {
+                            names.iter().any(|name| name.eq_ignore_ascii_case(file))
+                        }))
+            }
             Self::Document => matches!(tool, "workspace.write" | "artifact.create") || plugin,
             Self::Memory => tool == "memory.save",
             Self::Delivery => plugin,
@@ -149,17 +165,47 @@ fn sentences(content: &str) -> Vec<&str> {
     parts
 }
 
-fn claims_in(content: &str) -> Vec<Claim> {
+/// File names and paths mentioned in a sentence: `src/main.rs`,
+/// `config.toml`, `out/`. Web addresses and abbreviations are not files.
+fn named_files(sentence: &str) -> (Vec<String>, bool) {
+    const NOT_FILES: &[&str] = &["e.g", "i.e", "etc", "a.m", "p.m", "u.s", "u.k", "vs", "no"];
+    let mut names = Vec::new();
+    let mut path = false;
+    for token in sentence.split_whitespace() {
+        let token = token
+            .trim_matches(|c: char| "`'\"()[]{}<>,;:*“”‘’".contains(c))
+            .trim_end_matches(['.', '!', '?'])
+            .to_lowercase();
+        if token.is_empty() || token.contains("://") || token == "and/or" {
+            continue;
+        }
+        let last = token.rsplit('/').next().unwrap_or_default();
+        let extension = last.rsplit_once('.').filter(|(stem, extension)| {
+            !stem.is_empty()
+                && (1..=5).contains(&extension.len())
+                && extension.starts_with(|c: char| c.is_ascii_alphabetic())
+                && extension.chars().all(|c| c.is_ascii_alphanumeric())
+        });
+        let is_path = token.contains('/') && token.len() > 1;
+        if (extension.is_some() || is_path) && !NOT_FILES.contains(&token.as_str()) {
+            path |= is_path;
+            names.push(last.to_owned());
+        }
+    }
+    (names, path)
+}
+
+fn claims_in(content: &str) -> Vec<(Claim, Vec<String>)> {
     const HEDGES: &[&str] = &[
         "not", "never", "no", "unable", "cannot", "can't", "couldn't", "didn't", "don't",
         "haven't", "hasn't", "wasn't", "weren't", "won't", "failed", "without", "would", "could",
         "should", "can", "will", "may", "might", "if", "once", "before", "want", "please", "how",
-        "need", "needs",
+        "need", "needs", "shall",
     ];
-    // Verbs that claim an effect on their own, and verbs that only do so in
-    // a first-person or completed-passive sentence ("I created", "has been
-    // updated"), since "the file was last updated in 2024" is a description.
-    const STRONG: &[&str] = &[
+    // Past-tense effect verbs. Those that change an existing file make a
+    // named-file claim a file write; the persistence verbs let "the summary"
+    // or "the report" stand for a saved document.
+    const VERBS: &[&str] = &[
         "saved",
         "wrote",
         "written",
@@ -176,26 +222,58 @@ fn claims_in(content: &str) -> Vec<Claim> {
         "published",
         "submitted",
         "forwarded",
+        "pushed",
         "downloaded",
         "deleted",
         "renamed",
         "scheduled",
+        "created",
+        "updated",
+        "edited",
+        "modified",
+        "stored",
+        "added",
+        "changed",
+        "replaced",
+        "moved",
+        "removed",
+        "put",
+        "placed",
+        "generated",
+        "exported",
+        "copied",
+        "remembered",
+        "set",
     ];
-    const WEAK: &[&str] = &[
-        "created", "updated", "edited", "modified", "stored", "added", "changed", "replaced",
-        "moved", "removed",
+    const EDITS: &[&str] = &[
+        "updated",
+        "edited",
+        "modified",
+        "changed",
+        "replaced",
+        "appended",
+        "overwrote",
+        "overwritten",
+        "renamed",
+        "moved",
+        "deleted",
+        "removed",
     ];
-    const ACTOR: &[&str] = &[
-        "i",
-        "i've",
-        "we",
-        "we've",
-        "been",
-        "now",
-        "already",
-        "successfully",
-        "done",
+    const PERSIST: &[&str] = &["saved", "stored", "exported", "placed", "put", "copied"];
+    const DELIVERY: &[&str] = &[
+        "sent",
+        "emailed",
+        "mailed",
+        "texted",
+        "messaged",
+        "posted",
+        "uploaded",
+        "published",
+        "submitted",
+        "forwarded",
+        "pushed",
     ];
+    const FIRST_PERSON: &[&str] = &["i", "i've", "i\u{2019}ve", "i'd", "i'm", "we", "we've"];
     const PLACES: &[&str] = &[
         "folder",
         "directory",
@@ -206,69 +284,86 @@ fn claims_in(content: &str) -> Vec<Claim> {
         "desktop",
         "path",
     ];
-    let mut found = Vec::new();
+    let mut found: Vec<(Claim, Vec<String>)> = Vec::new();
     for sentence in sentences(content) {
         if sentence.contains('?') {
             continue;
         }
         let lower = sentence.to_lowercase();
-        // Dots stay inside words so `summary.md` reads as a file name.
+        // Dots stay inside words so `summary.md` reads as one word.
         let words: Vec<&str> = lower
             .split(|c: char| !(c.is_alphanumeric() || matches!(c, '\'' | '\u{2019}' | '.')))
             .map(|word| word.trim_matches('.'))
             .filter(|word| !word.is_empty())
             .collect();
         let has = |set: &[&str]| words.iter().any(|word| set.contains(word));
-        // A hedge or negation before the effect verb ("was not saved", "I
-        // could save it") makes the sentence something other than a claim;
-        // one after it ("I saved it so you can open it") does not.
+        let pair = |first: &str, seconds: &[&str]| {
+            words
+                .windows(2)
+                .any(|pair| pair[0] == first && seconds.contains(&pair[1]))
+        };
+        // "… is now in out/summary.md", "… now contains …".
+        let now_in = pair("now", &["in", "contains", "holds", "includes"]);
+        // "Noted" is a claim only about memory ("I've noted that in memory").
+        let memory = has(&["memory", "memories"]);
         let first_verb = words
             .iter()
-            .position(|word| STRONG.contains(word) || WEAK.contains(word));
+            .position(|word| VERBS.contains(word) || (memory && *word == "noted"))
+            .or_else(|| {
+                now_in
+                    .then(|| words.iter().position(|word| *word == "now"))
+                    .flatten()
+            });
         let Some(first_verb) = first_verb else {
             continue;
         };
+        // A hedge or negation before the effect verb ("was not saved", "I
+        // could save it") makes the sentence something other than a claim;
+        // one after it ("I saved it so you can open it") does not.
         if words[..first_verb].iter().any(|word| {
             HEDGES.contains(word) || word.ends_with("n't") || word.ends_with("n\u{2019}t")
         }) {
             continue;
         }
-        if !(has(STRONG) || (has(WEAK) && has(ACTOR))) {
+        // Who speaks: the answer itself ("I saved", "Saved the file", "has
+        // been saved to your folder", "is now in …"), never a reported third
+        // party ("The company published its report [S1]"). A citation marks
+        // reported content, so it rules out the passive and "now" forms.
+        let cited = lower
+            .match_indices("[s")
+            .any(|(index, _)| lower[index + 2..].starts_with(|c: char| c.is_ascii_digit()));
+        let first_person = has(FIRST_PERSON);
+        let imperative = first_verb == 0;
+        let completed = has(&["been"]) && has(&["has", "have", "had"]);
+        if !(first_person || imperative || (!cited && (completed || now_in))) {
             continue;
         }
-        let file_named = has(&["file", "files"])
-            || words.iter().any(|word| {
-                word.rsplit_once('.')
-                    .is_some_and(|(stem, ext)| !stem.is_empty() && (1..=5).contains(&ext.len()))
-            });
-        let claim = if has(&["memory", "memories", "remember"]) {
+        let (names, path) = named_files(sentence);
+        let claim = if has(&["memory", "memories", "remember", "remembered"]) {
             Claim::Memory
-        } else if has(&[
-            "sent",
-            "emailed",
-            "mailed",
-            "texted",
-            "messaged",
-            "posted",
-            "uploaded",
-            "published",
-            "submitted",
-            "forwarded",
-        ]) {
+        } else if has(DELIVERY) {
             Claim::Delivery
         } else if has(&["downloaded"]) {
             Claim::Download
-        } else if has(&["scheduled", "reminder", "schedule"]) {
+        } else if has(&["scheduled", "reminder", "reminders", "schedule"]) {
             Claim::Schedule
-        } else if has(PLACES) {
+        } else if has(PLACES) || path || (!names.is_empty() && has(EDITS)) {
             Claim::FileWrite
-        } else if file_named || has(&["document", "report", "note", "notes", "summary", "draft"]) {
+        } else if !names.is_empty() {
+            Claim::NamedFile
+        } else if has(&["file", "files", "document", "documents"])
+            || (has(PERSIST)
+                && has(&[
+                    "summary", "report", "note", "notes", "draft", "copy", "it", "this",
+                ]))
+        {
             Claim::Document
         } else {
             continue;
         };
-        if !found.contains(&claim) {
-            found.push(claim);
+        match found.iter_mut().find(|(existing, _)| *existing == claim) {
+            Some((_, existing)) => existing.extend(names),
+            None => found.push((claim, names)),
         }
     }
     found
@@ -279,11 +374,12 @@ fn claims_in(content: &str) -> Vec<Claim> {
 fn unperformed_claims(content: &str, actions: &[TaskAction]) -> Vec<Claim> {
     claims_in(content)
         .into_iter()
-        .filter(|claim| {
+        .filter(|(claim, names)| {
             !actions
                 .iter()
-                .any(|action| action.status == "succeeded" && claim.backed_by(&action.tool))
+                .any(|action| action.status == "succeeded" && claim.backed_by(action, names))
         })
+        .map(|(claim, _)| claim)
         .collect()
 }
 
@@ -2014,7 +2110,12 @@ mod persistence_recovery_tests {
 
     #[test]
     fn effect_claims_are_found_only_when_asserted_and_unbacked() {
-        let claims = |text: &str| claims_in(text);
+        let claims = |text: &str| -> Vec<Claim> {
+            claims_in(text)
+                .into_iter()
+                .map(|(claim, _)| claim)
+                .collect()
+        };
         assert_eq!(
             claims("The summary has already been saved as `summary.md` in the project folder…"),
             vec![Claim::FileWrite]
@@ -2023,10 +2124,49 @@ mod persistence_recovery_tests {
             claims("I saved it so you can open it later in your notes."),
             vec![Claim::Document]
         );
-        assert_eq!(claims("I've updated config.toml."), vec![Claim::Document]);
         assert_eq!(claims("I uploaded the slides."), vec![Claim::Delivery]);
         assert_eq!(claims("Downloaded the dataset."), vec![Claim::Download]);
         assert_eq!(claims("I saved that to memory."), vec![Claim::Memory]);
+        // Re-review F-11 (b): verbs and phrasings the first heuristic missed.
+        for (text, expected) in [
+            ("I put the summary in out/summary.md.", Claim::FileWrite),
+            (
+                "I placed the notes in your project folder.",
+                Claim::FileWrite,
+            ),
+            ("I generated report.pdf for you.", Claim::NamedFile),
+            ("Exported the table to data.csv.", Claim::NamedFile),
+            (
+                "I copied the config to backup/config.toml.",
+                Claim::FileWrite,
+            ),
+            ("I pushed the branch to GitHub.", Claim::Delivery),
+            ("The summary is now in out/summary.md.", Claim::FileWrite),
+            (
+                "Your notes file now contains the new section.",
+                Claim::Document,
+            ),
+            ("I set a reminder for 9 AM tomorrow.", Claim::Schedule),
+            ("Set a reminder for Monday.", Claim::Schedule),
+            ("I remembered that you prefer short reports.", Claim::Memory),
+            ("I've noted that in memory.", Claim::Memory),
+            (
+                "The report has been saved to your desktop.",
+                Claim::FileWrite,
+            ),
+        ] {
+            assert_eq!(claims(text), vec![expected], "{text}");
+        }
+        // Re-review F-11 (a): a named project file is a file claim.
+        assert_eq!(
+            claims("I edited src/main.rs to fix the bug."),
+            vec![Claim::FileWrite]
+        );
+        assert_eq!(claims("I've updated config.toml."), vec![Claim::FileWrite]);
+        assert_eq!(
+            claims("I created notes.md with the summary."),
+            vec![Claim::NamedFile]
+        );
         for not_a_claim in [
             "The file was not saved.",
             "I could save this as notes.md.",
@@ -2035,6 +2175,15 @@ mod persistence_recovery_tests {
             "The README was last updated in 2024.",
             "Once saved, the document opens in your editor.",
             "The answer is 42 [S1].",
+            "I've created a summary below.",
+            // Re-review F-11 (c): reported third-party actions are not claims.
+            "The company published its Q3 report on Tuesday [S1].",
+            "The team posted the results on GitHub [S2].",
+            "The dataset was uploaded by the authors in 2023.",
+            "The package was downloaded 2 million times last month.",
+            "Dana sent the invoice on Monday [S1].",
+            "According to the article, the file has been saved on the server [S3].",
+            "The maintainers have pushed a fix for the bug.",
         ] {
             assert!(claims(not_a_claim).is_empty(), "{not_a_claim}");
         }
@@ -2042,12 +2191,34 @@ mod persistence_recovery_tests {
         write.tool = "workspace.write".into();
         let mut artifact = action("succeeded");
         artifact.tool = "artifact.create".into();
+        artifact.arguments = json!({ "title": "Summary", "fileName": "summary.md" });
         let text = "I saved the summary to out/summary.md in the project folder.";
         assert!(unperformed_claims(text, std::slice::from_ref(&write)).is_empty());
         assert_eq!(
             unperformed_claims(text, std::slice::from_ref(&artifact)),
             vec![Claim::FileWrite],
             "a Juniper document is not a file in the project folder"
+        );
+        assert_eq!(
+            unperformed_claims(
+                "I edited src/main.rs to fix the bug.",
+                std::slice::from_ref(&artifact)
+            ),
+            vec![Claim::FileWrite],
+            "a created document does not edit a project file"
+        );
+        assert_eq!(
+            unperformed_claims("I've updated config.toml.", std::slice::from_ref(&artifact)),
+            vec![Claim::FileWrite]
+        );
+        assert_eq!(
+            unperformed_claims("I created report.md.", std::slice::from_ref(&artifact)),
+            vec![Claim::NamedFile],
+            "a document with another file name does not back it"
+        );
+        assert!(
+            unperformed_claims("I created summary.md.", std::slice::from_ref(&artifact)).is_empty(),
+            "a document with that exact file name backs it"
         );
         let mut failed = write.clone();
         failed.status = "failed".into();

@@ -947,9 +947,7 @@ fn an_answer_claiming_an_unperformed_save_needs_review_instead_of_completing() {
             "artifact.create",
             json!({ "title": "Summary", "fileName": "summary.md", "content": "# Summary\nQ4 budget [S1].", "sourceIds": ["S1"] }),
         )]),
-        sse_answer(
-            "The summary has already been saved as `summary.md` in the project folder [S1].",
-        ),
+        sse_answer("The summary has already been saved as `summary.md` in the project folder."),
     ];
     let fixture = new_fixture(script);
     let id = fixture.start(
