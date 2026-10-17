@@ -13,9 +13,11 @@ shell access.
 - **Granting a folder.** A folder is granted to a project only through the
   native folder picker, read-only or read-write. The renderer never supplies a
   path. The host refuses (`ROOT_REFUSED`) the filesystem root, the home folder
-  itself or any folder containing it, any folder under the home folder whose
-  path passes through a hidden (dot) folder (`~/.ssh`, `~/.gnupg`, `~/.config`
-  and its subfolders, `~/.local/share`, `~/.local/bin`, …), Juniper's own data
+  itself or any folder containing it, any folder whose path passes through a
+  hidden (dot) folder, inside the home folder or not (`~/.ssh`, `~/.gnupg`,
+  `~/.config` and its subfolders, `~/.local/share`, another user's `.ssh`, a
+  disk's `.git`, …), any folder under a Windows `AppData` folder (which holds
+  the per-user Startup folder) or, on macOS, under `~/Library`, Juniper's own data
   folder or anything
   containing or inside it, and system folders (`/etc`, `/usr`, `/boot`,
   `/var/lib` and similar; on Windows the system, program and program-data

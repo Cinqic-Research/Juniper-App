@@ -242,6 +242,33 @@ pub fn refused_root(
     if system.iter().any(|folder| canonical.starts_with(folder)) {
         return Some("a system folder");
     }
+    let names: Vec<String> = canonical
+        .components()
+        .filter_map(|component| match component {
+            std::path::Component::Normal(name) => Some(name.to_string_lossy().into_owned()),
+            _ => None,
+        })
+        .collect();
+    // Third review F-19: hidden folders outside the home folder too
+    // (another user's ~/.ssh, a disk's .ssh, /opt/.hidden).
+    if names.iter().any(|name| name.starts_with('.')) {
+        return Some("a hidden folder");
+    }
+    // Windows keeps per-user start-up programs and application settings
+    // under AppData (%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup).
+    if names
+        .iter()
+        .any(|name| name.eq_ignore_ascii_case("appdata"))
+    {
+        return Some("an application data folder");
+    }
+    // macOS keeps launch agents and application settings in ~/Library.
+    #[cfg(target_os = "macos")]
+    if let Some(home) = home
+        && canonical.starts_with(home.join("Library"))
+    {
+        return Some("an application data folder");
+    }
     None
 }
 
@@ -1031,6 +1058,19 @@ mod tests {
         assert!(refused("/home/someone/projects/site").is_none());
         assert!(refused("/home/someone/projects/site.v2").is_none());
         assert!(refused("/media/someone/disk/work").is_none());
+        // Third review F-19: hidden folders elsewhere, and Windows AppData.
+        for elsewhere in [
+            "/media/someone/disk/.ssh",
+            "/opt/.hidden",
+            "/home/other/.ssh",
+            "/srv/site/.git",
+            "/c/Users/someone/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup",
+            "/c/Users/someone/AppData/Local/Programs",
+        ] {
+            assert!(refused(elsewhere).is_some(), "{elsewhere}");
+        }
+        assert!(refused("/home/other/projects/site").is_none());
+        assert!(refused("/c/Users/someone/Documents/site").is_none());
         assert!(
             refused("/home/someone/.local/share/other-app").is_some(),
             "inside ~/.local"
