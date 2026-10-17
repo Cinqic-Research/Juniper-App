@@ -344,6 +344,13 @@ pub fn prepare(
         }
         "code.run" => {
             let root = project_root(connection, run, argument(call, "rootId"), false)?;
+            // Review F-09: a standing grant covers this program in this
+            // folder of this project only.
+            prepared.scope = json!({
+                "projectId": root.project_id,
+                "rootId": root.id,
+                "program": argument(call, "program"),
+            });
             prepared.preview = format!(
                 "Run `{} {}` in the sandbox with “{}” mounted read-only, no network.",
                 argument(call, "program"),
@@ -361,6 +368,13 @@ pub fn prepare(
             if let Some(root_id) = call.arguments["projectRootId"].as_str() {
                 project_root(connection, run, root_id, false)?;
             }
+            // Review F-09: a standing grant allows any Python, so it is held
+            // to the task's project (or to project-less tasks) and the
+            // mounted folder (or none).
+            prepared.scope = json!({
+                "projectId": task.project_id,
+                "projectRootId": call.arguments["projectRootId"].as_str(),
+            });
             let code = argument(call, "code");
             prepared.preview = format!(
                 "Run this Python in the sandbox (no network, no access to your files{}):\n\n{}",

@@ -451,7 +451,12 @@ fn scope_covers(capability: &str, granted: &Value, requested: &Value) -> bool {
     // Network destinations and plugin identities are security boundaries. A
     // legacy empty/subset grant must not become a wildcard after endpoints or
     // executable identities are added to the requested scope.
-    if capability.starts_with("mcp:") || matches!(capability, "web.search" | "web.fetch") {
+    // Code runs are held to their exact project, folder and program, and a
+    // legacy unscoped code grant no longer matches (review F-09).
+    if capability.starts_with("mcp:")
+        || capability.starts_with("code.")
+        || matches!(capability, "web.search" | "web.fetch")
+    {
         return requested
             .as_object()
             .is_some_and(|fields| !fields.is_empty() && granted == requested);
@@ -875,5 +880,81 @@ mod tests {
         assert!(!role_tools("reviewer").contains(&"workspace.write"));
         assert!(!role_tools("reviewer").contains(&"artifact.create"));
         assert!(role_tools("unknown").is_empty());
+    }
+
+    /// Review F-09: code grants are held to their project, folder and
+    /// program; an unscoped (legacy) code grant no longer allows anything,
+    /// and a grant made outside a project does not reach project tasks.
+    #[test]
+    fn code_grants_are_scoped_to_project_folder_and_program() {
+        let profile = AgentProfile::default_for("agent-1");
+        let ask = Decision::Ask { standing: true };
+        let run_scope = |program: &str| json!({ "projectId": "project-1", "rootId": "root-1", "program": program });
+        let pytest = [grant("code.run", run_scope("pytest"), false)];
+        assert_eq!(
+            decide(
+                Risk::Process,
+                "code.run",
+                &context(&profile, &pytest, run_scope("pytest"))
+            ),
+            Decision::Allow
+        );
+        assert_eq!(
+            decide(
+                Risk::Process,
+                "code.run",
+                &context(&profile, &pytest, run_scope("make"))
+            ),
+            ask
+        );
+        let legacy = [grant("code.python", json!({}), false)];
+        let python_here = json!({ "projectId": "project-1", "projectRootId": null });
+        assert_eq!(
+            decide(
+                Risk::Process,
+                "code.python",
+                &context(&profile, &legacy, python_here.clone())
+            ),
+            ask,
+            "a legacy unscoped grant fails closed"
+        );
+        let mut outside = grant(
+            "code.python",
+            json!({ "projectId": null, "projectRootId": null }),
+            false,
+        );
+        outside.project_id = None;
+        let outside = [outside];
+        assert_eq!(
+            decide(
+                Risk::Process,
+                "code.python",
+                &context(&profile, &outside, python_here.clone())
+            ),
+            ask,
+            "a grant made outside a project does not cover project tasks"
+        );
+        let here = [grant("code.python", python_here.clone(), false)];
+        assert_eq!(
+            decide(
+                Risk::Process,
+                "code.python",
+                &context(&profile, &here, python_here)
+            ),
+            Decision::Allow
+        );
+        assert_eq!(
+            decide(
+                Risk::Process,
+                "code.python",
+                &context(
+                    &profile,
+                    &here,
+                    json!({ "projectId": "project-1", "projectRootId": "root-1" })
+                )
+            ),
+            ask,
+            "mounting a project folder is a different grant"
+        );
     }
 }

@@ -197,6 +197,26 @@ describe('Agent screen (Beta)', () => {
     expect(invocations.some((call) => call.command === 'save_app_data')).toBe(false)
   })
 
+  it('says how broad a standing Python grant is', async () => {
+    const pythonApproval = {
+      ...detail.approvals[0]!,
+      tool: 'code.python',
+      capability: 'code.python',
+      preview: 'Run this Python in the sandbox (no network, no access to your files):\n\nprint(1)',
+    }
+    respond = (command) => {
+      if (command === 'agent_overview') return overview
+      if (command === 'task_detail') return { ...detail, approvals: [pythonApproval] }
+      return null
+    }
+    await mount()
+    await act(async () => button('Write the budget summary').click())
+    await settle()
+    expect(container.textContent).toContain(
+      'Always allow Python runs for this agent in this project (any code)',
+    )
+  })
+
   it('shows a host-flagged unperformed claim as Needs review, never Completed', async () => {
     const reviewed: AgentTask = {
       ...task,

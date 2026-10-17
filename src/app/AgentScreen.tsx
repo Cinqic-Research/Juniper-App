@@ -840,7 +840,11 @@ function ApprovalCard({
             disabled={busy}
             onClick={() => onDecide('allow-standing')}
           >
-            Always allow for this agent{projectScoped ? ' in this project' : ''}
+            {approval.tool === 'code.python'
+              ? `Always allow Python runs for this agent${projectScoped ? ' in this project' : ' outside projects'} (any code)`
+              : approval.tool === 'code.run'
+                ? 'Always allow this program in this folder for this agent'
+                : `Always allow for this agent${projectScoped ? ' in this project' : ''}`}
           </button>
         )}
         <button className="button danger-ghost" disabled={busy} onClick={() => onDecide('deny')}>
