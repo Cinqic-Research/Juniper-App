@@ -169,14 +169,34 @@ fn sentences(content: &str) -> Vec<&str> {
 /// `config.toml`, `out/`. Web addresses and abbreviations are not files.
 fn named_files(sentence: &str) -> (Vec<String>, bool) {
     const NOT_FILES: &[&str] = &["e.g", "i.e", "etc", "a.m", "p.m", "u.s", "u.k", "vs", "no"];
+    // Product names written like files (re-review F-18).
+    const PRODUCTS: &[&str] = &[
+        "node.js",
+        "vue.js",
+        "next.js",
+        "nuxt.js",
+        "react.js",
+        "express.js",
+        "three.js",
+        "chart.js",
+        "d3.js",
+        "socket.io",
+        "asp.net",
+        "ado.net",
+    ];
     let mut names = Vec::new();
     let mut path = false;
-    for token in sentence.split_whitespace() {
-        let token = token
+    for raw in sentence.split_whitespace() {
+        let raw = raw
             .trim_matches(|c: char| "`'\"()[]{}<>,;:*“”‘’".contains(c))
-            .trim_end_matches(['.', '!', '?'])
-            .to_lowercase();
-        if token.is_empty() || token.contains("://") || token == "and/or" {
+            .trim_end_matches(['.', '!', '?']);
+        let token = raw.to_lowercase();
+        if token.is_empty()
+            || token.contains("://")
+            || token == "and/or"
+            || NOT_FILES.contains(&token.as_str())
+            || PRODUCTS.contains(&token.as_str())
+        {
             continue;
         }
         let last = token.rsplit('/').next().unwrap_or_default();
@@ -186,8 +206,26 @@ fn named_files(sentence: &str) -> (Vec<String>, bool) {
                 && extension.starts_with(|c: char| c.is_ascii_alphabetic())
                 && extension.chars().all(|c| c.is_ascii_alphanumeric())
         });
-        let is_path = token.contains('/') && token.len() > 1;
-        if (extension.is_some() || is_path) && !NOT_FILES.contains(&token.as_str()) {
+        // "Something.js" with a capital is a product, not a file name.
+        if extension.is_some_and(|(_, extension)| extension == "js")
+            && raw.starts_with(|c: char| c.is_ascii_uppercase())
+            && !raw.contains('/')
+        {
+            continue;
+        }
+        // A path needs a file name with an extension, a trailing folder
+        // slash, or a leading ./ ../ ~/ / followed by a letter: "I/O",
+        // "24/7" and "10/17" are not paths.
+        let lettered = |part: &str| part.chars().filter(|c| c.is_alphabetic()).count() >= 2;
+        let is_path = token.contains('/')
+            && (extension.is_some()
+                || (token.ends_with('/') && lettered(token.trim_end_matches('/')))
+                || ["./", "../", "~/", "/"].iter().any(|prefix| {
+                    token
+                        .strip_prefix(prefix)
+                        .is_some_and(|rest| rest.starts_with(|c: char| c.is_alphabetic()))
+                }));
+        if extension.is_some() || is_path {
             path |= is_path;
             names.push(last.to_owned());
         }
@@ -290,9 +328,10 @@ fn claims_in(content: &str) -> Vec<(Claim, Vec<String>)> {
             continue;
         }
         let lower = sentence.to_lowercase();
-        // Dots stay inside words so `summary.md` reads as one word.
+        // Dots and slashes stay inside words so `summary.md` and "I/O" read
+        // as one word (the "I" of "I/O" is not a speaker).
         let words: Vec<&str> = lower
-            .split(|c: char| !(c.is_alphanumeric() || matches!(c, '\'' | '\u{2019}' | '.')))
+            .split(|c: char| !(c.is_alphanumeric() || matches!(c, '\'' | '\u{2019}' | '.' | '/')))
             .map(|word| word.trim_matches('.'))
             .filter(|word| !word.is_empty())
             .collect();
@@ -332,13 +371,56 @@ fn claims_in(content: &str) -> Vec<(Claim, Vec<String>)> {
         let cited = lower
             .match_indices("[s")
             .any(|(index, _)| lower[index + 2..].starts_with(|c: char| c.is_ascii_digit()));
-        let first_person = has(FIRST_PERSON);
-        let imperative = first_verb == 0;
+        let (names, path) = named_files(sentence);
+        // Re-review F-17: a citation exempts a passive or verb-initial
+        // sentence only when nothing in it points at the user's own things
+        // ("your", a place word, a file path). "… has been saved as
+        // `summary.md` in the project folder [S1]" stays a claim.
+        let addressed = has(&["your", "you"]) || has(PLACES) || path;
+        let reported = cited && !addressed;
+        // The pronoun must come before the verb ("I saved"), not anywhere
+        // ("The invoice Dana sent, which I summarise below").
+        let first_person = words[..first_verb]
+            .iter()
+            .any(|word| FIRST_PERSON.contains(word));
+        // A verb-initial participle describing something else ("Published in
+        // 2019, the study …", "Downloaded 2 million times", "Posted prices
+        // are …") is not the answer reporting its own work (F-18).
+        let participial = first_verb == 0
+            && (words.get(1).is_some_and(|word| {
+                matches!(
+                    *word,
+                    "in" | "by" | "on" | "at" | "over" | "nearly" | "about" | "around"
+                ) || word.starts_with(|c: char| c.is_ascii_digit())
+            }) || words
+                .iter()
+                .skip(1)
+                .take(3)
+                .any(|word| matches!(*word, "is" | "are" | "was" | "were")));
+        let imperative = first_verb == 0 && !participial && !reported;
         let completed = has(&["been"]) && has(&["has", "have", "had"]);
-        if !(first_person || imperative || (!cited && (completed || now_in))) {
+        // "The file is updated", "the summary is saved" (F-18).
+        let present_passive = words.windows(2).any(|pair| {
+            matches!(pair[0], "is" | "are")
+                && matches!(
+                    pair[1],
+                    "saved"
+                        | "written"
+                        | "updated"
+                        | "stored"
+                        | "created"
+                        | "edited"
+                        | "modified"
+                        | "exported"
+                        | "generated"
+                        | "placed"
+                        | "copied"
+                )
+        });
+        if !(first_person || imperative || (!reported && (completed || now_in || present_passive)))
+        {
             continue;
         }
-        let (names, path) = named_files(sentence);
         let claim = if has(&["memory", "memories", "remember", "remembered"]) {
             Claim::Memory
         } else if has(DELIVERY) {
@@ -356,6 +438,7 @@ fn claims_in(content: &str) -> Vec<(Claim, Vec<String>)> {
                 && has(&[
                     "summary", "report", "note", "notes", "draft", "copy", "it", "this",
                 ]))
+            || (has(EDITS) && has(&["summary", "report", "note", "notes", "draft"]))
         {
             Claim::Document
         } else {
@@ -2154,6 +2237,20 @@ mod persistence_recovery_tests {
                 "The report has been saved to your desktop.",
                 Claim::FileWrite,
             ),
+            // Third review F-17 and F-18.
+            (
+                "The summary has already been saved as `summary.md` in the project folder [S1].",
+                Claim::FileWrite,
+            ),
+            (
+                "The notes have been saved to your project [S2].",
+                Claim::FileWrite,
+            ),
+            ("The file is updated.", Claim::Document),
+            ("Done: the summary is saved.", Claim::Document),
+            ("I updated the summary.", Claim::Document),
+            ("I edited the notes.", Claim::Document),
+            ("Saved the file to out/notes.md [S1].", Claim::FileWrite),
         ] {
             assert_eq!(claims(text), vec![expected], "{text}");
         }
@@ -2166,6 +2263,19 @@ mod persistence_recovery_tests {
         assert_eq!(
             claims("I created notes.md with the summary."),
             vec![Claim::NamedFile]
+        );
+        assert!(named_files("Disk I/O stayed at 24/7 on 10/17").0.is_empty());
+        assert!(named_files("I upgraded Node.js and socket.io").0.is_empty());
+        assert_eq!(
+            named_files("I saved out/ and ./notes and src/main.rs"),
+            (
+                vec!["".to_owned(), "notes".to_owned(), "main.rs".to_owned()],
+                true
+            )
+        );
+        assert_eq!(
+            claims("I saved Node.js notes to your project."),
+            vec![Claim::FileWrite]
         );
         for not_a_claim in [
             "The file was not saved.",
@@ -2184,6 +2294,15 @@ mod persistence_recovery_tests {
             "Dana sent the invoice on Monday [S1].",
             "According to the article, the file has been saved on the server [S3].",
             "The maintainers have pushed a fix for the bug.",
+            // Third review F-18: participles, late pronouns, slashes, products.
+            "Published in 2019, the study followed 400 patients [S1].",
+            "Downloaded 2 million times, the package is widely used [S2].",
+            "Posted prices are higher than last year.",
+            "The invoice Dana sent on Monday, which I summarise below, is overdue [S1].",
+            "The report is published every Monday.",
+            "Disk I/O was saved for later analysis by the vendor [S1].",
+            "The service runs 24/7 and was updated by the vendor [S3].",
+            "I upgraded Node.js.",
         ] {
             assert!(claims(not_a_claim).is_empty(), "{not_a_claim}");
         }
