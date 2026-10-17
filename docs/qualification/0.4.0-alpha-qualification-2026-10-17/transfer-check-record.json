@@ -1,0 +1,81 @@
+{
+  "gate": "G2 (release plan gate 1): exact-source resumed transfer above 2 GiB and a sharded bundle through Juniper's own transfer code",
+  "kindOfEvidence": "non-implementer run (Claude Fable 5.1 qualification subagent, fresh context; did not author any Juniper-App code)",
+  "sourceCommit": "ea9cbe566ec7c59036ab9601ab522a5ccb639c34",
+  "sourceCommitDescription": "main, merge commit of PR #49 (Fixing Up A Little)",
+  "cleanTree": "git status --porcelain empty before and after the run (the script refuses a dirty tree)",
+  "host": {
+    "name": "FLOWBOX",
+    "os": "Linux 7.0.0-38-generic x86_64",
+    "rustc": "1.90.0 (1159e78c4 2025-09-14)",
+    "node": "v22.23.3",
+    "pnpm": "11.19.0",
+    "bubblewrap": "0.9.0",
+    "llamaServer": "/usr/lib/Juniper/runtime/llama-server, version: 0.3.0-dev (build 10788, commit e107984bc), built with GNU 11.4.0 for Linux x86_64",
+    "disk": "NVMe system disk (/dev/nvme0n1p3, ecryptfs home); the HDD was not used",
+    "freeSpaceBeforeRun": "about 12 GB free at 02:52 AM EDT before the clone and the test build; the script's own guard (free >= 1500 MB headroom + 4700 MB largest download = 6200 MB) passed; 9.6 GB free after the run with the downloaded files deleted",
+    "concurrentDiskWork": "none during the transfers; the debug app build was started only after the run finished"
+  },
+  "commands": [
+    "git clone https://github.com/Cinqic-Research/Juniper-App /home/cinqic/j1work/app-qual && cd /home/cinqic/j1work/app-qual && git checkout ea9cbe566e",
+    "pnpm install --frozen-lockfile; cargo fetch --locked --manifest-path src-tauri/Cargo.toml",
+    "export CARGO_PROFILE_DEV_DEBUG=0 CARGO_INCREMENTAL=0; scripts/live-transfer-check.sh /home/cinqic/j1work/app-qual-evidence/transfer   (default artifacts qwen3-4b-q4-k-m,qwen2.5-7b-instruct-q4-k-m; resume artifact qwen3-4b-q4-k-m; JUNIPER_LLAMA_SERVER default /usr/lib/Juniper/runtime/llama-server)"
+  ],
+  "run": {
+    "startedAt": "2026-10-17T06:54:08Z (2:54 AM EDT)",
+    "finishedAt": "2026-10-17T07:07:47Z (3:07 AM EDT)",
+    "wallClock": "13 m 39.5 s including the test build; the ignored test itself ran 747.63 s",
+    "testResult": "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 326 filtered out",
+    "exitCode": 0,
+    "testBinary": "/home/cinqic/j1work/app-qual/src-tauri/target/debug/deps/juniper_lib-1cc093324bc35c5e"
+  },
+  "identity": {
+    "sourceCommit": "ea9cbe566ec7c59036ab9601ab522a5ccb639c34",
+    "harnessSha256": "f9795375872217afc265eceaf96903c4637f4ae656a1e0597279377283831ccd",
+    "harnessSha256CheckedAgainst": "git show ea9cbe566e:src-tauri/src/live_catalog.rs | sha256sum -> f9795375872217afc265eceaf96903c4637f4ae656a1e0597279377283831ccd (match)",
+    "transferCodeSha256": "843bcc94b217976a5b37a1e62bdeaef6287615c555c719bae86dfe3f391de7a0",
+    "transferCodeSha256CheckedAgainst": "git show ea9cbe566e:src-tauri/src/managed_models.rs | sha256sum -> 843bcc94b217976a5b37a1e62bdeaef6287615c555c719bae86dfe3f391de7a0 (match)",
+    "testBinarySha256": "7ae05f25f5d64af7ef049e5f84241c8b8f0251da1a0943a51e9fd414468cc0a4",
+    "testBinarySha256CheckedAgainst": "sha256sum of the binary file after the run (match)",
+    "noteOnImplementerRecord": "the implementer's 2026-10-16 record at 59d3d44 carried transferCodeSha256 d406f10e...; managed_models.rs changed between 59d3d44 and main (the two model_licenses::require lines and later repairs), so this record is the first run of the transfer code actually on main"
+  },
+  "artifacts": [
+    {
+      "artifactId": "qwen3-4b-q4-k-m",
+      "catalogId": "qwen3-4b",
+      "sourceRepository": "https://huggingface.co/Qwen/Qwen3-4B-GGUF",
+      "sourceRevision": "bc640142c66e1fdd12af0bd68f40445458f3869b",
+      "files": [{"path": "Qwen3-4B-Q4_K_M.gguf", "sizeBytes": 2497280256, "sha256": "7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5"}],
+      "sizeBytes": 2497280256,
+      "sizeNote": "2,497,280,256 B = 2.33 GiB, above 2 GiB",
+      "resume": {"interruptedWith": "MODEL_DOWNLOAD_CANCELLED: Download paused; you can resume it later.", "partialBytesBeforeResume": 253285332, "note": "cancelled by the harness 20 s in, then resumed with a range request from byte 253,285,332"},
+      "download": {"ok": true, "verified": "every file's size and SHA-256 matched before publish", "downloadSeconds": 243},
+      "load": {"ok": true, "loadSeconds": 8, "contextSize": 16384},
+      "chat": {"ok": true, "content": "The capital of France is Paris.", "finishReason": "stop", "completionTokens": 142, "seconds": 10.76},
+      "toolCall": {"ok": true, "name": "calculator.evaluate", "expression": "847291 * 19347", "finishReason": "tool_calls"},
+      "startedAt": "2026-10-17T06:55:21Z",
+      "finishedAt": "2026-10-17T06:59:58Z"
+    },
+    {
+      "artifactId": "qwen2.5-7b-instruct-q4-k-m",
+      "catalogId": "qwen2.5-7b-instruct",
+      "sourceRepository": "https://huggingface.co/Qwen/Qwen2.5-7B-Instruct-GGUF",
+      "sourceRevision": "bb5d59e06d9551d752d08b292a50eb208b07ab1f",
+      "files": [
+        {"path": "qwen2.5-7b-instruct-q4_k_m-00001-of-00002.gguf", "sizeBytes": 3993201344, "sha256": "dfce12e3862a5283ccfb88221b48480e58745165de856439950d0f22590580db"},
+        {"path": "qwen2.5-7b-instruct-q4_k_m-00002-of-00002.gguf", "sizeBytes": 689872288, "sha256": "539cf93f78e887edea1c04e2d7d8cdaca9d01dae9c9025bcb8accbe29df3d72a"}
+      ],
+      "sizeBytes": 4683073632,
+      "sizeNote": "two-shard bundle, 4,683,073,632 B in total",
+      "download": {"ok": true, "verified": "every file's size and SHA-256 matched before publish", "downloadSeconds": 445},
+      "load": {"ok": true, "loadSeconds": 13, "contextSize": 16384},
+      "chat": {"ok": true, "content": "The capital of France is Paris.", "finishReason": "stop", "completionTokens": 8, "seconds": 1.66},
+      "toolCall": {"ok": true, "name": "calculator.evaluate", "expression": "847291 * 19347", "finishReason": "tool_calls"},
+      "startedAt": "2026-10-17T06:59:58Z",
+      "finishedAt": "2026-10-17T07:07:47Z"
+    }
+  ],
+  "comparisonWithImplementerRecord": "same artifact ids, source revisions, file digests and sizes as docs/qualification/pr49-gate-evidence-2026-10-16/transfer-check.jsonl; resume offset 253,285,332 B here versus 253,197,722 B there (time-based cut, 20 s); download times 243 s / 445 s here versus 238 s / 450 s there",
+  "rawRecord": "transfer-check.jsonl (copy of transfer/evidence.jsonl written by the harness); transfer/run.log holds the script's stdout/stderr",
+  "outcome": "PASS"
+}

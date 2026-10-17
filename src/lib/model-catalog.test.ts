@@ -120,19 +120,41 @@ describe('model catalog', () => {
   })
 
   it('does not persist acceptance for reported hashes without bundled terms bytes', () => {
-    const gemma = MODEL_CATALOG.models.find((item) => item.id === 'gemma-3-1b-it')!
-    const llama = MODEL_CATALOG.models.find((item) => item.id === 'llama-3.2-1b-instruct')!
+    // The Gemma entries are held from the 0.4.0-alpha.1 catalog (release gate G7), so the
+    // fingerprinted case is a copy of a pinned entry with a mutable-terms fingerprint.
+    const pinned = MODEL_CATALOG.models.find((item) => item.id === 'nemotron-3-nano-4b')!
+    const fingerprinted = {
+      ...pinned,
+      licenseTermsRevision: `gemma-terms-2026-04-01-sha256-${'a'.repeat(64)}`,
+    }
 
-    expect(licenseAcceptanceValue(gemma)).toBeNull()
-    expect(licenseAcceptanceValue(llama)).toBe(
-      JSON.stringify([llama.license, llama.licenseUrl, llama.licenseTermsRevision]),
+    expect(pinned.licenseAcceptance).toBe('required')
+    expect(licenseAcceptanceValue(fingerprinted)).toBeNull()
+    expect(licenseAcceptanceValue(pinned)).toBe(
+      JSON.stringify([pinned.license, pinned.licenseUrl, pinned.licenseTermsRevision]),
     )
+  })
+
+  it('holds the third-party Llama 3.x and Gemma 3 mirrors out of the alpha catalog', () => {
+    const ids = MODEL_CATALOG.models.map((model) => model.id)
+    for (const held of [
+      'llama-3.2-1b-instruct',
+      'llama-3.2-3b-instruct',
+      'llama-3.1-8b-instruct',
+      'gemma-3-1b-it',
+      'gemma-3-4b-it',
+    ])
+      expect(ids).not.toContain(held)
+    for (const model of MODEL_CATALOG.models)
+      expect(model.sourceRepository).not.toMatch(/\/(unsloth|ggml-org)\/(Llama-3|gemma-3)/i)
   })
 
   it('labels popularity with its dated source and keeps quantizations under one release', () => {
     const ranked = MODEL_CATALOG.models.filter((model) => model.popularity)
     const ranks = new Set(ranked.map((model) => model.popularity!.eligibleRank))
-    for (let rank = 1; rank <= 10; rank += 1) expect(ranks.has(rank)).toBe(true)
+    // Ranks 6 (Llama 3.2 1B) and 8 (Llama 3.1 8B) are held third-party mirrors (G7).
+    const held = new Set([6, 8])
+    for (let rank = 1; rank <= 10; rank += 1) expect(ranks.has(rank)).toBe(!held.has(rank))
     for (const model of ranked) {
       expect(model.popularity!.source).toBe('huggingface-downloads-30d')
       expect(model.popularity!.snapshot).toMatch(/^2026-10-15/)

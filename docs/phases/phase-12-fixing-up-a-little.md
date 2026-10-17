@@ -1,11 +1,21 @@
 # Phase 12: Fixing Up A Little (2026-10-15)
 
-Status: `BLOCKED - INDEPENDENT REVIEW`. Implemented by Claude Opus 5.5 under
-the owner's directive of 2026-10-15, then independently inspected and repaired
-for PR #49. The candidate remains draft and unmerged because required exact-
-source large-transfer evidence and independent real-app workflow evidence are
-not available. See `docs/qualification/pr49-independent-review-2026-10-15.md`
-for the review disposition and limits.
+Status: `MERGED` (updated Saturday, October 17, 2026, EDT). Implemented by
+Claude Opus 5.5 under the owner's directive of 2026-10-15. PR #49 merged into
+`main` at `ea9cbe566ec7c59036ab9601ab522a5ccb639c34` after three independent
+review iterations (Claude Fable 5.1, separate sessions, same vendor): at
+`406a0be` and `2450c7a` (CHANGES_REQUIRED) and at `782956a`
+(APPROVED_WITH_CONDITIONS). The follow-ups from the last review (F-17 to F-20)
+merged with PR #51 at `ad20e74`. The exact-source large-transfer and
+native-application workflow gates were then passed by a non-implementer run
+(`docs/qualification/0.4.0-alpha-qualification-2026-10-17/`). Release status:
+`docs/release/juniper-0.4.0-alpha-readiness-review.md`.
+
+The status before the merge was `BLOCKED - INDEPENDENT REVIEW`: the candidate
+was draft and unmerged because exact-source large-transfer evidence and
+independent real-app workflow evidence were not yet available. See
+`docs/qualification/pr49-independent-review-2026-10-15.md` for that review's
+disposition and limits, and its closing note.
 
 ## Objective
 
@@ -102,7 +112,15 @@ Implementer-run evidence for the three review gates (exact-source transfers,
 copied-database restore, and native app workflows) is in
 `docs/qualification/pr49-gate-evidence-2026-10-16.md`. It is not independent.
 
-`BLOCKED - INDEPENDENT REVIEW`. The repairs and local validation are recorded
-in the independent review report. The live catalog table above remains the
-implementer's own evidence; it was not reproduced against an identified source
-revision. Do not treat this phase as approved or merged.
+`MERGED` (2026-10-17). The review history is recorded in
+`docs/qualification/pr49-gate-evidence-2026-10-16.md` (repairs per review
+iteration) and in the closing note of
+`docs/qualification/pr49-independent-review-2026-10-15.md`. The
+non-implementer G2/G3 records are in
+`docs/qualification/0.4.0-alpha-qualification-2026-10-17/`. The live catalog
+table above remains the implementer's own evidence. Five of its entries (Llama
+3.x and Gemma 3, third-party mirrors) were later held from the 0.4.0-Alpha
+catalog; see `docs/research/model-catalog-2026-10-15/exclusions-and-blockers.md`.
+
+Earlier status, kept for the record: `BLOCKED - INDEPENDENT REVIEW`, with the
+repairs and local validation recorded in the independent review report.

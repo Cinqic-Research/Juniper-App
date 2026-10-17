@@ -8,6 +8,9 @@
 //
 // It rewrites config/models/catalog.json, keeping entries it does not
 // generate (including import-only and research-only entries) unchanged.
+// A research record with a `catalogHold` is left out of the catalog, and an
+// existing entry with the same id is removed: the selection below keeps its
+// curated text so the entry can return when the hold is lifted.
 /* global console, process */
 
 import { readFileSync, writeFileSync } from 'node:fs'
@@ -309,10 +312,17 @@ function memory(fileBytes, parameterCount, architecture) {
 }
 
 const generated = []
+const held = []
 for (const choice of SELECTION) {
   const research = candidates.find((candidate) => candidate.releaseId === choice.release)
   if (!research || !research.complete)
     throw new Error(`No complete research record for ${choice.release}`)
+  if (research.catalogHold) {
+    if (research.catalogHold.status !== 'held' || typeof research.catalogHold.reason !== 'string')
+      throw new Error(`${choice.release} has a catalog hold without a status and reason`)
+    held.push(choice.id)
+    continue
+  }
   const artifacts = (
     choice.alternative ? research.artifacts.slice(0, 2) : research.artifacts.slice(0, 1)
   ).map((artifact) => ({
@@ -394,7 +404,7 @@ for (const choice of SELECTION) {
   })
 }
 
-const ids = new Set(generated.map((entry) => entry.id))
+const ids = new Set([...generated.map((entry) => entry.id), ...held])
 // Existing entries keep their identities; add popularity evidence to those
 // the snapshot ranks, without changing their artifacts.
 const RELEASE_OF = {
@@ -421,5 +431,5 @@ const kept = catalog.models
 catalog.models = [...kept, ...generated]
 writeFileSync(catalogPath, `${JSON.stringify(catalog, null, 2)}\n`)
 console.log(
-  `catalog: ${kept.length} kept, ${generated.length} generated, ${catalog.models.length} total`,
+  `catalog: ${kept.length} kept, ${generated.length} generated, ${held.length} held, ${catalog.models.length} total`,
 )

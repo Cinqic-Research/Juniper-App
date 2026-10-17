@@ -73,3 +73,27 @@ The Clippy interruption left 89 MiB available on the review drive. Do not repeat
 The existing schema migrations make a pre-v5 and pre-v6 database backup. Restore only after a clean app shutdown; preserve the current database and any SQLite WAL/SHM sidecars before replacing it. Restoring an older backup discards changes made after that backup. Fixture upgrade tests passed; a real copied-database restore rehearsal remains unverified.
 
 The branch must stay draft and unmerged until a safe exact-source run covers the resumed >2 GiB single-file transfer and sharded bundle, the required real-app workflows are independently exercised, and all checks pass on the final pushed head. CI runs `38801453523` and `38803253536` tested superseded heads `195c088` and `d16bc9f`; the fixture and test-expectation issues are repaired in `3c70a07`/`49c0662`. A fresh run on the final report-bearing PR head remains required. Respect branch protections and refresh PR/base/head/check identities before any later approval or merge.
+
+## Closing note (added Saturday, October 17, 2026, EDT)
+
+This note is appended; the review text above is unchanged and records the
+2026-10-15 disposition as it stood then.
+
+- PR #49 merged into `main` at `ea9cbe566ec7c59036ab9601ab522a5ccb639c34`
+  after three further independent review iterations by Claude Fable 5.1
+  (separate sessions, same vendor as the implementer) on 2026-10-16 and
+  2026-10-17: `Juniper-App-49-406a0be.md` (CHANGES_REQUIRED),
+  `Juniper-App-49-2450c7a.md` (CHANGES_REQUIRED) and
+  `Juniper-App-49-782956a.md` (APPROVED_WITH_CONDITIONS). The repairs for each
+  iteration are listed in `pr49-gate-evidence-2026-10-16.md`; the reports are
+  in the owner's review-report folder.
+- PR #51 (the F-17 to F-20 follow-ups and the public Juniper 1 Base links)
+  merged at `ad20e74c284531d0e130cc25f1f1dc345dbe6847` (review
+  `Juniper-App-51-c7de02a.md`, final disposition at head `0df58dd`:
+  APPROVED_WITH_CONDITIONS).
+- The two gates this review left BLOCKED, the exact-source resumed transfer
+  above 2 GiB with a sharded bundle and the independent real-app workflows,
+  were passed by a non-implementer run on `ea9cbe566e`; its records are in
+  `0.4.0-alpha-qualification-2026-10-17/`.
+- The release status and remaining steps are in
+  `docs/release/juniper-0.4.0-alpha-readiness-review.md`.

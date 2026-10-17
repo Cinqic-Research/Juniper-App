@@ -7,7 +7,18 @@
       "lastModified": "2026-04-01",
       "representation": "Recorded SHA-256 fingerprint reported for an HTTPS response fetched on 2026-10-15. The response bytes are not included or independently reproducible; this fingerprint is not an immutable copy of the terms.",
       "responseBytes": 144414,
-      "sha256": "971c1f26bda668f56567a7545df993d297b6f331ce9d2ad677ee0dee588ff86f"
+      "sha256": "971c1f26bda668f56567a7545df993d297b6f331ce9d2ad677ee0dee588ff86f",
+      "catalogUse": "No 0.4.0-alpha.1 catalog entry uses these terms: Gemma 3 1B IT and Gemma 3 4B IT were held on 2026-10-17 (release gate G7, see exclusions-and-blockers.md). The fingerprint is kept because scripts/catalog-from-research.mjs still binds it to the held selections, and the host's mutable-terms rule (never saved, one transfer) is unchanged."
     }
+  },
+  "catalogHolds": {
+    "date": "2026-10-17",
+    "gate": "G7",
+    "held": {
+      "Llama 3.2 Community License": ["llama-3.2-1b-instruct", "llama-3.2-3b-instruct"],
+      "Llama 3.1 Community License": ["llama-3.1-8b-instruct"],
+      "Gemma Terms of Use": ["gemma-3-1b-it", "gemma-3-4b-it"]
+    },
+    "note": "These licenses are not presented by any catalog entry in 0.4.0-alpha.1; imported files and the license-acceptance code paths are unchanged."
   }
 }

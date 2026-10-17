@@ -33,6 +33,7 @@ jobs:
     outputs:
       tag: ${{ steps.contract.outputs.tag }}
       version: ${{ steps.contract.outputs.version }}
+      display_name: ${{ steps.contract.outputs.display_name }}
       commit: ${{ steps.contract.outputs.commit }}
       publish: ${{ steps.contract.outputs.publish }}
     steps:
@@ -60,6 +61,14 @@ jobs:
           node scripts/check-project-license.mjs
           node scripts/check-runtime-contract.mjs
           version=${RELEASE_TAG#v}
+          # Only prereleases are published by this workflow; a stable release
+          # needs its own decision (scripts/lib/version-scheme.mjs).
+          case "$version" in
+            *-alpha.* | *-beta.* | *-rc.*) ;;
+            *) echo "$version is not a prerelease version; refusing to publish it." >&2; exit 1 ;;
+          esac
+          display_name=$(sed -n 's/^display_name: *//p' manifests/release-candidate.yaml)
+          test -n "$display_name"
           publish=false
           if test "$GITHUB_EVENT_NAME" = push || test "$REQUESTED_PUBLISH" = true; then
             publish=true
@@ -72,6 +81,7 @@ jobs:
           fi
           echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "display_name=$display_name" >> "$GITHUB_OUTPUT"
           echo "commit=$commit" >> "$GITHUB_OUTPUT"
           echo "publish=$publish" >> "$GITHUB_OUTPUT"
 
@@ -450,6 +460,7 @@ jobs:
       - name: Generate release notes from verified evidence
         env:
           VERSION: ${{ needs.contract.outputs.version }}
+          DISPLAY_NAME: ${{ needs.contract.outputs.display_name }}
           TAG: ${{ needs.contract.outputs.tag }}
           COMMIT: ${{ needs.contract.outputs.commit }}
         run: |
@@ -467,9 +478,9 @@ jobs:
           )
           test -n "$downloads"
           {
-            echo "# Juniper $VERSION"
+            echo "# $DISPLAY_NAME"
             echo
-            echo "Prerelease built from immutable tag \`$TAG\` at commit \`$COMMIT\`."
+            echo "Machine version \`$VERSION\`. Prerelease built from immutable tag \`$TAG\` at commit \`$COMMIT\`. This is an alpha, not a stable release."
             echo
             echo '## Downloads'
             echo
@@ -482,14 +493,30 @@ jobs:
             echo '- Windows Authenticode status is in `SIGNING-windows.txt`; no signature is implied unless it says `Valid`.'
             echo '- GitHub artifact attestations link each executable artifact to this workflow and commit.'
             echo
+            echo '## Platform status'
+            echo
+            echo '- Linux x86_64 (DEB, AppImage): supported for this alpha. Launch verified on X11; native Wayland is not verified. Packages are not signed; use `SHA256SUMS.txt` and the attestations.'
+            echo '- Windows 10/11 x64 (MSI): supported for this alpha, unsigned; SmartScreen will warn before it runs. Agent execution on Windows is not verified, and sandboxed code is unavailable there.'
+            echo '- Android 7.0+ (APK): Beta. Signed. A physical ARM64 inference run is still required before Android inference leaves Beta. Agent project folders and sandboxed code are unavailable on Android.'
+            echo '- macOS and iOS: not built.'
+            echo
+            echo '## Known limitations'
+            echo
+            echo '- Agent is Beta. The code sandbox is Linux-only and there is no background agent service.'
+            echo '- The "Needs review" check on an Agent answer is a text heuristic: it flags an answer that claims a file was saved or changed when no tool did so, but it can miss phrasings.'
+            echo '- Backup restore has not been verified on a clean machine.'
+            echo '- MCP is Beta and tools-only; local MCP servers are not sandboxed.'
+            echo '- The Llama 3.x and Gemma 3 catalog entries are held from this alpha (third-party GGUF mirrors); a GGUF you obtained yourself can still be imported.'
+            echo '- gpt-oss-20b is import-only. The Juniper 1 local import is a research experiment, not a qualified or production model.'
+            echo '- Device Link is a non-networked policy preview. Pairing, discovery, peer connections, remote control, and Juniper Network transport are disabled.'
+            echo '- The full gate table and evidence are in `docs/release/juniper-0.4.0-alpha-readiness-review.md` in the source repository.'
+            echo
             echo '## Runtime notes'
             echo
             echo '- Models downloads verified GGUF weights on demand; the desktop bundle owns its loopback llama.cpp runtime and does not require Ollama.'
             echo '- Desktop credentials use the operating-system credential store; Android credentials use Android Keystore-backed AES-GCM storage.'
             echo '- Android loopback addresses refer to the phone itself; use an explicit LAN endpoint to reach a computer.'
-            echo '- Android llama.cpp remains Beta because physical ARM64 inference qualification is not yet recorded.'
-            echo '- Device Link is a non-networked policy preview. Pairing, discovery, peer connections, remote control, and Juniper Network transport are disabled.'
-            echo '- Ollama, OpenAI-compatible, and llama.cpp-compatible providers remain optional. MCP client calls, iOS, and macOS are not included.'
+            echo '- Ollama, OpenAI-compatible, and llama.cpp-compatible providers remain optional.'
             echo
             echo 'Source: https://github.com/Cinqic-Research/Juniper-App'
             echo 'License: Apache-2.0'
@@ -497,8 +524,12 @@ jobs:
       - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           tag_name: ${{ needs.contract.outputs.tag }}
-          name: Juniper ${{ needs.contract.outputs.version }}
+          name: ${{ needs.contract.outputs.display_name }}
           prerelease: true
+          # A prerelease is never the repository's latest release; say so
+          # explicitly rather than rely on the API default.
+          make_latest: 'false'
+          draft: false
           body_path: RELEASE_NOTES.md
           fail_on_unmatched_files: true
           files: |

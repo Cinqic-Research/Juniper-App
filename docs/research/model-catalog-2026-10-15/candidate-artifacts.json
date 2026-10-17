@@ -656,8 +656,19 @@
       "third-party quantization by unsloth (not the model publisher)",
       "original repo gated (manual); unsloth GGUF repo ungated, but Llama Community License + AUP still bind redistribution/use (attribution \"Built with Llama\")"
     ],
-    "blockers": [],
-    "complete": true
+    "blockers": [
+      "held from the 0.4.0-alpha.1 catalog (G7): third-party mirror; publisher offers no official GGUF; held pending the owner's decision"
+    ],
+    "complete": true,
+    "catalogHold": {
+      "gate": "G7",
+      "release": "0.4.0-alpha.1",
+      "decidedAt": "2026-10-17 7:01 AM EDT (2026-10-17T11:01:29Z)",
+      "status": "held",
+      "reason": "third-party mirror; publisher offers no official GGUF; held pending the owner's decision",
+      "officialGguf": null,
+      "evidence": "Hugging Face API 2026-10-17: author=meta-llama&filter=gguf returns no repositories (70 meta-llama models listed, none GGUF); meta-llama/<name>-GGUF repositories do not exist."
+    }
   },
   {
     "releaseId": "meta-llama/Llama-3.2-3B-Instruct",
@@ -713,8 +724,19 @@
       "third-party quantization by unsloth (not the model publisher)",
       "original repo gated (manual); unsloth GGUF repo ungated, but Llama Community License + AUP still bind redistribution/use (attribution \"Built with Llama\")"
     ],
-    "blockers": [],
-    "complete": true
+    "blockers": [
+      "held from the 0.4.0-alpha.1 catalog (G7): third-party mirror; publisher offers no official GGUF; held pending the owner's decision"
+    ],
+    "complete": true,
+    "catalogHold": {
+      "gate": "G7",
+      "release": "0.4.0-alpha.1",
+      "decidedAt": "2026-10-17 7:01 AM EDT (2026-10-17T11:01:29Z)",
+      "status": "held",
+      "reason": "third-party mirror; publisher offers no official GGUF; held pending the owner's decision",
+      "officialGguf": null,
+      "evidence": "Hugging Face API 2026-10-17: author=meta-llama&filter=gguf returns no repositories (70 meta-llama models listed, none GGUF); meta-llama/<name>-GGUF repositories do not exist."
+    }
   },
   {
     "releaseId": "meta-llama/Llama-3.1-8B-Instruct",
@@ -770,8 +792,19 @@
       "third-party quantization by unsloth (not the model publisher)",
       "original repo gated (manual); unsloth GGUF repo ungated, but Llama Community License + AUP still bind redistribution/use (attribution \"Built with Llama\")"
     ],
-    "blockers": [],
-    "complete": true
+    "blockers": [
+      "held from the 0.4.0-alpha.1 catalog (G7): third-party mirror; publisher offers no official GGUF; held pending the owner's decision"
+    ],
+    "complete": true,
+    "catalogHold": {
+      "gate": "G7",
+      "release": "0.4.0-alpha.1",
+      "decidedAt": "2026-10-17 7:01 AM EDT (2026-10-17T11:01:29Z)",
+      "status": "held",
+      "reason": "third-party mirror; publisher offers no official GGUF; held pending the owner's decision",
+      "officialGguf": null,
+      "evidence": "Hugging Face API 2026-10-17: author=meta-llama&filter=gguf returns no repositories (70 meta-llama models listed, none GGUF); meta-llama/<name>-GGUF repositories do not exist."
+    }
   },
   {
     "releaseId": "google/gemma-3-1b-it",
@@ -828,8 +861,32 @@
       "third-party quantization by ggml-org (not the model publisher)",
       "original repo gated (manual, Gemma terms acknowledgement); ggml-org GGUF repo ungated"
     ],
-    "blockers": [],
-    "complete": true
+    "blockers": [
+      "held from the 0.4.0-alpha.1 catalog (G7): third-party mirror; the publisher's official GGUF is gated on Hugging Face (manual access approval under the Gemma Terms of Use), so Juniper, which downloads without a Hugging Face account, cannot serve it; held pending the owner's decision"
+    ],
+    "complete": true,
+    "catalogHold": {
+      "gate": "G7",
+      "release": "0.4.0-alpha.1",
+      "decidedAt": "2026-10-17 7:01 AM EDT (2026-10-17T11:01:29Z)",
+      "status": "held",
+      "reason": "third-party mirror; the publisher's official GGUF is gated on Hugging Face (manual access approval under the Gemma Terms of Use), so Juniper, which downloads without a Hugging Face account, cannot serve it; held pending the owner's decision",
+      "officialGguf": {
+        "repo": "google/gemma-3-1b-it-qat-q4_0-gguf",
+        "revision": "d1be121d36172a4b0b964657e2ee859d61138593",
+        "gated": "manual",
+        "quantization": "Q4_0 (quantization-aware trained)",
+        "files": [
+          {
+            "path": "gemma-3-1b-it-q4_0.gguf",
+            "sizeBytes": 1003541152,
+            "sha256": "95e5b8d891cd6a794f66c2a6fb59a41e9562b4660560b854274eceffb628b22a"
+          }
+        ],
+        "integritySource": "Hugging Face API model_info(files_metadata=True) LFS sha256 and size, read 2026-10-17; not downloaded or re-hashed: the file endpoint returned 401 anonymously and 403 (GatedRepoError) for the signed-in Cinqic account, which has no access grant"
+      },
+      "evidence": "anonymous GET of the resolve URL returns 401 'Access to model ... is restricted'; Juniper's managed download sends no Hugging Face credentials."
+    }
   },
   {
     "releaseId": "google/gemma-3-4b-it",
@@ -886,8 +943,38 @@
       "third-party quantization by ggml-org (not the model publisher)",
       "multimodal model; text-only use: mmproj-model-f16.gguf deliberately omitted. Original pipeline_tag image-text-to-text, so absent from the text-generation popularity listing"
     ],
-    "blockers": [],
-    "complete": true
+    "blockers": [
+      "held from the 0.4.0-alpha.1 catalog (G7): third-party mirror; the publisher's official GGUF is gated on Hugging Face (manual access approval under the Gemma Terms of Use), so Juniper, which downloads without a Hugging Face account, cannot serve it; held pending the owner's decision"
+    ],
+    "complete": true,
+    "catalogHold": {
+      "gate": "G7",
+      "release": "0.4.0-alpha.1",
+      "decidedAt": "2026-10-17 7:01 AM EDT (2026-10-17T11:01:29Z)",
+      "status": "held",
+      "reason": "third-party mirror; the publisher's official GGUF is gated on Hugging Face (manual access approval under the Gemma Terms of Use), so Juniper, which downloads without a Hugging Face account, cannot serve it; held pending the owner's decision",
+      "officialGguf": {
+        "repo": "google/gemma-3-4b-it-qat-q4_0-gguf",
+        "revision": "15f73f5eee9c28f53afefef5723e29680c2fc78a",
+        "gated": "manual",
+        "quantization": "Q4_0 (quantization-aware trained)",
+        "files": [
+          {
+            "path": "gemma-3-4b-it-q4_0.gguf",
+            "sizeBytes": 3155051328,
+            "sha256": "76aed0a8285b83102f18b5d60e53c70d09eb4e9917a20ce8956bd546452b56e2"
+          },
+          {
+            "path": "mmproj-model-f16-4B.gguf",
+            "sizeBytes": 851251104,
+            "sha256": "8c0fb064b019a6972856aaae2c7e4792858af3ca4561be2dbf649123ba6c40cb",
+            "note": "image projector; Juniper would not load it"
+          }
+        ],
+        "integritySource": "Hugging Face API model_info(files_metadata=True) LFS sha256 and size, read 2026-10-17; not downloaded or re-hashed: the file endpoint returned 401 anonymously and 403 (GatedRepoError) for the signed-in Cinqic account, which has no access grant"
+      },
+      "evidence": "anonymous GET of the resolve URL returns 401 'Access to model ... is restricted'; Juniper's managed download sends no Hugging Face credentials."
+    }
   },
   {
     "releaseId": "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B",

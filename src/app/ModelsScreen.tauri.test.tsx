@@ -142,7 +142,7 @@ describe('Models screen native integration', () => {
   })
 
   it('asks the native host about license acceptance and records it there, not in localStorage', async () => {
-    const gated = MODEL_CATALOG.models.find((model) => model.id === 'llama-3.2-1b-instruct')!
+    const gated = MODEL_CATALOG.models.find((model) => model.id === 'nemotron-3-nano-4b')!
     const data = initialAppData()
     data.settings.onboardingComplete = true
     const calls: Array<{ command: string; args?: Record<string, unknown> }> = []
