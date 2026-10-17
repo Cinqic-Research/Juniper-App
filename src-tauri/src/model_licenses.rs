@@ -147,7 +147,18 @@ pub fn require_in(directory: &Path, entry: &CatalogEntry) -> Result<(), String> 
     ))
 }
 
+#[cfg(test)]
+thread_local! {
+    /// Tests point the host store at a temporary folder: a mock app's data
+    /// directory would be a real folder in the user's profile (review F-16).
+    static TEST_DIRECTORY: std::cell::RefCell<Option<PathBuf>> = const { std::cell::RefCell::new(None) };
+}
+
 fn directory<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
+    #[cfg(test)]
+    if let Some(directory) = TEST_DIRECTORY.with(|directory| directory.borrow().clone()) {
+        return Ok(directory);
+    }
     app.path()
         .app_data_dir()
         .map_err(|error| format!("MODEL_LICENSE_STORE_ERROR: {error}"))
@@ -253,12 +264,14 @@ mod tests {
         use crate::commands::{AppState, Cancellation};
         let app = tauri::test::mock_app();
         let state = AppState::default();
+        let temporary = folder();
+        TEST_DIRECTORY.with(|directory| *directory.borrow_mut() = Some(temporary.clone()));
         let gated = catalog::entries()
             .unwrap()
             .into_iter()
             .find(|entry| required(entry) && persistable(entry))
             .unwrap();
-        // The mock app's data directory has no saved acceptance for it.
+        // The temporary host store has no saved acceptance for it.
         assert!(!accepted(app.handle(), &gated.id).unwrap());
         let download = tauri::async_runtime::block_on(crate::managed_models::download(
             app.handle().clone(),
@@ -284,6 +297,12 @@ mod tests {
         ))
         .unwrap_err();
         assert!(import.starts_with("MODEL_LICENSE_NOT_ACCEPTED"), "{import}");
+        // Acceptance recorded through the same host path is found there.
+        accept(app.handle(), &gated.id).unwrap();
+        assert!(temporary.join(FILE_NAME).is_file());
+        require(app.handle(), &gated).unwrap();
+        TEST_DIRECTORY.with(|directory| *directory.borrow_mut() = None);
+        fs::remove_dir_all(temporary).unwrap();
     }
 
     #[test]
