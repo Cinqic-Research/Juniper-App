@@ -60,6 +60,14 @@ apps. An `input_required` result is reported as unsupported.
   a private folder) plus named secrets read from the keychain. Nothing else is
   inherited.
 - The interface states plainly that the server is **not sandboxed**.
+- Approvals and standing grants bind to the server's identity: the resolved
+  program's path and SHA-256, a digest of its arguments, and the SHA-256 of
+  every file named in the arguments (for example `server.py` or a built
+  `index.js`). Replacing any of them after approval breaks the binding. When
+  the program is a launcher or interpreter (`npx`, `uvx`, `node`, `python`,
+  …) and no argument names a file, the identity is marked `launcher-only`:
+  code the launcher downloads when it starts (an npm or PyPI package) is not
+  covered, and the approval and server details say so.
 
 **Remote servers.**
 

@@ -470,10 +470,15 @@ pub fn prepare(
             "This plugin call's arguments are too long to show for approval, so it was not sent.",
         ));
     }
+    let coverage = if target["executable"]["coverage"] == "launcher-only" {
+        "\n\nThis server starts through a launcher; Juniper checks the launcher and its arguments, not code the launcher downloads when it starts."
+    } else {
+        ""
+    };
     Ok((
         scope,
         format!(
-            "Call “{}” on {} ({}) with:\n{arguments}",
+            "Call “{}” on {} ({}) with:\n{arguments}{coverage}",
             tool.name, plugin.name, plugin.location
         ),
         target,
@@ -533,31 +538,92 @@ fn stdio_executable_identity(plugin: &Plugin) -> Result<Value, ToolError> {
             "The local server program must resolve to a regular file.",
         ));
     }
-    let mut file = std::fs::File::open(&canonical).map_err(|_| {
+    let sha256 = hash_file(&canonical).ok_or_else(|| {
         fail(
             "PLUGIN_START_FAILED",
-            "The local server program is unavailable.",
+            "The local server program could not be verified.",
         )
     })?;
+    // Review F-08: a launcher or interpreter (npx, uvx, node, python, ...)
+    // is only part of the server. Files named in the arguments (a script, a
+    // built server) are hashed too, so replacing them after approval breaks
+    // the binding; the arguments themselves are digested. Code a launcher
+    // fetches at run time (an npm or PyPI package) cannot be hashed, and the
+    // identity says so.
+    let directory = plugin_directory(&plugin.id)?;
+    let mut argument_files = Vec::new();
+    for argument in plugin
+        .config
+        .args
+        .iter()
+        .filter(|argument| !argument.starts_with('-'))
+    {
+        let candidate = std::path::Path::new(argument);
+        let candidate = if candidate.is_absolute() {
+            candidate.to_path_buf()
+        } else {
+            directory.join(candidate)
+        };
+        let Ok(resolved) = std::fs::canonicalize(&candidate) else {
+            continue;
+        };
+        if !resolved.is_file() {
+            continue;
+        }
+        let digest = hash_file(&resolved).ok_or_else(|| {
+            fail(
+                "PLUGIN_START_FAILED",
+                "A file named in the server's arguments could not be verified.",
+            )
+        })?;
+        argument_files.push(json!({ "path": resolved.to_string_lossy(), "sha256": digest }));
+    }
+    let program = canonical
+        .file_stem()
+        .map(|stem| stem.to_string_lossy().to_ascii_lowercase())
+        .unwrap_or_default();
+    // "python3" and "python3.12" are python.
+    let launcher = LAUNCHERS.iter().any(|name| {
+        program.strip_prefix(name).is_some_and(|rest| {
+            rest.chars()
+                .all(|character| character.is_ascii_digit() || character == '.')
+        })
+    });
+    let coverage = if launcher && argument_files.is_empty() {
+        "launcher-only"
+    } else {
+        "program-and-files"
+    };
+    Ok(json!({
+        "path": canonical.to_string_lossy(),
+        "sha256": sha256,
+        "argumentsSha256": format!("{:x}", Sha256::digest(serde_json::to_vec(&plugin.config.args).unwrap_or_default())),
+        "argumentFiles": argument_files,
+        "launcher": launcher,
+        "coverage": coverage,
+    }))
+}
+
+/// Programs that run other code named in their arguments or fetched at run
+/// time. For these the executable hash alone does not identify the server.
+const LAUNCHERS: &[&str] = &[
+    "npx", "npm", "pnpm", "yarn", "bunx", "bun", "node", "deno", "uvx", "uv", "pipx", "python",
+    "pypy", "ruby", "perl", "php", "java", "dotnet", "docker", "podman", "sh", "bash", "env",
+];
+
+fn hash_file(path: &std::path::Path) -> Option<String> {
+    use std::io::Read;
+    let mut file = std::fs::File::open(path).ok()?;
     let mut hasher = Sha256::new();
     let mut buffer = [0u8; 64 * 1024];
     loop {
-        use std::io::Read;
-        let read = file.read(&mut buffer).map_err(|_| {
-            fail(
-                "PLUGIN_START_FAILED",
-                "The local server program could not be verified.",
-            )
-        })?;
+        let read = file.read(&mut buffer).ok()?;
         if read == 0 {
             break;
         }
         hasher.update(&buffer[..read]);
     }
-    Ok(json!({
-        "path": canonical.to_string_lossy(),
-        "sha256": format!("{:x}", hasher.finalize()),
-    }))
+    Some(format!("{:x}", hasher.finalize()))
 }
 
 fn resolve_stdio_executable(plugin: &Plugin, command: &str) -> Option<std::path::PathBuf> {
@@ -1625,7 +1691,7 @@ pub fn summary(plugin: &Plugin) -> Value {
         "hasToken": plugin.config.credential_ref.is_some(),
         "state": plugin.state,
         "tools": plugin.state.tools.iter().map(|tool| json!({ "name": tool.name, "exposedName": exposed_name(&plugin.id, &tool.name), "description": tool.description })).collect::<Vec<_>>(),
-        "access": if plugin.kind == "mcp-stdio" { "Runs as a normal program with your account's access to files and network. It is not sandboxed. Only connect servers you trust." } else { "Juniper sends tool arguments to this server over the network." },
+        "access": if plugin.kind == "mcp-stdio" { "Runs as a normal program with your account's access to files and network. It is not sandboxed. Only connect servers you trust. Approvals are bound to the program's bytes and to files named in its arguments; when the program is a launcher such as npx or uvx, code it downloads when it starts is not covered." } else { "Juniper sends tool arguments to this server over the network." },
     })
 }
 
@@ -1834,7 +1900,58 @@ mod tests {
             after["executable"]["sha256"]
         );
         assert_ne!(before, after);
+        assert_eq!(after["executable"]["coverage"], "program-and-files");
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    /// Review F-08: for a launcher or interpreter, files named in the
+    /// arguments are part of the identity, and a launcher that fetches its
+    /// server says the fetched code is not covered.
+    #[cfg(unix)]
+    #[test]
+    fn launcher_identity_covers_argument_files_and_discloses_fetched_code() {
+        let plugin = |id: &str, args: Vec<String>| Plugin {
+            id: id.into(),
+            kind: "mcp-stdio".into(),
+            name: "Launcher test".into(),
+            config: PluginConfig {
+                name: "Launcher test".into(),
+                kind: "mcp-stdio".into(),
+                command: Some("/usr/bin/python3".into()),
+                args,
+                env: Vec::new(),
+                url: None,
+                credential_ref: None,
+            },
+            state: PluginState::default(),
+            enabled: true,
+            revision: 1,
+            location: "local server",
+        };
+        let id = format!("launcher-test-{}", uuid::Uuid::new_v4().simple());
+        let folder = plugin_directory(&id).unwrap();
+        std::fs::write(folder.join("server.py"), b"print('one')").unwrap();
+        let scripted = plugin(&id, vec!["-I".into(), "server.py".into()]);
+        let before = stdio_executable_identity(&scripted).unwrap();
+        assert_eq!(before["launcher"], true);
+        assert_eq!(before["coverage"], "program-and-files");
+        assert_eq!(before["argumentFiles"].as_array().unwrap().len(), 1);
+        std::fs::write(folder.join("server.py"), b"print('two')").unwrap();
+        let after = stdio_executable_identity(&scripted).unwrap();
+        assert_ne!(
+            before, after,
+            "replacing the script breaks the approval binding"
+        );
+        assert_eq!(
+            before["sha256"], after["sha256"],
+            "the launcher itself is unchanged"
+        );
+
+        let fetched = plugin(&id, vec!["-m".into(), "some_server_package".into()]);
+        let identity = stdio_executable_identity(&fetched).unwrap();
+        assert_eq!(identity["coverage"], "launcher-only");
+        assert_ne!(identity["argumentsSha256"], before["argumentsSha256"]);
+        std::fs::remove_dir_all(folder).ok();
     }
 
     #[cfg(unix)]
