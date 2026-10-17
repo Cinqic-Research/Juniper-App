@@ -8,6 +8,14 @@ evidence, not exact-source independent qualification. The required resumed
 single-file and sharded-transfer paths still need a safe rerun against the
 final candidate; see `pr49-independent-review-2026-10-15.md`.
 
+**Later record (2026-10-16).** The exact-source rerun of the resumed
+single-file transfer (paused after 253,197,722 bytes, resumed with a range)
+and of the two-shard bundle, at commit `59d3d44` with harness, transfer-code,
+and binary digests, is in
+[`pr49-gate-evidence-2026-10-16.md`](pr49-gate-evidence-2026-10-16.md)
+("Gate 1"). That record is implementer evidence; the 2026-10-16 independent
+review checked its source identity but did not reproduce it.
+
 Evidence for every downloadable catalog artifact, produced by the ignored test
 `src-tauri/src/live_catalog.rs` on FLOWBOX (Linux x86_64, 16 cores, 14 GiB RAM),
 CPU-only, with the Juniper-bundled llama.cpp server

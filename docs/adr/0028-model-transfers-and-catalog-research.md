@@ -61,5 +61,7 @@ smoke runs on the bundled llama.cpp build is in
 this checkout, so the checked-in report is not a standalone reproduction
 package. The live-resume row also lacks the exact outgoing `Range` and received
 `Content-Range` headers; exact-range handling is covered by fixture tests, not
-that live record. Artifacts keep `qualification: package-only` unless
+that live record. The later exact-source resumed-transfer and bundle record
+(commit `59d3d44`, with source and binary digests) is "Gate 1" in
+`docs/qualification/pr49-gate-evidence-2026-10-16.md`. Artifacts keep `qualification: package-only` unless
 capabilities were measured.
