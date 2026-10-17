@@ -6,12 +6,20 @@ release:
   tag: v0.4.0-alpha.1
   commit: resolved-from-tag
   url: derived-at-release
+  name: Juniper 0.4.0-Alpha
   prerelease: true
+  make_latest: false
   overwrite_existing_release: forbidden
 publication:
-  state: not-yet-published
+  state: ready-to-publish-from-tag
   published_artifacts: not-yet-published
   plan: docs/release/juniper-0.4.0-alpha-release-plan.md
+  readiness_review: docs/release/juniper-0.4.0-alpha-readiness-review.md
+  qualification_evidence: docs/qualification/0.4.0-alpha-qualification-2026-10-17
+  publication_record: written-after-the-release-workflow-publishes
+  remaining_before_tag:
+    - validation-workflow-green-on-the-exact-release-commit
+    - owner-creates-and-pushes-annotated-tag-v0.4.0-alpha.1
 canonical_repository: https://github.com/Cinqic-Research/Juniper-App
 canonical_branch: main
 project_license: Apache-2.0
@@ -33,10 +41,17 @@ runtime_registry:
   optional_backends: upstream-metadata-only-no-Juniper-adapters-or-artifacts
 model_catalog:
   source: config/models/catalog.json
-  entries: 28
-  artifacts: 33
-  downloadable_entries: 27
+  entries: 23
+  artifacts: 26
+  downloadable_entries: 22
   import_only_entries: 1
+  held_entries:
+    - llama-3.2-1b-instruct
+    - llama-3.2-3b-instruct
+    - llama-3.1-8b-instruct
+    - gemma-3-1b-it
+    - gemma-3-4b-it
+  held_reason: third-party-GGUF-mirrors-held-pending-owner-decision-see-docs/research/model-catalog-2026-10-15/exclusions-and-blockers.md
   maximum_parameter_count: 20914757184
   maximum_downloadable_parameter_count: 14768307200
   license_acceptance: enforced-by-native-host
@@ -92,6 +107,10 @@ accepted_limitations:
   - local-MCP-servers-are-not-sandboxed
   - Agent-is-Beta-code-sandbox-is-Linux-only-and-there-is-no-background-service
   - Agent-execution-on-Windows-is-not-verified
+  - backup-restore-is-not-verified-on-a-clean-machine
+  - Agent-Needs-review-claim-check-is-a-text-heuristic-and-can-miss-phrasings
+  - project-folder-grants-made-before-the-root-guard-are-not-re-checked
+  - Llama-3.x-and-Gemma-3-catalog-entries-are-held-third-party-mirrors
   - gpt-oss-20b-is-import-only
   - Juniper-1-local-import-is-a-research-experiment-not-a-qualified-or-production-model
   - Device-Link-and-Juniper-Network-transport-are-disabled

@@ -63,8 +63,8 @@ these 14 files, which `manifests/release-candidate.yaml` lists:
 - `RELEASE-PROVENANCE.json`
 - `LICENSE`, `THIRD_PARTY_NOTICES.md`
 
-The manifest's `publication.state` is `not-yet-published` until the release
-exists; after publication, record the run, tag commit, and file digests in a
+The manifest's `publication.state` is `ready-to-publish-from-tag` and
+`published_artifacts` is `not-yet-published` until the release exists; after publication, record the run, tag commit, and file digests in a
 `docs/release/0.4.0-alpha.1-publication.md` record in the style of
 `rc33-publication.md`.
 
@@ -104,14 +104,15 @@ production model.
    - a restore on a clean machine (not yet run by anyone).
 2. The owner records a decision on the third-party GGUF mirrors used for the
    Llama 3.x and Gemma 3 entries (review F-02 note) before those entries ship.
+   Done on 2026-10-17 by holding the entries: they are removed from the alpha
+   catalog (gate G7 in the readiness review).
 3. On the merge commit: `pnpm validate` and `pnpm build` pass locally, and the
    `validation` workflow passes in full, including the
    `agent-sandbox-evidence` artifact ("6 passed; 0 failed", no skip line).
    Dispatch the manual Android inference job if emulator inference evidence is
    wanted for the notes.
-4. A release-readiness review is written to
-   `docs/qualification/release-readiness-review-<date>.md` (as for
-   2026-09-22), covering this checklist.
+4. A release-readiness review is written, covering this checklist:
+   [juniper-0.4.0-alpha-readiness-review.md](juniper-0.4.0-alpha-readiness-review.md).
 5. Create the annotated tag `v0.4.0-alpha.1` on the merge commit and push it.
    The release workflow checks `RELEASE_TAG` against `check-version.mjs`,
    builds, smokes, signs, attests, writes `SHA256SUMS.txt` and

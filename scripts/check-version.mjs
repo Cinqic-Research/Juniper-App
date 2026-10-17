@@ -45,6 +45,18 @@ if (
     `Version mismatch: expected ${expected} across package, Cargo, Tauri, and release manifest.`,
   )
 }
+// The GitHub release takes its title from the manifest's display name
+// ("Juniper 0.4.0-Alpha" for 0.4.0-alpha.1) and must stay a prerelease.
+const displayName = manifest.match(/^display_name:\s*(.+)$/m)?.[1]?.trim()
+if (
+  !displayName ||
+  !displayName.startsWith(`Juniper ${expected.split('-')[0]}-`) ||
+  !/^\s+prerelease: true$/m.test(manifest)
+) {
+  throw new Error(
+    `Release manifest needs a display_name for ${expected} and prerelease: true (got ${displayName}).`,
+  )
+}
 const releaseTag = process.env.RELEASE_TAG
 if (releaseTag && releaseTag !== `v${expected}`) {
   throw new Error(`Release tag mismatch: expected v${expected}, received ${releaseTag}.`)
