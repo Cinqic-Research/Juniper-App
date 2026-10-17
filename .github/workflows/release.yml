@@ -104,8 +104,9 @@ jobs:
           libssl-dev libayatana-appindicator3-dev librsvg2-dev xvfb cmake
           x11-utils x11-apps desktop-file-utils fuse3 python3 python3-xlib
           libegl1 libgl1 libgles2 libgbm1 libegl-mesa0 libgl1-mesa-dri libfontconfig1
-          libharfbuzz0b libfribidi0 libx11-xcb1
+          libharfbuzz0b libfribidi0 libx11-xcb1 bubblewrap
       - run: pnpm install --frozen-lockfile
+      # The agent sandbox tests fail without bubblewrap; they are never skipped here.
       - run: pnpm validate
       - name: Build pinned Juniper local runtime
         run: scripts/build-llama-runtime.sh

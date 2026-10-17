@@ -61,7 +61,11 @@ shell access.
 
 Agents can do real project work without any change to `capabilities/*.json`.
 The sandbox tests (`agent::sandbox::tests`) show four things on the build
-machine:
+machine and on CI, where the validation and release jobs install bubblewrap and
+the tests fail (rather than skip) when the sandbox is unavailable; the
+validation job uploads their output as `agent-sandbox-evidence`. A developer
+machine that cannot sandbox may set `JUNIPER_SKIP_SANDBOX_TESTS=1`; CI refuses
+that variable:
 
 - the user's home folder is not visible inside the sandbox;
 - no environment variables leak;

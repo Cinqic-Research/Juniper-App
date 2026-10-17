@@ -584,6 +584,47 @@ async fn run_tool_linux(
 mod tests {
     use super::*;
 
+    /// Opt-out for a developer machine that cannot sandbox (no bubblewrap,
+    /// or user namespaces disabled). CI never sets it, so on CI a missing
+    /// sandbox fails these tests instead of passing them silently.
+    const SKIP_VARIABLE: &str = "JUNIPER_SKIP_SANDBOX_TESTS";
+
+    /// Review F-04: whether this test should run. Without the sandbox it
+    /// panics unless the opt-out is set to 1.
+    fn sandbox_required() -> bool {
+        let available = availability();
+        let run = sandbox_required_with(
+            available.clone(),
+            std::env::var(SKIP_VARIABLE).ok().as_deref(),
+        );
+        if let (false, Err(reason)) = (run, available) {
+            eprintln!("{SKIP_VARIABLE}=1: skipping a sandbox test ({reason})");
+        }
+        run
+    }
+
+    fn sandbox_required_with(available: Result<(), String>, skip: Option<&str>) -> bool {
+        match available {
+            Ok(()) => true,
+            Err(_) if skip == Some("1") => false,
+            Err(reason) => panic!(
+                "The sandbox is unavailable: {reason} Install bubblewrap, or set {SKIP_VARIABLE}=1 on a developer machine that cannot sandbox (never on CI)."
+            ),
+        }
+    }
+
+    #[test]
+    fn a_missing_sandbox_fails_the_tests_unless_explicitly_skipped() {
+        let missing =
+            || Err::<(), String>("Install bubblewrap (bwrap) to run code in a sandbox.".into());
+        assert!(std::panic::catch_unwind(|| sandbox_required_with(missing(), None)).is_err());
+        assert!(
+            std::panic::catch_unwind(|| sandbox_required_with(missing(), Some("yes"))).is_err()
+        );
+        assert!(!sandbox_required_with(missing(), Some("1")));
+        assert!(sandbox_required_with(Ok(()), None));
+    }
+
     async fn python(code: &str, project: Option<&std::path::Path>) -> Finished {
         let work = std::env::temp_dir().join(format!("juniper-sandbox-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&work).unwrap();
@@ -608,8 +649,7 @@ mod tests {
 
     #[tokio::test]
     async fn the_sandbox_runs_code_and_hides_the_users_files_secrets_and_network() {
-        if availability().is_err() {
-            eprintln!("sandbox unavailable here; skipping");
+        if !sandbox_required() {
             return;
         }
         let home = std::env::var("HOME").unwrap_or_else(|_| "/root".into());
@@ -646,7 +686,7 @@ open("result.txt", "w").write("ok")
 
     #[tokio::test]
     async fn a_script_cannot_fill_the_disk_or_memory_with_files() {
-        if availability().is_err() {
+        if !sandbox_required() {
             return;
         }
         let started = std::time::Instant::now();
@@ -670,7 +710,7 @@ open("result.txt", "w").write("ok")
 
     #[tokio::test]
     async fn a_mounted_project_is_read_only() {
-        if availability().is_err() {
+        if !sandbox_required() {
             return;
         }
         let project =
@@ -696,7 +736,7 @@ open("result.txt", "w").write("ok")
 
     #[tokio::test]
     async fn without_tmpfs_bounds_tmp_lives_in_the_watched_work_folder() {
-        if availability().is_err() {
+        if !sandbox_required() {
             return;
         }
         UNBOUNDED_TMPFS_FOR_TESTS.with(|forced| forced.set(true));
@@ -712,7 +752,7 @@ open("result.txt", "w").write("ok")
 
     #[tokio::test]
     async fn runaway_processes_are_stopped_with_their_children() {
-        if availability().is_err() {
+        if !sandbox_required() {
             return;
         }
         let ran = python("while True:\n    pass\n", None).await;
