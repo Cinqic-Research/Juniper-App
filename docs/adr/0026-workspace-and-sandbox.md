@@ -26,8 +26,10 @@ shell access.
   `.config/autostart/` and `.config/systemd/`, or `*.service`, `*.timer` and
   `*.socket` units (`PROTECTED_PATH`). Build manifests and scripts that run
   when the user builds or installs (`Makefile`, `*.mk`, `package.json`,
-  `pyproject.toml`, `setup.py`, `Cargo.toml`, `build.rs`, `CMakeLists.txt`
-  and similar), `*.desktop` entries, and every other dot-file or dot-folder at
+  `pyproject.toml`, `setup.py`, `Cargo.toml`, `build.rs`, `CMakeLists.txt`,
+  `Rakefile`, `Gemfile`, Gradle and Maven files, `meson.build`, Bazel `BUILD`
+  and `WORKSPACE`, `Dockerfile` and Compose files, `Taskfile`, `Jenkinsfile`,
+  `configure`, and `*.sh`, `*.ps1`, `*.bat` scripts), `*.desktop` entries, and every other dot-file or dot-folder at
   any depth can be written only through a per-call approval showing the diff:
   neither the "Within projects" preset nor a standing permission covers them,
   and no standing grant is offered. Residual risk: a project folder can still

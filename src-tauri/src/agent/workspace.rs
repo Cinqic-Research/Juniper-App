@@ -86,8 +86,36 @@ const ASK_EVERY_TIME: &[&str] = &[
     "tox.ini",
     "cargo.toml",
     "build.rs",
+    "rakefile",
+    "gemfile",
+    "build.gradle",
+    "build.gradle.kts",
+    "settings.gradle",
+    "settings.gradle.kts",
+    "pom.xml",
+    "meson.build",
+    "build",
+    "build.bazel",
+    "workspace",
+    "workspace.bazel",
+    "module.bazel",
+    "dockerfile",
+    "containerfile",
+    "docker-compose.yml",
+    "docker-compose.yaml",
+    "compose.yml",
+    "compose.yaml",
+    "taskfile",
+    "taskfile.yml",
+    "taskfile.yaml",
+    "jenkinsfile",
+    "configure",
 ];
-const ASK_EVERY_TIME_EXTENSIONS: &[&str] = &["mk", "desktop"];
+/// Names that start a family of build files (`Dockerfile.dev`).
+const ASK_EVERY_TIME_PREFIXES: &[&str] = &["dockerfile.", "containerfile."];
+const ASK_EVERY_TIME_EXTENSIONS: &[&str] = &[
+    "mk", "desktop", "sh", "bash", "zsh", "ps1", "psm1", "bat", "cmd",
+];
 
 fn lowercase_components(path: &Path) -> Vec<String> {
     path.components()
@@ -123,7 +151,11 @@ pub fn write_needs_approval(path: &str) -> bool {
     let names = lowercase_components(&relative);
     names.iter().any(|name| name.starts_with('.'))
         || names.last().is_some_and(|name| {
-            ASK_EVERY_TIME.contains(&name.as_str()) || extension_in(name, ASK_EVERY_TIME_EXTENSIONS)
+            ASK_EVERY_TIME.contains(&name.as_str())
+                || ASK_EVERY_TIME_PREFIXES
+                    .iter()
+                    .any(|prefix| name.starts_with(prefix))
+                || extension_in(name, ASK_EVERY_TIME_EXTENSIONS)
         })
 }
 
@@ -853,6 +885,26 @@ mod tests {
             "share/app.desktop",
             ".npmrc",
             "notes/.hidden/plan.md",
+            // Re-review F-15.
+            "Rakefile",
+            "Gemfile",
+            "app/build.gradle",
+            "build.gradle.kts",
+            "pom.xml",
+            "meson.build",
+            "BUILD",
+            "pkg/BUILD.bazel",
+            "WORKSPACE",
+            "Dockerfile",
+            "docker/Dockerfile.dev",
+            "docker-compose.yml",
+            "Taskfile.yml",
+            "Jenkinsfile",
+            "configure",
+            "run.sh",
+            "scripts/setup.sh",
+            "tools/install.ps1",
+            "build.bat",
         ] {
             assert!(write_needs_approval(target), "{target}");
         }
@@ -861,6 +913,8 @@ mod tests {
             "out/summary.md",
             "src/main.rs",
             "package.json.md",
+            "build/output.txt",
+            "docs/shell.md",
         ] {
             assert!(!write_needs_approval(target), "{target}");
         }
