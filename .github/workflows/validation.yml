@@ -48,17 +48,35 @@ jobs:
         with:
           toolchain: 1.90.0
           components: rustfmt, clippy
-      - name: Install Tauri Linux dependencies
+      # bubblewrap: the agent sandbox tests (agent::sandbox::tests) fail
+      # rather than skip when it is missing, so CI proves they ran.
+      - name: Install Tauri Linux dependencies and bubblewrap
         run: >-
           sudo apt-get update && sudo apt-get install -y
           libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev
-          libssl-dev libayatana-appindicator3-dev librsvg2-dev
+          libssl-dev libayatana-appindicator3-dev librsvg2-dev bubblewrap
       - name: Run native contract tests
         run: bash scripts/run-native-contract-tests.sh
       - run: pnpm install --frozen-lockfile
       - name: Audit JavaScript dependencies
         run: pnpm audit --audit-level high
+      - name: Refuse a sandbox-test opt-out on CI
+        run: test -z "${JUNIPER_SKIP_SANDBOX_TESTS:-}"
       - run: pnpm validate
+      - name: Record agent sandbox test evidence
+        run: |
+          mkdir -p sandbox-evidence
+          { bwrap --version; uname -r; } > sandbox-evidence/bubblewrap.txt
+          cargo test --locked --manifest-path src-tauri/Cargo.toml --lib agent::sandbox::tests -- \
+            --nocapture --test-threads 1 2>&1 | tee sandbox-evidence/sandbox-tests.txt
+          grep -q 'test result: ok. 6 passed; 0 failed' sandbox-evidence/sandbox-tests.txt
+          ! grep -q 'skipping a sandbox test' sandbox-evidence/sandbox-tests.txt
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: agent-sandbox-evidence
+          path: sandbox-evidence
+          if-no-files-found: error
       - name: Production frontend build
         run: pnpm build
       - name: Install Linux launch-probe tools

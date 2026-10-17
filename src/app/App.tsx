@@ -13,9 +13,11 @@ import {
   saveNativeAppData,
   type WindowInsets,
 } from '../lib/runtime'
+import { agentApi, applyMemoryChanges, onAgentEvent } from '../lib/agent'
 import { loadAppData, saveAppData } from '../lib/storage'
 import type { AppData, Page, SettingsSection } from '../types'
 import { JuniperMark } from './branding'
+import { AgentScreen } from './AgentScreen'
 import { ChatHistory, ChatScreen, type NewChatState } from './ChatScreen'
 import {
   currentHistoryState,
@@ -38,10 +40,11 @@ interface NavState {
   section: SettingsSection | null
 }
 
-const PAGES: Page[] = ['chats', 'models', 'settings']
+const PAGES: Page[] = ['chats', 'agent', 'models', 'settings']
 
-const NAV_ITEMS: Array<{ page: Page; label: string; icon: IconName }> = [
-  { page: 'chats', label: 'Chats', icon: 'chat' },
+const NAV_ITEMS: Array<{ page: Page; label: string; icon: IconName; beta?: boolean }> = [
+  { page: 'chats', label: 'Chat', icon: 'chat' },
+  { page: 'agent', label: 'Agent', icon: 'sparkle', beta: true },
   { page: 'models', label: 'Models', icon: 'models' },
   { page: 'settings', label: 'Settings', icon: 'settings' },
 ]
@@ -158,6 +161,39 @@ function JuniperApp() {
     if (!runningInTauri || !hydrated) return
     void reportFrontendReady().catch(() => undefined)
   }, [hydrated])
+
+  // Memories an agent saved (each one approved by the user) are queued by the
+  // host; the interface owns the memory list, so it applies and acknowledges them.
+  useEffect(() => {
+    if (!runningInTauri || !hydrated || loadFailed) return
+    let applying = false
+    const apply = async () => {
+      if (applying) return
+      applying = true
+      try {
+        const changes = await agentApi.memoryChanges()
+        if (changes.length === 0) return
+        update((current) => applyMemoryChanges(current, changes))
+      } catch {
+        // Retried on the next agent event.
+      } finally {
+        applying = false
+      }
+    }
+    void apply()
+    let stop: (() => void) | undefined
+    let disposed = false
+    void onAgentEvent((event) => {
+      if (event.kind === 'inbox' || event.kind === 'task') void apply()
+    }).then((unlisten) => {
+      if (disposed) unlisten()
+      else stop = unlisten
+    })
+    return () => {
+      disposed = true
+      stop?.()
+    }
+  }, [hydrated, loadFailed, update])
 
   // If the open chat disappears while its view is mounted, remount the view:
   // otherwise it would keep the old id and stream the next message into nothing.
@@ -432,6 +468,7 @@ function JuniperApp() {
                   <Icon name={item.icon} />
                   <span className={sidebarCollapsed ? 'visually-hidden' : undefined}>
                     {item.label}
+                    {item.beta && <span className="nav-beta"> Beta</span>}
                   </span>
                 </button>
               ))}
@@ -474,6 +511,13 @@ function JuniperApp() {
               onComposerFocus={setComposing}
             />
           )}
+          {page === 'agent' && (
+            <AgentScreen
+              data={data}
+              mobile={mobile}
+              onBrowseModels={() => navigate({ page: 'models', section: null })}
+            />
+          )}
           {page === 'models' && (
             <ModelsScreen
               data={data}
@@ -509,7 +553,10 @@ function JuniperApp() {
                 }
               >
                 <Icon name={item.icon} size={22} />
-                <span>{item.label}</span>
+                <span>
+                  {item.label}
+                  {item.beta && <span className="visually-hidden"> (Beta)</span>}
+                </span>
               </button>
             ))}
           </nav>
@@ -533,6 +580,10 @@ function JuniperApp() {
       <Onboarding
         open={hydrated && (!data.settings.onboardingComplete || replayingOnboarding)}
         onDone={completeOnboarding}
+        theme={data.settings.theme}
+        onTheme={(theme) =>
+          update((current) => ({ ...current, settings: { ...current.settings, theme } }))
+        }
       />
     </>
   )

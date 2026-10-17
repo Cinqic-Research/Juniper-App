@@ -51,6 +51,10 @@ describe('Juniper native startup', () => {
   function installTauri(handler: InvokeHandler) {
     commands = []
     invocations = []
+    Object.defineProperty(window, '__TAURI_EVENT_PLUGIN_INTERNALS__', {
+      configurable: true,
+      value: { unregisterListener: () => undefined },
+    })
     Object.defineProperty(window, '__TAURI_INTERNALS__', {
       configurable: true,
       value: {
@@ -114,7 +118,7 @@ describe('Juniper native startup', () => {
 
     expect(uncaught).toEqual([])
     expect(commands).toContain('list_models')
-    expect(container.textContent).toContain('Chats')
+    expect(container.textContent).toContain('Chat')
     const lastSave = invocations.filter((call) => call.command === 'save_app_data').at(-1)
     const savedModels = JSON.stringify(lastSave?.args ?? {})
     expect(savedModels).toContain('ollama-local:qwen3:8b')
@@ -151,6 +155,56 @@ describe('Juniper native startup', () => {
     expect(container.querySelector('[role="alert"]')?.textContent).toContain(
       'could not save your latest changes: DATABASE_ERROR: FOREIGN KEY constraint failed',
     )
+  })
+
+  it('does not acknowledge an approved memory until its snapshot is durable', async () => {
+    const change = {
+      id: 'outbox-1',
+      assistantId: 'assistant-1',
+      operation: 'save',
+      payload: { content: 'Remember the project codename.' },
+      createdAt: '2026-10-15T12:00:00Z',
+    }
+    const outbox = [change]
+    const saveAttempts: AppData[] = []
+    const durableSnapshots: AppData[] = []
+    installTauri((command, args) => {
+      if (command === 'load_app_data') return storedStateWithOllama()
+      if (command === 'memory_changes') return outbox
+      if (command === 'save_app_data') {
+        const snapshot = args?.data as AppData
+        saveAttempts.push(snapshot)
+        if (snapshot.memories.some((memory) => memory.id === 'memory-agent-outbox-1')) {
+          throw new Error('DATABASE_ERROR: simulated disk failure')
+        }
+        durableSnapshots.push(snapshot)
+      }
+      return null
+    })
+
+    await mountApp()
+
+    expect(outbox).toEqual([change])
+    expect(
+      saveAttempts.some((snapshot) =>
+        snapshot.memories.some((memory) => memory.id === 'memory-agent-outbox-1'),
+      ),
+    ).toBe(true)
+    expect(
+      durableSnapshots.some((snapshot) =>
+        snapshot.memories.some((memory) => memory.id === 'memory-agent-outbox-1'),
+      ),
+    ).toBe(false)
+    expect(commands).not.toContain('memory_changes_applied')
+    expect(
+      invocations.some(
+        (call) =>
+          call.command === 'save_app_data' &&
+          (call.args?.data as AppData).memories.some(
+            (memory) => memory.id === 'memory-agent-outbox-1',
+          ),
+      ),
+    ).toBe(true)
   })
 
   it('reports frontend readiness to the native host once stored state is hydrated', async () => {

@@ -65,6 +65,18 @@ export interface CatalogModel {
   supportedArchitectures: string[]
   tags: string[]
   releaseStatus: 'available' | 'deprecated'
+  originalRevision?: string
+  /** The license must be accepted in Juniper before downloading. */
+  licenseAcceptance?: 'required'
+  /** Pinned model license revision or recorded external-terms fingerprint bound to acceptance. */
+  licenseTermsRevision?: string
+  /** Dated Hugging Face download evidence; not a measure of quality or fit. */
+  popularity?: {
+    source: 'huggingface-downloads-30d'
+    snapshot: string
+    eligibleRank: number
+    downloads: number
+  }
   artifacts: CatalogArtifact[]
   /** Compatibility view; new code must use artifacts. */
   variants: CatalogArtifact[]
@@ -108,11 +120,46 @@ export interface ModelRecommendation {
   fit: ModelFit
   reasons: string[]
   storageSafe: boolean
+  artifactCompatible: boolean
+  artifactCompatibilityKnown: boolean
+  memory: ArtifactMemoryEstimate
+}
+
+/**
+ * Returns a persistence token only when the catalog identifies a stable
+ * license revision. A reported hash without the source bytes cannot prove the
+ * contents of a mutable external terms page, so it must not authorize future
+ * downloads without another review.
+ */
+export function licenseAcceptanceValue(
+  model: Pick<CatalogModel, 'license' | 'licenseUrl' | 'licenseTermsRevision'>,
+): string | null {
+  if (model.licenseTermsRevision?.includes('-sha256-')) return null
+  return JSON.stringify([model.license, model.licenseUrl, model.licenseTermsRevision])
+}
+
+export interface ArtifactMemoryEstimate {
+  minimum: number
+  recommended: number
 }
 
 export const MODEL_CATALOG: ModelCatalog = parseCatalog(catalogJson)
 
-const STORAGE_HEADROOM_BYTES = 512 * 1024 * 1024
+const STORAGE_HEADROOM_BYTES = 1024 * 1024 * 1024
+const GIB = 1024 ** 3
+
+export function artifactMemoryEstimate(
+  model: CatalogModel,
+  artifact: CatalogArtifact,
+): ArtifactMemoryEstimate {
+  const billions = model.parameterCount / 1e9
+  const hybrid = ['granitehybrid', 'nemotron_h', 'lfm2'].includes(model.architecture)
+  const kvAtFullContext = Math.max(0.1, billions * (hybrid ? 0.06 : 0.25)) * GIB
+  return {
+    minimum: Math.round(artifact.sizeBytes + kvAtFullContext / 4 + 0.5 * GIB),
+    recommended: Math.round(artifact.sizeBytes + kvAtFullContext + 1.5 * GIB),
+  }
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -271,6 +318,7 @@ export function parseCatalog(value: unknown): ModelCatalog {
       typeof raw.architecture !== 'string' ||
       typeof raw.sourceRepository !== 'string' ||
       typeof raw.license !== 'string' ||
+      typeof raw.licenseUrl !== 'string' ||
       typeof raw.chatTemplate !== 'string' ||
       !isStringArray(raw.useCases) ||
       !isStringArray(raw.supportedArchitectures) ||
@@ -282,6 +330,23 @@ export function parseCatalog(value: unknown): ModelCatalog {
       typeof raw.minimumStorageBytes !== 'number'
     ) {
       throw new Error(`Catalog entry ${raw.id} is missing required metadata.`)
+    }
+    if (raw.licenseAcceptance === 'required') {
+      const revision = raw.licenseTermsRevision
+      const pinnedRepositoryLicense =
+        typeof raw.originalModel === 'string' &&
+        typeof raw.originalRevision === 'string' &&
+        raw.licenseUrl.startsWith(
+          `${raw.originalModel.replace(/\/+$/, '')}/blob/${raw.originalRevision}/`,
+        ) &&
+        revision === raw.originalRevision
+      const hashedExternalTerms =
+        typeof revision === 'string' && /-sha256-[a-f0-9]{64}$/.test(revision)
+      if (!pinnedRepositoryLicense && !hashedExternalTerms) {
+        throw new Error(
+          `Catalog entry ${raw.id} must identify pinned or fingerprinted terms before requiring acceptance.`,
+        )
+      }
     }
     const rawArtifacts =
       Number(value.version) === 1
@@ -350,58 +415,79 @@ function normalizedArchitecture(architecture: string): string {
   }
 }
 
-function artifactSupportsDevice(artifact: CatalogArtifact, device: DeviceCapabilities): boolean {
+function artifactDeviceSupport(
+  artifact: CatalogArtifact,
+  device: DeviceCapabilities,
+): { compatible: boolean; known: boolean } {
   const architecture = normalizedArchitecture(device.architecture)
   const platform = device.os.toLowerCase()
-  return (
-    (artifact.platforms.includes(platform) ||
-      (artifact.platforms.includes('desktop') && ['linux', 'windows'].includes(platform))) &&
-    (artifact.architectures.includes(device.architecture) ||
-      artifact.architectures.includes(architecture) ||
-      device.architecture === 'unknown')
-  )
+  const platformCompatible =
+    artifact.platforms.includes(platform) ||
+    (artifact.platforms.includes('desktop') && ['linux', 'windows'].includes(platform))
+  if (!platformCompatible) return { compatible: false, known: true }
+  if (!device.architecture || device.architecture === 'unknown') {
+    return { compatible: false, known: false }
+  }
+  const architectureCompatible =
+    artifact.architectures.includes(device.architecture) ||
+    artifact.architectures.includes(architecture)
+  return { compatible: architectureCompatible, known: true }
+}
+
+function artifactSupportsDevice(artifact: CatalogArtifact, device: DeviceCapabilities): boolean {
+  return artifactDeviceSupport(artifact, device).compatible
 }
 
 export function recommendModel(
   model: CatalogModel,
   device: DeviceCapabilities,
+  artifactId?: string,
 ): ModelRecommendation {
   const artifact =
-    model.artifacts.find((item) => artifactSupportsDevice(item, device)) ?? selectedArtifact(model)
+    model.artifacts.find((item) => item.id === artifactId) ??
+    model.artifacts.find((item) => artifactSupportsDevice(item, device)) ??
+    selectedArtifact(model)
+  const artifactSupport = artifactDeviceSupport(artifact, device)
+  const artifactCompatible = artifactSupport.compatible
+  const memory = artifactMemoryEstimate(model, artifact)
   const budget = memoryBudget(device)
   const reasons: string[] = []
   let score = 45
   let storageSafe = true
-  if (!artifactSupportsDevice(artifact, device) && device.architecture !== 'unknown') {
+  if (!artifactCompatible) {
     return {
       model,
       artifact,
       variant: artifact,
       score: 0,
       fit: 'not-recommended',
-      reasons: [`${device.architecture} is not listed for the ${artifact.runtimeId} artifact`],
-      storageSafe: false,
+      reasons: [
+        artifactSupport.known
+          ? `${device.architecture} is not listed for the ${artifact.runtimeId} artifact`
+          : `Device architecture could not be determined, so compatibility cannot be confirmed for the ${artifact.runtimeId} artifact`,
+      ],
+      storageSafe: true,
+      artifactCompatible,
+      artifactCompatibilityKnown: artifactSupport.known,
+      memory,
     }
   }
   if (budget === undefined) {
     reasons.push('Available memory could not be measured')
     score -= 15
-  } else if (budget >= model.recommendedRamBytes) {
+  } else if (budget >= memory.recommended) {
     score += 35
     reasons.push(
       `${formatBytes(device.availableMemoryBytes ?? device.totalMemoryBytes)} available memory leaves headroom`,
     )
-  } else if (budget >= model.minimumRecommendedRamBytes) {
+  } else if (budget >= memory.minimum) {
     score += 18
     reasons.push('Fits the measured memory budget with moderate headroom')
   } else {
     score -= 35
     reasons.push('Available memory is below the comfortable range')
   }
-  const requiredStorage = Math.max(
-    model.minimumStorageBytes,
-    artifact.sizeBytes + STORAGE_HEADROOM_BYTES,
-  )
+  const requiredStorage = artifact.sizeBytes + STORAGE_HEADROOM_BYTES
   if (device.freeStorageBytes === undefined) {
     reasons.push('Free storage could not be measured')
     score -= 10
@@ -440,6 +526,9 @@ export function recommendModel(
     fit,
     reasons,
     storageSafe,
+    artifactCompatible,
+    artifactCompatibilityKnown: artifactSupport.known,
+    memory,
   }
 }
 
@@ -454,6 +543,10 @@ export function recommendModels(
       (left, right) =>
         right.score - left.score || left.artifact.sizeBytes - right.artifact.sizeBytes,
     )
+}
+
+export function isRecommendedModel(recommendation: ModelRecommendation): boolean {
+  return recommendation.artifactCompatible && recommendation.fit !== 'not-recommended'
 }
 
 export function runtimeOptionsForModel(

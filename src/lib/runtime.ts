@@ -223,6 +223,7 @@ export async function importNativeJuniper1Model(
 
 export async function downloadManagedModel(
   catalogId: string,
+  artifactId: string,
   onProgress: (progress: ModelPullProgress) => void,
   signal: AbortSignal,
 ): Promise<void> {
@@ -233,12 +234,28 @@ export async function downloadManagedModel(
   const cancel = () => void cancelManagedModel(requestId)
   signal.addEventListener('abort', cancel, { once: true })
   try {
-    await invoke('download_managed_model', { catalogId, requestId })
+    await invoke('download_managed_model', { catalogId, artifactId, requestId })
     if (signal.aborted) throw abortError()
   } finally {
     signal.removeEventListener('abort', cancel)
     await unlisten()
   }
+}
+
+/**
+ * Whether the native host holds the user's acceptance of this model's license
+ * (true when the catalog requires none). The host refuses downloads and
+ * imports without it; this only decides whether to show the dialog.
+ */
+export async function modelLicenseAccepted(catalogId: string): Promise<boolean> {
+  if (!runningInTauri) return false
+  return invoke<boolean>('model_license_accepted', { catalogId })
+}
+
+/** Records acceptance in the native host after the user confirmed the dialog. */
+export async function acceptModelLicense(catalogId: string): Promise<void> {
+  if (!runningInTauri) throw new Error('Model licenses are recorded by the Juniper native runtime.')
+  await invoke('accept_model_license', { catalogId })
 }
 
 export async function cancelManagedModel(requestId: string): Promise<void> {
@@ -252,6 +269,7 @@ export async function cancelManagedModel(requestId: string): Promise<void> {
 export async function importManagedModel(
   selectionId: string,
   catalogId: string,
+  artifactId: string,
   onProgress: (progress: ModelPullProgress) => void,
   signal: AbortSignal,
 ): Promise<void> {
@@ -262,7 +280,7 @@ export async function importManagedModel(
   const cancel = () => void cancelManagedModel(requestId)
   signal.addEventListener('abort', cancel, { once: true })
   try {
-    await invoke('import_managed_model', { selectionId, catalogId, requestId })
+    await invoke('import_managed_model', { selectionId, catalogId, artifactId, requestId })
     if (signal.aborted) throw abortError()
   } finally {
     signal.removeEventListener('abort', cancel)
@@ -281,9 +299,10 @@ export async function unloadLocalRuntime(): Promise<boolean> {
   return invoke<boolean>('unload_local_runtime')
 }
 
-export async function deleteManagedModel(catalogId: string): Promise<void> {
+/** Removes one downloaded artifact, or every artifact of the model. */
+export async function deleteManagedModel(catalogId: string, artifactId?: string): Promise<void> {
   if (!runningInTauri) throw new Error('Model management requires the Juniper native runtime.')
-  await invoke('delete_managed_model', { catalogId })
+  await invoke('delete_managed_model', { catalogId, artifactId: artifactId ?? null })
 }
 
 export async function deleteProviderModel(
@@ -395,7 +414,7 @@ export async function deleteProviderCredential(reference: string): Promise<void>
 export async function getDiagnostics(): Promise<Record<string, string>> {
   if (runningInTauri) return invoke<Record<string, string>>('system_info')
   return {
-    application: 'Juniper 0.3.0-rc.33',
+    application: 'Juniper 0.4.0-alpha.1',
     runtime: browserPreviewEnabled
       ? 'Browser preview (development only)'
       : 'Native runtime unavailable',

@@ -211,9 +211,30 @@ describe('browser-preview storage', () => {
     ['http://169.254.3.4:11434', 'local-network'],
     ['http://[fd00::1234]:11434', 'local-network'],
     ['http://[fe80::1234]:11434', 'local-network'],
+    ['http://[::ffff:127.0.0.1]:11434', 'on-device'],
+    ['http://[::ffff:192.168.1.2]:11434', 'local-network'],
     ['https://api.example.test', 'remote'],
     ['not a URL', 'unknown'],
   ])('classifies provider route %s as %s', (url, expected) => {
     expect(inferTransportLocation(url)).toBe(expected)
+  })
+
+  it('recomputes imported provider and model locality from the current provider URL', () => {
+    const data = rc32StoredState()
+    const provider = data.providers.find((item) => item.id === 'ollama-local')!
+    const model = data.models.find((item) => item.providerId === provider.id)!
+    provider.baseUrl = 'https://api.example.test/v1'
+    provider.locality = 'local'
+    provider.transportLocation = 'on-device'
+    model.locality = 'local'
+    model.executionLocation = 'on-device'
+
+    const normalized = normalizeAppData(data)
+
+    const normalizedProvider = normalized.providers.find((item) => item.id === provider.id)
+    expect(normalizedProvider?.transportLocation).toBe('remote')
+    expect(normalizedProvider?.locality).toBe('remote')
+    expect(normalized.models.find((item) => item.id === model.id)?.executionLocation).toBe('remote')
+    expect(normalized.models.find((item) => item.id === model.id)?.locality).toBe('remote')
   })
 })

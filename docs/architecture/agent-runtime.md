@@ -1,0 +1,202 @@
+# Agent runtime (Beta)
+
+Agent sits beside Chat. Chat is a conversation. Agent hands a goal to a
+personal agent, which works through it with tools the user allowed and shows
+each step. The decision record is [ADR 0025](../adr/0025-agent-runtime.md).
+This page describes how the runtime works.
+
+## Ownership
+
+| Part                                                        | Owner                                                             |
+| ----------------------------------------------------------- | ----------------------------------------------------------------- |
+| Task scheduling, lifecycle, budgets, retries                | Rust (`src-tauri/src/agent/runner.rs`)                            |
+| Tool dispatch, permission decisions, approvals, grants      | Rust (`agent/tools.rs`, `agent/policy.rs`)                        |
+| Durable state: tasks, events, actions, approvals, artifacts | Rust, SQLite schema v6 (`agent/store.rs`)                         |
+| Agent identity: name, avatar, personality, model, memory    | The existing assistant profile, edited in Settings › Assistants   |
+| Agent working settings: tools, skills, autonomy, budgets    | A native agent profile per assistant (`agent_profiles`, schema 1) |
+| Presentation and user intents                               | React (`src/app/AgentScreen.tsx`, `AgentManage.tsx`)              |
+
+The interface sends only intents: start, steer, answer, approve or deny,
+pause, resume, cancel, and stop all. The host checks each intent against stored
+state and the transition model. A stale interface snapshot cannot write to the
+agent tables, because `save_app_data` rebuilds only the snapshot projections and
+the agent tables hold no foreign keys to them.
+
+## Task states
+
+```text
+queued ──► running ──► completed | failed | cancelled
+  ▲  │        │
+  │  │        ├──► waiting-input ────┐
+  │  │        ├──► waiting-approval ─┤──► queued (answered / decided)
+  │  │        ├──► paused ───────────┤──► queued (resumed)
+  │  │        └──► interrupted ──────┘    (restart or global stop)
+  │  └──► paused | cancelled
+  └── completed | failed (a follow-up from the user reopens the task)
+```
+
+`TaskStatus::can_become` enforces these transitions, and every change is
+recorded as an event. Other conditions are not separate states:
+
+- A parent waiting for subtasks stays `queued` with `pending.wait = children`.
+  The worker does not pick it until every child has finished.
+- A task waiting for a busy local model stays `queued` with `usage.notBefore`.
+
+**Completed** means the model finished with a final answer and the host
+accepted it. If the answer cites a source the task never retrieved, the
+citation is listed under `result.unverified`. A task that runs out of budget
+ends **failed**, with `outcome: "partial"`, and keeps what it produced.
+
+A model's claim is not success. Before accepting a final answer the host
+checks it for asserted effects — a file saved or edited, a document saved, a
+memory saved, something sent, posted or uploaded, a download, a schedule — and
+compares each with the succeeded actions in the task tree (`workspace.write`
+for files in a project, `artifact.create` or `workspace.write` for documents,
+`memory.save`, `web.fetch`, `schedule.create`; a plugin tool can back any
+claim except memories and schedules). A claim with no matching succeeded
+action ends the task with `outcome: "needs-review"`, a status reason naming
+the claim, `claim: …` entries in `result.unverified`, a "Needs review" status
+event and inbox item, and a **Needs review** label in the interface; it is
+never shown as Completed. The lifecycle state stays the terminal `completed`
+(so schedules, follow-ups and the database constraint are unchanged); the
+outcome is what the interface reports. The check is a deliberate heuristic:
+past-tense effect verbs (saved, wrote, edited, put, placed, generated,
+exported, copied, sent, posted, pushed, downloaded, scheduled, set a reminder,
+remembered, "is now in", …) in sentences that are not negated, hedged or
+questions, and that speak for the answer itself (first person, a sentence that
+starts with the verb, or a completed passive such as "has been saved to your
+folder"); sentences reporting a third party, or a passive carrying a citation
+marker such as `[S1]`, are not claims. A named project file (`src/main.rs`, or
+an edited `config.toml`) needs a `workspace.write`; a Juniper document backs a
+named file only when it has exactly that file name. An answer phrased in a way
+the check does not recognise can still end as Completed; the interface's beta
+note says so, and the activity list shows what actually ran.
+
+## The loop
+
+Each model step builds its prompt the same way:
+
+1. Host instructions: identity, constitution rules, runtime facts (model,
+   where it runs, time zone, granted folders, offered tools), the untrusted-data
+   rule, and how to work.
+2. Below those, the user's agent profile text and the project instructions,
+   each labelled as unable to override the host.
+3. Curated memories.
+4. The task transcript.
+
+The model returns either an answer or tool calls. Calls are processed in order.
+For each call the host does the following:
+
+1. Record an action as `proposed`. A reused call id is refused here.
+2. **Prepare** it: check the arguments against the host's schema, resolve its
+   scope, and compute the target state and a host-written preview (for example,
+   a unified diff of a file write).
+3. **Decide** it with `policy::decide`. The tool's risk comes from the host's
+   registry, never from the model, a skill, or a plugin.
+   - Safe tools and reads in granted folders run without asking. The folder
+     grant is checked in the database at each call, so removing a folder stops
+     a running task from using it.
+   - Writes, network use, sandboxed code, and plugin calls ask unless a matching
+     standing grant exists.
+   - Memory changes always ask, one call at a time.
+4. **Bind** an approval to `sha256(tool, canonical arguments, target)`. On
+   resume, the host prepares the call again. If anything changed (the file's
+   version, the arguments, or a plugin's tool set), the approval is stale and
+   the user is asked again.
+5. Mark the action `started`, execute it, and record the host result.
+
+The transcript is committed after every model turn and every tool result.
+
+**Restart recovery.** On startup:
+
+- Running tasks become `interrupted`, and `started` actions become `uncertain`.
+- A committed schedule claim with no linked task is dispatched again; scheduled
+  task creation is idempotent by schedule-run id, and reminders commit their
+  inbox item and run completion together.
+- A delegated child and its parent's durable wait cursor commit together, so a
+  crash cannot leave a queued child that the parent does not know about.
+- On resume, a `workspace.write` is reconciled by comparing the file with the
+  intended content.
+- Any other uncertain action is reported to the model as "outcome unknown". It
+  is never silently repeated.
+
+## Budgets
+
+| Limit                         | Default | Ceiling   |
+| ----------------------------- | ------- | --------- |
+| Model steps                   | 16      | 64        |
+| Tool calls                    | 48      | 200       |
+| Tokens (estimated if unknown) | 120,000 | 1,000,000 |
+| Active time                   | 30 min  | 4 h       |
+| Documents                     | 10      | 50        |
+| Subtasks per task / depth     | 4 / 2   | 8 / 2     |
+| Retries per failure cause     | 2       | 5         |
+
+Other per-turn limits:
+
+- At most 8 tool calls are processed per model turn.
+- The active-time budget bounds model and tool calls and is checked between
+  calls. If a call times out, its outcome is recorded as uncertain and the
+  remaining calls from that model turn do not run.
+- Tool results are cut to 24,000 characters.
+- Older tool results are shortened (and labelled as shortened) once the
+  transcript passes 60,000 characters.
+
+Chat's own four-round tool loop is unchanged.
+
+## Delegation
+
+`agent.delegate` creates a child task with a role: researcher, file analyst,
+implementer, or reviewer.
+
+- **Tools.** The child gets the parent's offered tools intersected with the
+  role's list. A reviewer has no write tools.
+- **Budget.** Each child is capped at half of the parent's remaining steps,
+  tool calls, tokens, time, and artifact allowance. When joined, the parent is
+  charged the child's actual use in each dimension; delegation cannot enlarge
+  the parent's limits.
+- **Context.** The child sees only the objective and the context the parent
+  passed, framed as data. It does not see the parent's conversation.
+- **Recovery.** Creating the child and moving the parent to its child-wait
+  cursor are one transaction.
+- **Execution.** Children run on the same single worker, so local inference
+  stays one at a time.
+- **Joining.** The parent resumes when every child has finished and receives
+  their structured reports as a tool result.
+- **Cancellation.** Cancelling a parent cancels every unfinished descendant.
+
+## Scheduling
+
+Schedules store a rule, an IANA time zone, and the next run as a UTC instant.
+They run **while Juniper is running**; there is no background service.
+
+- **Time zones and DST.** A time skipped by a DST change runs at the first
+  minute after the gap. A time that occurs twice runs once.
+- **Claiming.** Each due run is claimed with a compare-and-swap on `next_run_at`
+  and recorded under a unique (schedule, scheduled time, attempt) key.
+- **Dispatch recovery.** Committed `started` runs without a linked task are
+  retried by the worker after restart, so the claim/dispatch gap does not lose
+  an occurrence.
+- **Process ownership.** One Juniper process may own an Agent data directory at
+  a time. A native file lock prevents another instance from recovering or
+  mutating the same task database concurrently.
+- **Missed runs.** After the computer was off, only the latest missed run runs
+  (policy `run-once`), or it is skipped (`skip`). A backlog is never replayed.
+- **Overlap.** A run is skipped while the previous one is unfinished.
+- **Retries.** A failed run is retried only if it changed nothing outside
+  Juniper.
+- **Reminders.** A reminder goes to the inbox without loading a model.
+- **Permissions.** Scheduled tasks run under the agent's current permissions.
+  Anything that needs approval waits, and an approval request expires after
+  72 hours without ever becoming an allow.
+
+## What Beta means here
+
+- **Quality depends on the model.** A model without measured tool-use evidence
+  is not offered for agent tasks unless the user allows it explicitly, and its
+  tasks say so.
+- **Platforms.** Desktop has project folders. Linux also has sandboxed code;
+  Windows and Android do not. On Android, agent tasks need a connected model,
+  because the on-device engine has no tool calling.
+- **Notifications** go to the Agent inbox. Operating-system notifications are
+  not implemented.

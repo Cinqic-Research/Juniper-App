@@ -1,0 +1,1716 @@
+[
+  {
+    "releaseId": "Qwen/Qwen3-0.6B",
+    "displayName": "Qwen3-0.6B",
+    "organization": "Alibaba Qwen",
+    "family": "Qwen3",
+    "parameterCount": 751632384,
+    "parameterCountSource": "original repo HF API safetensors.total",
+    "architecture": "qwen3",
+    "architectureSource": "HF API gguf.architecture (parsed from GGUF header general.architecture)",
+    "originalRepo": "Qwen/Qwen3-0.6B",
+    "originalRevision": "c1899de289a04d12100db370d81485cdf75e47ca",
+    "originalGated": false,
+    "license": "apache-2.0",
+    "licenseUrl": "https://huggingface.co/Qwen/Qwen3-0.6B/blob/c1899de289a04d12100db370d81485cdf75e47ca/LICENSE",
+    "ggufRepo": "Qwen/Qwen3-0.6B-GGUF",
+    "ggufRevision": "23749fefcc72300e3a2ad315e1317431b06b590a",
+    "quantizer": "Qwen",
+    "ggufRepoLicense": "apache-2.0",
+    "ggufRepoGated": false,
+    "contextLength": 40960,
+    "contextLengthSource": "original config.json max_position_embeddings",
+    "artifacts": [
+      {
+        "quantization": "Q8_0",
+        "default": true,
+        "files": [
+          {
+            "path": "Qwen3-0.6B-Q8_0.gguf",
+            "sizeBytes": 639446688,
+            "sha256": "9465e63a22add5354d9bb4b99e90117043c7124007664907259bd16d043bb031",
+            "url": "https://huggingface.co/Qwen/Qwen3-0.6B-GGUF/resolve/23749fefcc72300e3a2ad315e1317431b06b590a/Qwen3-0.6B-Q8_0.gguf"
+          }
+        ],
+        "totalBytes": 639446688
+      }
+    ],
+    "chatTemplateNote": "embedded GGUF tokenizer.chat_template present (per HF API gguf metadata); hybrid thinking model (enable_thinking / /think /no_think switches)",
+    "notes": [
+      "config max_position_embeddings=40960; model card states 32,768 native, 131,072 with YaRN",
+      "official GGUF from the model publisher",
+      "official repo ships only Q8_0; no alternative quant in official repo"
+    ],
+    "blockers": [],
+    "complete": true
+  },
+  {
+    "releaseId": "Qwen/Qwen3-1.7B",
+    "displayName": "Qwen3-1.7B",
+    "organization": "Alibaba Qwen",
+    "family": "Qwen3",
+    "parameterCount": 2031739904,
+    "parameterCountSource": "original repo HF API safetensors.total",
+    "architecture": "qwen3",
+    "architectureSource": "HF API gguf.architecture (parsed from GGUF header general.architecture)",
+    "originalRepo": "Qwen/Qwen3-1.7B",
+    "originalRevision": "70d244cc86ccca08cf5af4e1e306ecf908b1ad5e",
+    "originalGated": false,
+    "license": "apache-2.0",
+    "licenseUrl": "https://huggingface.co/Qwen/Qwen3-1.7B/blob/70d244cc86ccca08cf5af4e1e306ecf908b1ad5e/LICENSE",
+    "ggufRepo": "Qwen/Qwen3-1.7B-GGUF",
+    "ggufRevision": "90862c4b9d2787eaed51d12237eafdfe7c5f6077",
+    "quantizer": "Qwen",
+    "ggufRepoLicense": "apache-2.0",
+    "ggufRepoGated": false,
+    "contextLength": 40960,
+    "contextLengthSource": "original config.json max_position_embeddings",
+    "artifacts": [
+      {
+        "quantization": "Q8_0",
+        "default": true,
+        "files": [
+          {
+            "path": "Qwen3-1.7B-Q8_0.gguf",
+            "sizeBytes": 1834426016,
+            "sha256": "061b54daade076b5d3362dac252678d17da8c68f07560be70818cace6590cb1a",
+            "url": "https://huggingface.co/Qwen/Qwen3-1.7B-GGUF/resolve/90862c4b9d2787eaed51d12237eafdfe7c5f6077/Qwen3-1.7B-Q8_0.gguf"
+          }
+        ],
+        "totalBytes": 1834426016
+      }
+    ],
+    "chatTemplateNote": "embedded GGUF tokenizer.chat_template present (per HF API gguf metadata); hybrid thinking model (enable_thinking / /think /no_think switches)",
+    "notes": [
+      "config max_position_embeddings=40960; model card states 32,768 native, 131,072 with YaRN",
+      "official GGUF from the model publisher",
+      "official repo ships only Q8_0 (no Q4_K_M); Q8_0 chosen as default; unsloth/ggml-org/bartowski offer smaller quants"
+    ],
+    "blockers": [],
+    "complete": true
+  },
+  {
+    "releaseId": "Qwen/Qwen3-4B",
+    "displayName": "Qwen3-4B",
+    "organization": "Alibaba Qwen",
+    "family": "Qwen3",
+    "parameterCount": 4022468096,
+    "parameterCountSource": "original repo HF API safetensors.total",
+    "architecture": "qwen3",
+    "architectureSource": "HF API gguf.architecture (parsed from GGUF header general.architecture)",
+    "originalRepo": "Qwen/Qwen3-4B",
+    "originalRevision": "1cfa9a7208912126459214e8b04321603b3df60c",
+    "originalGated": false,
+    "license": "apache-2.0",
+    "licenseUrl": "https://huggingface.co/Qwen/Qwen3-4B/blob/1cfa9a7208912126459214e8b04321603b3df60c/LICENSE",
+    "ggufRepo": "Qwen/Qwen3-4B-GGUF",
+    "ggufRevision": "bc640142c66e1fdd12af0bd68f40445458f3869b",
+    "quantizer": "Qwen",
+    "ggufRepoLicense": "apache-2.0",
+    "ggufRepoGated": false,
+    "contextLength": 40960,
+    "contextLengthSource": "original config.json max_position_embeddings",
+    "artifacts": [
+      {
+        "quantization": "Q4_K_M",
+        "default": true,
+        "files": [
+          {
+            "path": "Qwen3-4B-Q4_K_M.gguf",
+            "sizeBytes": 2497280256,
+            "sha256": "7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5",
+            "url": "https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/bc640142c66e1fdd12af0bd68f40445458f3869b/Qwen3-4B-Q4_K_M.gguf"
+          }
+        ],
+        "totalBytes": 2497280256
+      },
+      {
+        "quantization": "Q8_0",
+        "default": false,
+        "files": [
+          {
+            "path": "Qwen3-4B-Q8_0.gguf",
+            "sizeBytes": 4280404704,
+            "sha256": "8c2f07f26af9747e41988551106f149b03eb9b5cb6df636027b6bf6278473300",
+            "url": "https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/bc640142c66e1fdd12af0bd68f40445458f3869b/Qwen3-4B-Q8_0.gguf"
+          }
+        ],
+        "totalBytes": 4280404704
+      }
+    ],
+    "chatTemplateNote": "embedded GGUF tokenizer.chat_template present (per HF API gguf metadata); hybrid thinking model (enable_thinking / /think /no_think switches)",
+    "notes": [
+      "config max_position_embeddings=40960; model card states 32,768 native, 131,072 with YaRN",
+      "official GGUF from the model publisher"
+    ],
+    "blockers": [],
+    "complete": true
+  },
+  {
+    "releaseId": "Qwen/Qwen3-8B",
+    "displayName": "Qwen3-8B",
+    "organization": "Alibaba Qwen",
+    "family": "Qwen3",
+    "parameterCount": 8190735360,
+    "parameterCountSource": "original repo HF API safetensors.total",
+    "architecture": "qwen3",
+    "architectureSource": "HF API gguf.architecture (parsed from GGUF header general.architecture)",
+    "originalRepo": "Qwen/Qwen3-8B",
+    "originalRevision": "b968826d9c46dd6066d109eabc6255188de91218",
+    "originalGated": false,
+    "license": "apache-2.0",
+    "licenseUrl": "https://huggingface.co/Qwen/Qwen3-8B/blob/b968826d9c46dd6066d109eabc6255188de91218/LICENSE",
+    "ggufRepo": "Qwen/Qwen3-8B-GGUF",
+    "ggufRevision": "7c41481f57cb95916b40956ab2f0b139b296d974",
+    "quantizer": "Qwen",
+    "ggufRepoLicense": "apache-2.0",
+    "ggufRepoGated": false,
+    "contextLength": 40960,
+    "contextLengthSource": "original config.json max_position_embeddings",
+    "artifacts": [
+      {
+        "quantization": "Q4_K_M",
+        "default": true,
+        "files": [
+          {
+            "path": "Qwen3-8B-Q4_K_M.gguf",
+            "sizeBytes": 5027783488,
+            "sha256": "d98cdcbd03e17ce47681435b5150e34c1417f50b5c0019dd560e4882c5745785",
+            "url": "https://huggingface.co/Qwen/Qwen3-8B-GGUF/resolve/7c41481f57cb95916b40956ab2f0b139b296d974/Qwen3-8B-Q4_K_M.gguf"
+          }
+        ],
+        "totalBytes": 5027783488
+      },
+      {
+        "quantization": "Q8_0",
+        "default": false,
+        "files": [
+          {
+            "path": "Qwen3-8B-Q8_0.gguf",
+            "sizeBytes": 8709518112,
+            "sha256": "408b955510e196121c1c375201744783b5c9a43c7956d73fc78df54c66e883d6",
+            "url": "https://huggingface.co/Qwen/Qwen3-8B-GGUF/resolve/7c41481f57cb95916b40956ab2f0b139b296d974/Qwen3-8B-Q8_0.gguf"
+          }
+        ],
+        "totalBytes": 8709518112
+      }
+    ],
+    "chatTemplateNote": "embedded GGUF tokenizer.chat_template present (per HF API gguf metadata); hybrid thinking model (enable_thinking / /think /no_think switches)",
+    "notes": [
+      "config max_position_embeddings=40960; model card states 32,768 native, 131,072 with YaRN",
+      "official GGUF from the model publisher"
+    ],
+    "blockers": [],
+    "complete": true
+  },
+  {
+    "releaseId": "Qwen/Qwen3-14B",
+    "displayName": "Qwen3-14B",
+    "organization": "Alibaba Qwen",
+    "family": "Qwen3",
+    "parameterCount": 14768307200,
+    "parameterCountSource": "original repo HF API safetensors.total",
+    "architecture": "qwen3",
+    "architectureSource": "HF API gguf.architecture (parsed from GGUF header general.architecture)",
+    "originalRepo": "Qwen/Qwen3-14B",
+    "originalRevision": "40c069824f4251a91eefaf281ebe4c544efd3e18",
+    "originalGated": false,
+    "license": "apache-2.0",
+    "licenseUrl": "https://huggingface.co/Qwen/Qwen3-14B/blob/40c069824f4251a91eefaf281ebe4c544efd3e18/LICENSE",
+    "ggufRepo": "Qwen/Qwen3-14B-GGUF",
+    "ggufRevision": "530227a7d994db8eca5ab5ced2fb692b614357fd",
+    "quantizer": "Qwen",
+    "ggufRepoLicense": "apache-2.0",
+    "ggufRepoGated": false,
+    "contextLength": 40960,
+    "contextLengthSource": "original config.json max_position_embeddings",
+    "artifacts": [
+      {
+        "quantization": "Q4_K_M",
+        "default": true,
+        "files": [
+          {
+            "path": "Qwen3-14B-Q4_K_M.gguf",
+            "sizeBytes": 9001752960,
+            "sha256": "500a8806e85ee9c83f3ae08420295592451379b4f8cf2d0f41c15dffeb6b81f0",
+            "url": "https://huggingface.co/Qwen/Qwen3-14B-GGUF/resolve/530227a7d994db8eca5ab5ced2fb692b614357fd/Qwen3-14B-Q4_K_M.gguf"
+          }
+        ],
+        "totalBytes": 9001752960
+      },
+      {
+        "quantization": "Q5_K_M",
+        "default": false,
+        "files": [
+          {
+            "path": "Qwen3-14B-Q5_K_M.gguf",
+            "sizeBytes": 10514569568,
+            "sha256": "e7c9aba1129ca2936be9eca01419d9f86af40e08caa01230d5574b34d08e3e31",
+            "url": "https://huggingface.co/Qwen/Qwen3-14B-GGUF/resolve/530227a7d994db8eca5ab5ced2fb692b614357fd/Qwen3-14B-Q5_K_M.gguf"
+          }
+        ],
+        "totalBytes": 10514569568
+      }
+    ],
+    "chatTemplateNote": "embedded GGUF tokenizer.chat_template present (per HF API gguf metadata); hybrid thinking model (enable_thinking / /think /no_think switches)",
+    "notes": [
+      "config max_position_embeddings=40960; model card states 32,768 native, 131,072 with YaRN",
+      "official GGUF from the model publisher"
+    ],
+    "blockers": [],
+    "complete": true
+  },
+  {
+    "releaseId": "Qwen/Qwen3-4B-Instruct-2507",
+    "displayName": "Qwen3-4B-Instruct-2507",
+    "organization": "Alibaba Qwen",
+    "family": "Qwen3",
+    "parameterCount": 4022468096,
+    "parameterCountSource": "original repo HF API safetensors.total",
+    "architecture": "qwen3",
+    "architectureSource": "HF API gguf.architecture (parsed from GGUF header general.architecture)",
+    "originalRepo": "Qwen/Qwen3-4B-Instruct-2507",
+    "originalRevision": "cdbee75f17c01a7cc42f958dc650907174af0554",
+    "originalGated": false,
+    "license": "apache-2.0",
+    "licenseUrl": "https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507/blob/cdbee75f17c01a7cc42f958dc650907174af0554/LICENSE",
+    "ggufRepo": "unsloth/Qwen3-4B-Instruct-2507-GGUF",
+    "ggufRevision": "a06e946bb6b655725eafa393f4a9745d460374c9",
+    "quantizer": "unsloth",
+    "ggufRepoLicense": "apache-2.0",
+    "ggufRepoGated": false,
+    "contextLength": 262144,
+    "contextLengthSource": "original config.json max_position_embeddings",
+    "artifacts": [
+      {
+        "quantization": "Q4_K_M",
+        "default": true,
+        "files": [
+          {
+            "path": "Qwen3-4B-Instruct-2507-Q4_K_M.gguf",
+            "sizeBytes": 2497281120,
+            "sha256": "3605803b982cb64aead44f6c1b2ae36e3acdb41d8e46c8a94c6533bc4c67e597",
+            "url": "https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF/resolve/a06e946bb6b655725eafa393f4a9745d460374c9/Qwen3-4B-Instruct-2507-Q4_K_M.gguf"
+          }
+        ],
+        "totalBytes": 2497281120
+      },
+      {
+        "quantization": "Q8_0",
+        "default": false,
+        "files": [
+          {
+            "path": "Qwen3-4B-Instruct-2507-Q8_0.gguf",
+            "sizeBytes": 4280405600,
+            "sha256": "391c1e410fd9f4cf2de2b510273b56a84c19ce18f4fa3bfb3774031dac4ef068",
+            "url": "https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF/resolve/a06e946bb6b655725eafa393f4a9745d460374c9/Qwen3-4B-Instruct-2507-Q8_0.gguf"
+          }
+        ],
+        "totalBytes": 4280405600
+      }
+    ],
+    "chatTemplateNote": "embedded GGUF tokenizer.chat_template present (per HF API gguf metadata)",
+    "notes": ["third-party quantization by unsloth (not the model publisher)"],
+    "blockers": [],
+    "complete": true
+  },
+  {
+    "releaseId": "Qwen/Qwen2.5-0.5B-Instruct",
+    "displayName": "Qwen2.5-0.5B-Instruct",
+    "organization": "Alibaba Qwen",
+    "family": "Qwen2.5",
+    "parameterCount": 494032768,
+    "parameterCountSource": "original repo HF API safetensors.total",
+    "architecture": "qwen2",
+    "architectureSource": "HF API gguf.architecture (parsed from GGUF header general.architecture)",
+    "originalRepo": "Qwen/Qwen2.5-0.5B-Instruct",
+    "originalRevision": "7ae557604adf67be50417f59c2c2f167def9a775",
+    "originalGated": false,
+    "license": "apache-2.0",
+    "licenseUrl": "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct/blob/7ae557604adf67be50417f59c2c2f167def9a775/LICENSE",
+    "ggufRepo": "Qwen/Qwen2.5-0.5B-Instruct-GGUF",
+    "ggufRevision": "9217f5db79a29953eb74d5343926648285ec7e67",
+    "quantizer": "Qwen",
+    "ggufRepoLicense": "apache-2.0",
+    "ggufRepoGated": false,
+    "contextLength": 32768,
+    "contextLengthSource": "original config.json max_position_embeddings",
+    "artifacts": [
+      {
+        "quantization": "Q8_0",
+        "default": true,
+        "files": [
+          {
+            "path": "qwen2.5-0.5b-instruct-q8_0.gguf",
+            "sizeBytes": 675710816,
+            "sha256": "ca59ca7f13d0e15a8cfa77bd17e65d24f6844b554a7b6c12e07a5f89ff76844e",
+            "url": "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/9217f5db79a29953eb74d5343926648285ec7e67/qwen2.5-0.5b-instruct-q8_0.gguf"
+          }
+        ],
+        "totalBytes": 675710816
+      },
+      {
+        "quantization": "Q4_K_M",
+        "default": false,
+        "files": [
+          {
+            "path": "qwen2.5-0.5b-instruct-q4_k_m.gguf",
+            "sizeBytes": 491400032,
+            "sha256": "74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db",
+            "url": "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/9217f5db79a29953eb74d5343926648285ec7e67/qwen2.5-0.5b-instruct-q4_k_m.gguf"
+          }
+        ],
+        "totalBytes": 491400032
+      }
+    ],
+    "chatTemplateNote": "embedded GGUF tokenizer.chat_template present (per HF API gguf metadata)",
+    "notes": ["official GGUF from the model publisher"],
+    "blockers": [],
+    "complete": true
+  },
+  {
+    "releaseId": "Qwen/Qwen2.5-1.5B-Instruct",
+    "displayName": "Qwen2.5-1.5B-Instruct",
+    "organization": "Alibaba Qwen",
+    "family": "Qwen2.5",
+    "parameterCount": 1543714304,
+    "parameterCountSource": "original repo HF API safetensors.total",
+    "architecture": "qwen2",
+    "architectureSource": "HF API gguf.architecture (parsed from GGUF header general.architecture)",
+    "originalRepo": "Qwen/Qwen2.5-1.5B-Instruct",
+    "originalRevision": "989aa7980e4cf806f80c7fef2b1adb7bc71aa306",
+    "originalGated": false,
+    "license": "apache-2.0",
+    "licenseUrl": "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct/blob/989aa7980e4cf806f80c7fef2b1adb7bc71aa306/LICENSE",
+    "ggufRepo": "Qwen/Qwen2.5-1.5B-Instruct-GGUF",
+    "ggufRevision": "91cad51170dc346986eccefdc2dd33a9da36ead9",
+    "quantizer": "Qwen",
+    "ggufRepoLicense": "apache-2.0",
+    "ggufRepoGated": false,
+    "contextLength": 32768,
+    "contextLengthSource": "original config.json max_position_embeddings",
+    "artifacts": [
+      {
+        "quantization": "Q4_K_M",
+        "default": true,
+        "files": [
+          {
+            "path": "qwen2.5-1.5b-instruct-q4_k_m.gguf",
+            "sizeBytes": 1117320736,
+            "sha256": "6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e",
+            "url": "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/91cad51170dc346986eccefdc2dd33a9da36ead9/qwen2.5-1.5b-instruct-q4_k_m.gguf"
+          }
+        ],
+        "totalBytes": 1117320736
+      },
+      {
+        "quantization": "Q8_0",
+        "default": false,
+        "files": [
+          {
+            "path": "qwen2.5-1.5b-instruct-q8_0.gguf",
+            "sizeBytes": 1894532128,
+            "sha256": "d7efb072e7724d25048a4fda0a3e10b04bdef5d06b1403a1c93bd9f1240a63c8",
+            "url": "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/91cad51170dc346986eccefdc2dd33a9da36ead9/qwen2.5-1.5b-instruct-q8_0.gguf"
+          }
+        ],
+        "totalBytes": 1894532128
+      }
+    ],
+    "chatTemplateNote": "embedded GGUF tokenizer.chat_template present (per HF API gguf metadata)",
+    "notes": ["official GGUF from the model publisher"],
+    "blockers": [],
+    "complete": true
+  },
+  {
+    "releaseId": "Qwen/Qwen2.5-7B-Instruct",
+    "displayName": "Qwen2.5-7B-Instruct",
+    "organization": "Alibaba Qwen",
+    "family": "Qwen2.5",
+    "parameterCount": 7615616512,
+    "parameterCountSource": "original repo HF API safetensors.total",
+    "architecture": "qwen2",
+    "architectureSource": "HF API gguf.architecture (parsed from GGUF header general.architecture)",
+    "originalRepo": "Qwen/Qwen2.5-7B-Instruct",
+    "originalRevision": "a09a35458c702b33eeacc393d103063234e8bc28",
+    "originalGated": false,
+    "license": "apache-2.0",
+    "licenseUrl": "https://huggingface.co/Qwen/Qwen2.5-7B-Instruct/blob/a09a35458c702b33eeacc393d103063234e8bc28/LICENSE",
+    "ggufRepo": "Qwen/Qwen2.5-7B-Instruct-GGUF",
+    "ggufRevision": "bb5d59e06d9551d752d08b292a50eb208b07ab1f",
+    "quantizer": "Qwen",
+    "ggufRepoLicense": "apache-2.0",
+    "ggufRepoGated": false,
+    "contextLength": 32768,
+    "contextLengthSource": "original config.json max_position_embeddings",
+    "artifacts": [
+      {
+        "quantization": "Q4_K_M",
+        "default": true,
+        "files": [
+          {
+            "path": "qwen2.5-7b-instruct-q4_k_m-00001-of-00002.gguf",
+            "sizeBytes": 3993201344,
+            "sha256": "dfce12e3862a5283ccfb88221b48480e58745165de856439950d0f22590580db",
+            "url": "https://huggingface.co/Qwen/Qwen2.5-7B-Instruct-GGUF/resolve/bb5d59e06d9551d752d08b292a50eb208b07ab1f/qwen2.5-7b-instruct-q4_k_m-00001-of-00002.gguf"
+          },
+          {
+            "path": "qwen2.5-7b-instruct-q4_k_m-00002-of-00002.gguf",
+            "sizeBytes": 689872288,
+            "sha256": "539cf93f78e887edea1c04e2d7d8cdaca9d01dae9c9025bcb8accbe29df3d72a",
+            "url": "https://huggingface.co/Qwen/Qwen2.5-7B-Instruct-GGUF/resolve/bb5d59e06d9551d752d08b292a50eb208b07ab1f/qwen2.5-7b-instruct-q4_k_m-00002-of-00002.gguf"
+          }
+        ],
+        "totalBytes": 4683073632
+      },
+      {
+        "quantization": "Q5_K_M",
+        "default": false,
+        "files": [
+          {
+            "path": "qwen2.5-7b-instruct-q5_k_m-00001-of-00002.gguf",
+            "sizeBytes": 3989841792,
+            "sha256": "42f6693004793ee6cf1b2b723f0273b10f86a3bb2a949bd9128d4cda5fb866cd",
+            "url": "https://huggingface.co/Qwen/Qwen2.5-7B-Instruct-GGUF/resolve/bb5d59e06d9551d752d08b292a50eb208b07ab1f/qwen2.5-7b-instruct-q5_k_m-00001-of-00002.gguf"
+          },
+          {
+            "path": "qwen2.5-7b-instruct-q5_k_m-00002-of-00002.gguf",
+            "sizeBytes": 1454989568,
+            "sha256": "beba9d4f2f5a1fe7d144dcae332e68b52c26705c5310dece2e5d1997e091e134",
+            "url": "https://huggingface.co/Qwen/Qwen2.5-7B-Instruct-GGUF/resolve/bb5d59e06d9551d752d08b292a50eb208b07ab1f/qwen2.5-7b-instruct-q5_k_m-00002-of-00002.gguf"
+          }
+        ],
+        "totalBytes": 5444831360
+      }
+    ],
+    "chatTemplateNote": "embedded GGUF tokenizer.chat_template present (per HF API gguf metadata)",
+    "notes": [
+      "official GGUF from the model publisher",
+      "official Q4_K_M and Q5_K_M are split into 2 shards each; llama.cpp loads shard 00001 and finds the rest in the same directory; all shards required"
+    ],
+    "blockers": [],
+    "complete": true
+  },
+  {
+    "releaseId": "Qwen/Qwen2.5-Coder-1.5B-Instruct",
+    "displayName": "Qwen2.5-Coder-1.5B-Instruct",
+    "organization": "Alibaba Qwen",
+    "family": "Qwen2.5-Coder",
+    "parameterCount": 1543714304,
+    "parameterCountSource": "original repo HF API safetensors.total",
+    "architecture": "qwen2",
+    "architectureSource": "HF API gguf.architecture (parsed from GGUF header general.architecture)",
+    "originalRepo": "Qwen/Qwen2.5-Coder-1.5B-Instruct",
+    "originalRevision": "2e1fd397ee46e1388853d2af2c993145b0f1098a",
+    "originalGated": false,
+    "license": "apache-2.0",
+    "licenseUrl": "https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct/blob/2e1fd397ee46e1388853d2af2c993145b0f1098a/LICENSE",
+    "ggufRepo": "Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF",
+    "ggufRevision": "f86cb2c1fa58255f8052cc32aeede1b7482d4361",
+    "quantizer": "Qwen",
+    "ggufRepoLicense": "apache-2.0",
+    "ggufRepoGated": false,
+    "contextLength": 32768,
+    "contextLengthSource": "original config.json max_position_embeddings",
+    "artifacts": [
+      {
+        "quantization": "Q4_K_M",
+        "default": true,
+        "files": [
+          {
+            "path": "qwen2.5-coder-1.5b-instruct-q4_k_m.gguf",
+            "sizeBytes": 1117320768,
+            "sha256": "cc324af070c2ecbfd324a30884d2f951a7ff756aba85cb811a6ec436933bb046",
+            "url": "https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF/resolve/f86cb2c1fa58255f8052cc32aeede1b7482d4361/qwen2.5-coder-1.5b-instruct-q4_k_m.gguf"
+          }
+        ],
+        "totalBytes": 1117320768
+      },
+      {
+        "quantization": "Q8_0",
+        "default": false,
+        "files": [
+          {
+            "path": "qwen2.5-coder-1.5b-instruct-q8_0.gguf",
+            "sizeBytes": 1894532160,
+            "sha256": "507de59046601282ba768a9789900e6ccf60ed93ddf346730b7c68eb0715bc47",
+            "url": "https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF/resolve/f86cb2c1fa58255f8052cc32aeede1b7482d4361/qwen2.5-coder-1.5b-instruct-q8_0.gguf"
+          }
+        ],
+        "totalBytes": 1894532160
+      }
+    ],
+    "chatTemplateNote": "embedded GGUF tokenizer.chat_template present (per HF API gguf metadata)",
+    "notes": ["official GGUF from the model publisher"],
+    "blockers": [],
+    "complete": true
+  },
+  {
+    "releaseId": "Qwen/Qwen2.5-Coder-7B-Instruct",
+    "displayName": "Qwen2.5-Coder-7B-Instruct",
+    "organization": "Alibaba Qwen",
+    "family": "Qwen2.5-Coder",
+    "parameterCount": 7615616512,
+    "parameterCountSource": "original repo HF API safetensors.total",
+    "architecture": "qwen2",
+    "architectureSource": "HF API gguf.architecture (parsed from GGUF header general.architecture)",
+    "originalRepo": "Qwen/Qwen2.5-Coder-7B-Instruct",
+    "originalRevision": "c03e6d358207e414f1eca0bb1891e29f1db0e242",
+    "originalGated": false,
+    "license": "apache-2.0",
+    "licenseUrl": "https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct/blob/c03e6d358207e414f1eca0bb1891e29f1db0e242/LICENSE",
+    "ggufRepo": "Qwen/Qwen2.5-Coder-7B-Instruct-GGUF",
+    "ggufRevision": "13fb94bfda8c8cf22497dc57b78f391a9acb426a",
+    "quantizer": "Qwen",
+    "ggufRepoLicense": "apache-2.0",
+    "ggufRepoGated": false,
+    "contextLength": 32768,
+    "contextLengthSource": "original config.json max_position_embeddings",
+    "artifacts": [
+      {
+        "quantization": "Q4_K_M",
+        "default": true,
+        "files": [
+          {
+            "path": "qwen2.5-coder-7b-instruct-q4_k_m.gguf",
+            "sizeBytes": 4683073536,
+            "sha256": "509287f78cb4d4cf6b3843734733b914b2c158e43e22a7f4bf5e963800894d3c",
+            "url": "https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF/resolve/13fb94bfda8c8cf22497dc57b78f391a9acb426a/qwen2.5-coder-7b-instruct-q4_k_m.gguf"
+          }
+        ],
+        "totalBytes": 4683073536
+      },
+      {
+        "quantization": "Q5_K_M",
+        "default": false,
+        "files": [
+          {
+            "path": "qwen2.5-coder-7b-instruct-q5_k_m.gguf",
+            "sizeBytes": 5444831232,
+            "sha256": "586844eac4d6d6321689f0192c8aa8e69cd8625974a5cc2d925b1a03366e4d16",
+            "url": "https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF/resolve/13fb94bfda8c8cf22497dc57b78f391a9acb426a/qwen2.5-coder-7b-instruct-q5_k_m.gguf"
+          }
+        ],
+        "totalBytes": 5444831232
+      }
+    ],
+    "chatTemplateNote": "embedded GGUF tokenizer.chat_template present (per HF API gguf metadata)",
+    "notes": [
+      "official GGUF from the model publisher",
+      "repo has both single-file and split copies of Q4_K_M/Q5_K_M; single-file copies chosen"
+    ],
+    "blockers": [],
+    "complete": true
+  },
+  {
+    "releaseId": "meta-llama/Llama-3.2-1B-Instruct",
+    "displayName": "Llama-3.2-1B-Instruct",
+    "organization": "Meta",
+    "family": "Llama 3.2",
+    "parameterCount": 1235814400,
+    "parameterCountSource": "original repo HF API safetensors.total",
+    "architecture": "llama",
+    "architectureSource": "HF API gguf.architecture (parsed from GGUF header general.architecture)",
+    "originalRepo": "meta-llama/Llama-3.2-1B-Instruct",
+    "originalRevision": "9213176726f574b556790deb65791e0c5aa438b6",
+    "originalGated": "manual",
+    "license": "llama3.2",
+    "licenseUrl": "https://huggingface.co/meta-llama/Llama-3.2-1B-Instruct/blob/9213176726f574b556790deb65791e0c5aa438b6/LICENSE.txt",
+    "ggufRepo": "unsloth/Llama-3.2-1B-Instruct-GGUF",
+    "ggufRevision": "b69aef112e9f895e6f98d7ae0949f72ff09aa401",
+    "quantizer": "unsloth",
+    "ggufRepoLicense": "llama3.2",
+    "ggufRepoGated": false,
+    "contextLength": 131072,
+    "contextLengthSource": "GGUF metadata context_length via HF API (original config.json not fetched: gated repo)",
+    "artifacts": [
+      {
+        "quantization": "Q8_0",
+        "default": true,
+        "files": [
+          {
+            "path": "Llama-3.2-1B-Instruct-Q8_0.gguf",
+            "sizeBytes": 1321082528,
+            "sha256": "3f87a880027e7b9ea8e0da9e4009584336f352af444a0e6e5c20721ac4c7ffd1",
+            "url": "https://huggingface.co/unsloth/Llama-3.2-1B-Instruct-GGUF/resolve/b69aef112e9f895e6f98d7ae0949f72ff09aa401/Llama-3.2-1B-Instruct-Q8_0.gguf"
+          }
+        ],
+        "totalBytes": 1321082528
+      },
+      {
+        "quantization": "Q4_K_M",
+        "default": false,
+        "files": [
+          {
+            "path": "Llama-3.2-1B-Instruct-Q4_K_M.gguf",
+            "sizeBytes": 807694368,
+            "sha256": "3f5a22426976ab26cfe84dba63c1d08391717abb1af893e10f1b2968d862dcc1",
+            "url": "https://huggingface.co/unsloth/Llama-3.2-1B-Instruct-GGUF/resolve/b69aef112e9f895e6f98d7ae0949f72ff09aa401/Llama-3.2-1B-Instruct-Q4_K_M.gguf"
+          }
+        ],
+        "totalBytes": 807694368
+      }
+    ],
+    "chatTemplateNote": "embedded GGUF tokenizer.chat_template present (per HF API gguf metadata)",
+    "notes": [
+      "third-party quantization by unsloth (not the model publisher)",
+      "original repo gated (manual); unsloth GGUF repo ungated, but Llama Community License + AUP still bind redistribution/use (attribution \"Built with Llama\")"
+    ],
+    "blockers": [],
+    "complete": true
+  },
+  {
+    "releaseId": "meta-llama/Llama-3.2-3B-Instruct",
+    "displayName": "Llama-3.2-3B-Instruct",
+    "organization": "Meta",
+    "family": "Llama 3.2",
+    "parameterCount": 3212749824,
+    "parameterCountSource": "original repo HF API safetensors.total",
+    "architecture": "llama",
+    "architectureSource": "HF API gguf.architecture (parsed from GGUF header general.architecture)",
+    "originalRepo": "meta-llama/Llama-3.2-3B-Instruct",
+    "originalRevision": "0cb88a4f764b7a12671c53f0838cd831a0843b95",
+    "originalGated": "manual",
+    "license": "llama3.2",
+    "licenseUrl": "https://huggingface.co/meta-llama/Llama-3.2-3B-Instruct/blob/0cb88a4f764b7a12671c53f0838cd831a0843b95/LICENSE.txt",
+    "ggufRepo": "unsloth/Llama-3.2-3B-Instruct-GGUF",
+    "ggufRevision": "e7d0997e49c9cb00d88b4c1a6a16aa894b0bbc31",
+    "quantizer": "unsloth",
+    "ggufRepoLicense": "llama3.2",
+    "ggufRepoGated": false,
+    "contextLength": 131072,
+    "contextLengthSource": "GGUF metadata context_length via HF API (original config.json not fetched: gated repo)",
+    "artifacts": [
+      {
+        "quantization": "Q4_K_M",
+        "default": true,
+        "files": [
+          {
+            "path": "Llama-3.2-3B-Instruct-Q4_K_M.gguf",
+            "sizeBytes": 2019377600,
+            "sha256": "6c99cc00ae910f6a532a80022cb4bc1939094527a089c29294b841c0bd87f74d",
+            "url": "https://huggingface.co/unsloth/Llama-3.2-3B-Instruct-GGUF/resolve/e7d0997e49c9cb00d88b4c1a6a16aa894b0bbc31/Llama-3.2-3B-Instruct-Q4_K_M.gguf"
+          }
+        ],
+        "totalBytes": 2019377600
+      },
+      {
+        "quantization": "Q8_0",
+        "default": false,
+        "files": [
+          {
+            "path": "Llama-3.2-3B-Instruct-Q8_0.gguf",
+            "sizeBytes": 3421898816,
+            "sha256": "f34112a11b7dad74ab517dedf6dcf00d624c9adac2dc0c72c719ca0478554ef2",
+            "url": "https://huggingface.co/unsloth/Llama-3.2-3B-Instruct-GGUF/resolve/e7d0997e49c9cb00d88b4c1a6a16aa894b0bbc31/Llama-3.2-3B-Instruct-Q8_0.gguf"
+          }
+        ],
+        "totalBytes": 3421898816
+      }
+    ],
+    "chatTemplateNote": "embedded GGUF tokenizer.chat_template present (per HF API gguf metadata)",
+    "notes": [
+      "third-party quantization by unsloth (not the model publisher)",
+      "original repo gated (manual); unsloth GGUF repo ungated, but Llama Community License + AUP still bind redistribution/use (attribution \"Built with Llama\")"
+    ],
+    "blockers": [],
+    "complete": true
+  },
+  {
+    "releaseId": "meta-llama/Llama-3.1-8B-Instruct",
+    "displayName": "Llama-3.1-8B-Instruct",
+    "organization": "Meta",
+    "family": "Llama 3.1",
+    "parameterCount": 8030261248,
+    "parameterCountSource": "original repo HF API safetensors.total",
+    "architecture": "llama",
+    "architectureSource": "HF API gguf.architecture (parsed from GGUF header general.architecture)",
+    "originalRepo": "meta-llama/Llama-3.1-8B-Instruct",
+    "originalRevision": "0e9e39f249a16976918f6564b8830bc894c89659",
+    "originalGated": "manual",
+    "license": "llama3.1",
+    "licenseUrl": "https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct/blob/0e9e39f249a16976918f6564b8830bc894c89659/LICENSE",
+    "ggufRepo": "unsloth/Llama-3.1-8B-Instruct-GGUF",
+    "ggufRevision": "600b0020115fd6b17f0752848fe7b5a1be686bcd",
+    "quantizer": "unsloth",
+    "ggufRepoLicense": "llama3.1",
+    "ggufRepoGated": false,
+    "contextLength": 131072,
+    "contextLengthSource": "GGUF metadata context_length via HF API (original config.json not fetched: gated repo)",
+    "artifacts": [
+      {
+        "quantization": "Q4_K_M",
+        "default": true,
+        "files": [
+          {
+            "path": "Llama-3.1-8B-Instruct-Q4_K_M.gguf",
+            "sizeBytes": 4920739200,
+            "sha256": "b3bdbf23b47d7e6bb791c99b206deb169cd5a96362a9e3399028df2faacdc506",
+            "url": "https://huggingface.co/unsloth/Llama-3.1-8B-Instruct-GGUF/resolve/600b0020115fd6b17f0752848fe7b5a1be686bcd/Llama-3.1-8B-Instruct-Q4_K_M.gguf"
+          }
+        ],
+        "totalBytes": 4920739200
+      },
+      {
+        "quantization": "Q5_K_M",
+        "default": false,
+        "files": [
+          {
+            "path": "Llama-3.1-8B-Instruct-Q5_K_M.gguf",
+            "sizeBytes": 5732992384,
+            "sha256": "bc945542131dc588ba0b896701311add406a229104125f7ee2786d95a21df949",
+            "url": "https://huggingface.co/unsloth/Llama-3.1-8B-Instruct-GGUF/resolve/600b0020115fd6b17f0752848fe7b5a1be686bcd/Llama-3.1-8B-Instruct-Q5_K_M.gguf"
+          }
+        ],
+        "totalBytes": 5732992384
+      }
+    ],
+    "chatTemplateNote": "embedded GGUF tokenizer.chat_template present (per HF API gguf metadata)",
+    "notes": [
+      "third-party quantization by unsloth (not the model publisher)",
+      "original repo gated (manual); unsloth GGUF repo ungated, but Llama Community License + AUP still bind redistribution/use (attribution \"Built with Llama\")"
+    ],
+    "blockers": [],
+    "complete": true
+  },
+  {
+    "releaseId": "google/gemma-3-1b-it",
+    "displayName": "gemma-3-1b-it",
+    "organization": "Google",
+    "family": "Gemma 3",
+    "parameterCount": 999885952,
+    "parameterCountSource": "original repo HF API safetensors.total",
+    "architecture": "gemma3",
+    "architectureSource": "HF API gguf.architecture (parsed from GGUF header general.architecture)",
+    "originalRepo": "google/gemma-3-1b-it",
+    "originalRevision": "dcc83ea841ab6100d6b47a070329e1ba4cf78752",
+    "originalGated": "manual",
+    "license": "gemma",
+    "licenseUrl": "https://ai.google.dev/gemma/terms",
+    "ggufRepo": "ggml-org/gemma-3-1b-it-GGUF",
+    "ggufRevision": "f9c28bcd85737ffc5aef028638d3341d49869c27",
+    "quantizer": "ggml-org",
+    "ggufRepoLicense": "gemma",
+    "ggufRepoGated": false,
+    "contextLength": 32768,
+    "contextLengthSource": "GGUF metadata context_length via HF API (original config.json not fetched: gated repo)",
+    "artifacts": [
+      {
+        "quantization": "Q8_0",
+        "default": true,
+        "files": [
+          {
+            "path": "gemma-3-1b-it-Q8_0.gguf",
+            "sizeBytes": 1069306368,
+            "sha256": "b205840c5dcef55078e37d344677869a714ffd42a4ae448c48dcfb52e4bb10d5",
+            "url": "https://huggingface.co/ggml-org/gemma-3-1b-it-GGUF/resolve/f9c28bcd85737ffc5aef028638d3341d49869c27/gemma-3-1b-it-Q8_0.gguf"
+          }
+        ],
+        "totalBytes": 1069306368
+      },
+      {
+        "quantization": "Q4_K_M",
+        "default": false,
+        "files": [
+          {
+            "path": "gemma-3-1b-it-Q4_K_M.gguf",
+            "sizeBytes": 806058240,
+            "sha256": "8ccc5cd1f1b3602548715ae25a66ed73fd5dc68a210412eea643eb20eb75a135",
+            "url": "https://huggingface.co/ggml-org/gemma-3-1b-it-GGUF/resolve/f9c28bcd85737ffc5aef028638d3341d49869c27/gemma-3-1b-it-Q4_K_M.gguf"
+          }
+        ],
+        "totalBytes": 806058240
+      }
+    ],
+    "chatTemplateNote": "embedded GGUF tokenizer.chat_template present (per HF API gguf metadata)",
+    "notes": [
+      "no license file in repo; license URL taken from README link (cardData.license=gemma)",
+      "third-party quantization by ggml-org (not the model publisher)",
+      "original repo gated (manual, Gemma terms acknowledgement); ggml-org GGUF repo ungated"
+    ],
+    "blockers": [],
+    "complete": true
+  },
+  {
+    "releaseId": "google/gemma-3-4b-it",
+    "displayName": "gemma-3-4b-it",
+    "organization": "Google",
+    "family": "Gemma 3",
+    "parameterCount": 4300079472,
+    "parameterCountSource": "original repo HF API safetensors.total",
+    "architecture": "gemma3",
+    "architectureSource": "HF API gguf.architecture (parsed from GGUF header general.architecture)",
+    "originalRepo": "google/gemma-3-4b-it",
+    "originalRevision": "093f9f388b31de276ce2de164bdc2081324b9767",
+    "originalGated": "manual",
+    "license": "gemma",
+    "licenseUrl": "https://ai.google.dev/gemma/terms",
+    "ggufRepo": "ggml-org/gemma-3-4b-it-GGUF",
+    "ggufRevision": "d0976223747697cb51e056d85c532013931fe52e",
+    "quantizer": "ggml-org",
+    "ggufRepoLicense": "gemma",
+    "ggufRepoGated": false,
+    "contextLength": 131072,
+    "contextLengthSource": "GGUF metadata context_length via HF API (original config.json not fetched: gated repo)",
+    "artifacts": [
+      {
+        "quantization": "Q4_K_M",
+        "default": true,
+        "files": [
+          {
+            "path": "gemma-3-4b-it-Q4_K_M.gguf",
+            "sizeBytes": 2489757856,
+            "sha256": "882e8d2db44dc554fb0ea5077cb7e4bc49e7342a1f0da57901c0802ea21a0863",
+            "url": "https://huggingface.co/ggml-org/gemma-3-4b-it-GGUF/resolve/d0976223747697cb51e056d85c532013931fe52e/gemma-3-4b-it-Q4_K_M.gguf"
+          }
+        ],
+        "totalBytes": 2489757856
+      },
+      {
+        "quantization": "Q8_0",
+        "default": false,
+        "files": [
+          {
+            "path": "gemma-3-4b-it-Q8_0.gguf",
+            "sizeBytes": 4130226336,
+            "sha256": "97b06383df48336e7d2f9b56b6ce545e0fa476407a62c0bd081b53447a58e644",
+            "url": "https://huggingface.co/ggml-org/gemma-3-4b-it-GGUF/resolve/d0976223747697cb51e056d85c532013931fe52e/gemma-3-4b-it-Q8_0.gguf"
+          }
+        ],
+        "totalBytes": 4130226336
+      }
+    ],
+    "chatTemplateNote": "embedded GGUF tokenizer.chat_template present (per HF API gguf metadata)",
+    "notes": [
+      "no license file in repo; license URL taken from README link (cardData.license=gemma)",
+      "third-party quantization by ggml-org (not the model publisher)",
+      "multimodal model; text-only use: mmproj-model-f16.gguf deliberately omitted. Original pipeline_tag image-text-to-text, so absent from the text-generation popularity listing"
+    ],
+    "blockers": [],
+    "complete": true
+  },
+  {
+    "releaseId": "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B",
+    "displayName": "DeepSeek-R1-Distill-Qwen-1.5B",
+    "organization": "DeepSeek",
+    "family": "DeepSeek-R1-Distill",
+    "parameterCount": 1777088000,
+    "parameterCountSource": "original repo HF API safetensors.total",
+    "architecture": "qwen2",
+    "architectureSource": "HF API gguf.architecture (parsed from GGUF header general.architecture)",
+    "originalRepo": "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B",
+    "originalRevision": "ad9f0ae0864d7fbcd1cd905e3c6c5b069cc8b562",
+    "originalGated": false,
+    "license": "mit",
+    "licenseUrl": "https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B/blob/ad9f0ae0864d7fbcd1cd905e3c6c5b069cc8b562/LICENSE",
+    "ggufRepo": "unsloth/DeepSeek-R1-Distill-Qwen-1.5B-GGUF",
+    "ggufRevision": "3cb4d15544a2a5e07439592b9a0965b6445fbd34",
+    "quantizer": "unsloth",
+    "ggufRepoLicense": "apache-2.0",
+    "ggufRepoGated": false,
+    "contextLength": 131072,
+    "contextLengthSource": "original config.json max_position_embeddings",
+    "artifacts": [
+      {
+        "quantization": "Q4_K_M",
+        "default": true,
+        "files": [
+          {
+            "path": "DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf",
+            "sizeBytes": 1117321312,
+            "sha256": "f3bdf9cf31dee4b57ae4e455a1cb0d01b5c2c1b50d72d3112141c195506c2840",
+            "url": "https://huggingface.co/unsloth/DeepSeek-R1-Distill-Qwen-1.5B-GGUF/resolve/3cb4d15544a2a5e07439592b9a0965b6445fbd34/DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf"
+          }
+        ],
+        "totalBytes": 1117321312
+      },
+      {
+        "quantization": "Q8_0",
+        "default": false,
+        "files": [
+          {
+            "path": "DeepSeek-R1-Distill-Qwen-1.5B-Q8_0.gguf",
+            "sizeBytes": 1894532416,
+            "sha256": "068a721e47419ccfc94b6420118f772478544e1a0d4fad7118212774b3f9ba9e",
+            "url": "https://huggingface.co/unsloth/DeepSeek-R1-Distill-Qwen-1.5B-GGUF/resolve/3cb4d15544a2a5e07439592b9a0965b6445fbd34/DeepSeek-R1-Distill-Qwen-1.5B-Q8_0.gguf"
+          }
+        ],
+        "totalBytes": 1894532416
+      }
+    ],
+    "chatTemplateNote": "embedded GGUF tokenizer.chat_template present (per HF API gguf metadata)",
+    "notes": ["third-party quantization by unsloth (not the model publisher)"],
+    "blockers": [],
+    "complete": true
+  },
+  {
+    "releaseId": "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B",
+    "displayName": "DeepSeek-R1-Distill-Qwen-7B",
+    "organization": "DeepSeek",
+    "family": "DeepSeek-R1-Distill",
+    "parameterCount": 7615616512,
+    "parameterCountSource": "original repo HF API safetensors.total",
+    "architecture": "qwen2",
+    "architectureSource": "HF API gguf.architecture (parsed from GGUF header general.architecture)",
+    "originalRepo": "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B",
+    "originalRevision": "916b56a44061fd5cd7d6a8fb632557ed4f724f60",
+    "originalGated": false,
+    "license": "mit",
+    "licenseUrl": "https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-7B/blob/916b56a44061fd5cd7d6a8fb632557ed4f724f60/LICENSE",
+    "ggufRepo": "unsloth/DeepSeek-R1-Distill-Qwen-7B-GGUF",
+    "ggufRevision": "097680e4eed7a83b3df6b0bb5e5134099cadf1b0",
+    "quantizer": "unsloth",
+    "ggufRepoLicense": "apache-2.0",
+    "ggufRepoGated": false,
+    "contextLength": 131072,
+    "contextLengthSource": "original config.json max_position_embeddings",
+    "artifacts": [
+      {
+        "quantization": "Q4_K_M",
+        "default": true,
+        "files": [
+          {
+            "path": "DeepSeek-R1-Distill-Qwen-7B-Q4_K_M.gguf",
+            "sizeBytes": 4683073248,
+            "sha256": "78272d8d32084548bd450394a560eb2d70de8232ab96a725769b1f9171235c1c",
+            "url": "https://huggingface.co/unsloth/DeepSeek-R1-Distill-Qwen-7B-GGUF/resolve/097680e4eed7a83b3df6b0bb5e5134099cadf1b0/DeepSeek-R1-Distill-Qwen-7B-Q4_K_M.gguf"
+          }
+        ],
+        "totalBytes": 4683073248
+      },
+      {
+        "quantization": "Q5_K_M",
+        "default": false,
+        "files": [
+          {
+            "path": "DeepSeek-R1-Distill-Qwen-7B-Q5_K_M.gguf",
+            "sizeBytes": 5444830944,
+            "sha256": "4a2787e10767be0f04ee282721f8250a9ee16c8330cb93a57e33727b02948c5a",
+            "url": "https://huggingface.co/unsloth/DeepSeek-R1-Distill-Qwen-7B-GGUF/resolve/097680e4eed7a83b3df6b0bb5e5134099cadf1b0/DeepSeek-R1-Distill-Qwen-7B-Q5_K_M.gguf"
+          }
+        ],
+        "totalBytes": 5444830944
+      }
+    ],
+    "chatTemplateNote": "embedded GGUF tokenizer.chat_template present (per HF API gguf metadata)",
+    "notes": ["third-party quantization by unsloth (not the model publisher)"],
+    "blockers": [],
+    "complete": true
+  },
+  {
+    "releaseId": "mistralai/Mistral-7B-Instruct-v0.3",
+    "displayName": "Mistral-7B-Instruct-v0.3",
+    "organization": "Mistral AI",
+    "family": "Mistral",
+    "parameterCount": 7248023552,
+    "parameterCountSource": "original repo HF API safetensors.total",
+    "architecture": "llama",
+    "architectureSource": "HF API gguf.architecture (parsed from GGUF header general.architecture)",
+    "originalRepo": "mistralai/Mistral-7B-Instruct-v0.3",
+    "originalRevision": "c170c708c41dac9275d15a8fff4eca08d52bab71",
+    "originalGated": false,
+    "license": "apache-2.0",
+    "licenseUrl": null,
+    "ggufRepo": "lmstudio-community/Mistral-7B-Instruct-v0.3-GGUF",
+    "ggufRevision": "29a785419661afc70b5cd91b5023a835b0092281",
+    "quantizer": "lmstudio-community",
+    "ggufRepoLicense": "apache-2.0",
+    "ggufRepoGated": false,
+    "contextLength": 32768,
+    "contextLengthSource": "original config.json max_position_embeddings",
+    "artifacts": [
+      {
+        "quantization": "Q4_K_M",
+        "default": true,
+        "files": [
+          {
+            "path": "Mistral-7B-Instruct-v0.3-Q4_K_M.gguf",
+            "sizeBytes": 4372812000,
+            "sha256": "1270d22c0fbb3d092fb725d4d96c457b7b687a5f5a715abe1e818da303e562b6",
+            "url": "https://huggingface.co/lmstudio-community/Mistral-7B-Instruct-v0.3-GGUF/resolve/29a785419661afc70b5cd91b5023a835b0092281/Mistral-7B-Instruct-v0.3-Q4_K_M.gguf"
+          }
+        ],
+        "totalBytes": 4372812000
+      },
+      {
+        "quantization": "Q8_0",
+        "default": false,
+        "files": [
+          {
+            "path": "Mistral-7B-Instruct-v0.3-Q8_0.gguf",
+            "sizeBytes": 7702565088,
+            "sha256": "404857e776114baada71a08ebd3bba79d721ec7fca99705e7e7b892ae8bc583f",
+            "url": "https://huggingface.co/lmstudio-community/Mistral-7B-Instruct-v0.3-GGUF/resolve/29a785419661afc70b5cd91b5023a835b0092281/Mistral-7B-Instruct-v0.3-Q8_0.gguf"
+          }
+        ],
+        "totalBytes": 7702565088
+      }
+    ],
+    "chatTemplateNote": "embedded GGUF tokenizer.chat_template present (per HF API gguf metadata)",
+    "notes": [
+      "licenseUrl null: no LICENSE file and no cardData.license_link in original repo; README only links https://mistral.ai/terms/ (service terms, not the model license). cardData.license=apache-2.0",
+      "third-party quantization by lmstudio-community (not the model publisher)"
+    ],
+    "blockers": [],
+    "complete": true
+  },
+  {
+    "releaseId": "mistralai/Ministral-3-3B-Instruct-2512",
+    "displayName": "Ministral-3-3B-Instruct-2512",
+    "organization": "Mistral AI",
+    "family": "Ministral 3",
+    "parameterCount": 3849090048,
+    "parameterCountSource": "original repo HF API safetensors.total",
+    "architecture": "mistral3",
+    "architectureSource": "HF API gguf.architecture (parsed from GGUF header general.architecture)",
+    "originalRepo": "mistralai/Ministral-3-3B-Instruct-2512",
+    "originalRevision": "b35d4dfe56c142746f54dbd64f579faab2744308",
+    "originalGated": false,
+    "license": "apache-2.0",
+    "licenseUrl": null,
+    "ggufRepo": "mistralai/Ministral-3-3B-Instruct-2512-GGUF",
+    "ggufRevision": "eb599d408350ea2bb60452cb86be7c7b2fc28227",
+    "quantizer": "mistralai",
+    "ggufRepoLicense": "apache-2.0",
+    "ggufRepoGated": false,
+    "contextLength": 262144,
+    "contextLengthSource": "original config.json text_config.max_position_embeddings",
+    "artifacts": [
+      {
+        "quantization": "Q4_K_M",
+        "default": true,
+        "files": [
+          {
+            "path": "Ministral-3-3B-Instruct-2512-Q4_K_M.gguf",
+            "sizeBytes": 2147023008,
+            "sha256": "9ed150d4367e68df0ac8e1540f6ddc65b42d0ee26378329d1ecbca60f93fc5f8",
+            "url": "https://huggingface.co/mistralai/Ministral-3-3B-Instruct-2512-GGUF/resolve/eb599d408350ea2bb60452cb86be7c7b2fc28227/Ministral-3-3B-Instruct-2512-Q4_K_M.gguf"
+          }
+        ],
+        "totalBytes": 2147023008
+      },
+      {
+        "quantization": "Q8_0",
+        "default": false,
+        "files": [
+          {
+            "path": "Ministral-3-3B-Instruct-2512-Q8_0.gguf",
+            "sizeBytes": 3652204704,
+            "sha256": "8c2b72eb5861304fcfd5e82f1eddd6efa4115737f4239fd216a028a8852413ef",
+            "url": "https://huggingface.co/mistralai/Ministral-3-3B-Instruct-2512-GGUF/resolve/eb599d408350ea2bb60452cb86be7c7b2fc28227/Ministral-3-3B-Instruct-2512-Q8_0.gguf"
+          }
+        ],
+        "totalBytes": 3652204704
+      }
+    ],
+    "chatTemplateNote": "embedded GGUF tokenizer.chat_template present (per HF API gguf metadata)",
+    "notes": [
+      "licenseUrl null: no LICENSE file and no cardData.license_link in original repo; README only links https://mistral.ai/terms/ (service terms, not the model license). cardData.license=apache-2.0",
+      "official GGUF from the model publisher",
+      "vision-capable (mistral3); BF16 mmproj omitted for text use; parameterCount includes vision encoder"
+    ],
+    "blockers": [],
+    "complete": true
+  },
+  {
+    "releaseId": "microsoft/Phi-4-mini-instruct",
+    "displayName": "Phi-4-mini-instruct",
+    "organization": "Microsoft",
+    "family": "Phi-4",
+    "parameterCount": 3836021760,
+    "parameterCountSource": "original repo HF API safetensors.total",
+    "architecture": "phi3",
+    "architectureSource": "HF API gguf.architecture (parsed from GGUF header general.architecture)",
+    "originalRepo": "microsoft/Phi-4-mini-instruct",
+    "originalRevision": "cfbefacb99257ffa30c83adab238a50856ac3083",
+    "originalGated": false,
+    "license": "mit",
+    "licenseUrl": "https://huggingface.co/microsoft/Phi-4-mini-instruct/blob/cfbefacb99257ffa30c83adab238a50856ac3083/LICENSE",
+    "ggufRepo": "unsloth/Phi-4-mini-instruct-GGUF",
+    "ggufRevision": "78eb92a46fc37e6b524df991ed9aca9bc6aa7b80",
+    "quantizer": "unsloth",
+    "ggufRepoLicense": "mit",
+    "ggufRepoGated": false,
+    "contextLength": 131072,
+    "contextLengthSource": "original config.json max_position_embeddings",
+    "artifacts": [
+      {
+        "quantization": "Q4_K_M",
+        "default": true,
+        "files": [
+          {
+            "path": "Phi-4-mini-instruct-Q4_K_M.gguf",
+            "sizeBytes": 2491874272,
+            "sha256": "88c00229914083cd112853aab84ed51b87bdf6b9ce42f532d8c85c7c63b1730a",
+            "url": "https://huggingface.co/unsloth/Phi-4-mini-instruct-GGUF/resolve/78eb92a46fc37e6b524df991ed9aca9bc6aa7b80/Phi-4-mini-instruct-Q4_K_M.gguf"
+          }
+        ],
+        "totalBytes": 2491874272
+      },
+      {
+        "quantization": "Q8_0",
+        "default": false,
+        "files": [
+          {
+            "path": "Phi-4-mini-instruct.Q8_0.gguf",
+            "sizeBytes": 4084611040,
+            "sha256": "26188c6050d525376a88b04514c236c5e28a36730f1e936f2a00314212b7ba42",
+            "url": "https://huggingface.co/unsloth/Phi-4-mini-instruct-GGUF/resolve/78eb92a46fc37e6b524df991ed9aca9bc6aa7b80/Phi-4-mini-instruct.Q8_0.gguf"
+          }
+        ],
+        "totalBytes": 4084611040
+      }
+    ],
+    "chatTemplateNote": "embedded GGUF tokenizer.chat_template present (per HF API gguf metadata)",
+    "notes": ["third-party quantization by unsloth (not the model publisher)"],
+    "blockers": [],
+    "complete": true
+  },
+  {
+    "releaseId": "HuggingFaceTB/SmolLM3-3B",
+    "displayName": "SmolLM3-3B",
+    "organization": "Hugging Face",
+    "family": "SmolLM3",
+    "parameterCount": 3075098624,
+    "parameterCountSource": "original repo HF API safetensors.total",
+    "architecture": "smollm3",
+    "architectureSource": "HF API gguf.architecture (parsed from GGUF header general.architecture)",
+    "originalRepo": "HuggingFaceTB/SmolLM3-3B",
+    "originalRevision": "a07cc9a04f16550a088caea529712d1d335b0ac1",
+    "originalGated": false,
+    "license": "apache-2.0",
+    "licenseUrl": "https://www.apache.org/licenses/LICENSE-2.0",
+    "ggufRepo": "ggml-org/SmolLM3-3B-GGUF",
+    "ggufRevision": "4965cb60b150737b68a0408c36aeefb65078f894",
+    "quantizer": "ggml-org",
+    "ggufRepoLicense": "apache-2.0",
+    "ggufRepoGated": false,
+    "contextLength": 65536,
+    "contextLengthSource": "original config.json max_position_embeddings",
+    "artifacts": [
+      {
+        "quantization": "Q4_K_M",
+        "default": true,
+        "files": [
+          {
+            "path": "SmolLM3-Q4_K_M.gguf",
+            "sizeBytes": 1915305312,
+            "sha256": "8334b850b7bd46238c16b0c550df2138f0889bf433809008cc17a8b05761863e",
+            "url": "https://huggingface.co/ggml-org/SmolLM3-3B-GGUF/resolve/4965cb60b150737b68a0408c36aeefb65078f894/SmolLM3-Q4_K_M.gguf"
+          }
+        ],
+        "totalBytes": 1915305312
+      },
+      {
+        "quantization": "Q8_0",
+        "default": false,
+        "files": [
+          {
+            "path": "SmolLM3-Q8_0.gguf",
+            "sizeBytes": 3275574624,
+            "sha256": "8aa8cc74656137174a1988d993b00828e65a86fd68773412b632a75aa1373248",
+            "url": "https://huggingface.co/ggml-org/SmolLM3-3B-GGUF/resolve/4965cb60b150737b68a0408c36aeefb65078f894/SmolLM3-Q8_0.gguf"
+          }
+        ],
+        "totalBytes": 3275574624
+      }
+    ],
+    "chatTemplateNote": "embedded GGUF tokenizer.chat_template present (per HF API gguf metadata)",
+    "notes": [
+      "no license file in repo; license URL taken from README link (cardData.license=apache-2.0)",
+      "third-party quantization by ggml-org (not the model publisher)",
+      "no LICENSE file in HF repo; licenseUrl is the generic Apache-2.0 text linked from README"
+    ],
+    "blockers": [],
+    "complete": true
+  },
+  {
+    "releaseId": "ibm-granite/granite-4.0-micro",
+    "displayName": "granite-4.0-micro",
+    "organization": "IBM",
+    "family": "Granite 4.0",
+    "parameterCount": 3402836480,
+    "parameterCountSource": "original repo HF API safetensors.total",
+    "architecture": "granite",
+    "architectureSource": "HF API gguf.architecture (parsed from GGUF header general.architecture)",
+    "originalRepo": "ibm-granite/granite-4.0-micro",
+    "originalRevision": "56111ae135df9c53a78c99028e7bc24035a9e979",
+    "originalGated": false,
+    "license": "apache-2.0",
+    "licenseUrl": "https://www.apache.org/licenses/LICENSE-2.0",
+    "ggufRepo": "ibm-granite/granite-4.0-micro-GGUF",
+    "ggufRevision": "ec48475f0c811d812fbfb61975717a9c36eeb652",
+    "quantizer": "ibm-granite",
+    "ggufRepoLicense": "apache-2.0",
+    "ggufRepoGated": false,
+    "contextLength": 131072,
+    "contextLengthSource": "original config.json max_position_embeddings",
+    "artifacts": [
+      {
+        "quantization": "Q4_K_M",
+        "default": true,
+        "files": [
+          {
+            "path": "granite-4.0-micro-Q4_K_M.gguf",
+            "sizeBytes": 2099502528,
+            "sha256": "97c417dcc0534b0737c74016fb2af083cb17c3b51eaac621192d23961b7024eb",
+            "url": "https://huggingface.co/ibm-granite/granite-4.0-micro-GGUF/resolve/ec48475f0c811d812fbfb61975717a9c36eeb652/granite-4.0-micro-Q4_K_M.gguf"
+          }
+        ],
+        "totalBytes": 2099502528
+      },
+      {
+        "quantization": "Q8_0",
+        "default": false,
+        "files": [
+          {
+            "path": "granite-4.0-micro-Q8_0.gguf",
+            "sizeBytes": 3619691968,
+            "sha256": "a023da9d89a7f3c5369ac1acfe8fa57277eaec591e1b23dde0cd8b01e0bd3fd6",
+            "url": "https://huggingface.co/ibm-granite/granite-4.0-micro-GGUF/resolve/ec48475f0c811d812fbfb61975717a9c36eeb652/granite-4.0-micro-Q8_0.gguf"
+          }
+        ],
+        "totalBytes": 3619691968
+      }
+    ],
+    "chatTemplateNote": "embedded GGUF tokenizer.chat_template present (per HF API gguf metadata)",
+    "notes": [
+      "no license file in repo; license URL taken from README link (cardData.license=apache-2.0)",
+      "official GGUF from the model publisher",
+      "no LICENSE file in HF repo; licenseUrl is the generic Apache-2.0 text linked from README; newer granite-4.1/4.2 GGUF repos exist (granite-4.1-3b is #129 in snapshot)"
+    ],
+    "blockers": [],
+    "complete": true
+  },
+  {
+    "releaseId": "ibm-granite/granite-4.0-h-tiny",
+    "displayName": "granite-4.0-h-tiny",
+    "organization": "IBM",
+    "family": "Granite 4.0",
+    "parameterCount": 6939037248,
+    "parameterCountSource": "original repo HF API safetensors.total",
+    "architecture": "granitehybrid",
+    "architectureSource": "HF API gguf.architecture (parsed from GGUF header general.architecture)",
+    "originalRepo": "ibm-granite/granite-4.0-h-tiny",
+    "originalRevision": "791e0d3d28c86e106c9b6e0b4cecdee0375b6124",
+    "originalGated": false,
+    "license": "apache-2.0",
+    "licenseUrl": "https://www.apache.org/licenses/LICENSE-2.0",
+    "ggufRepo": "ibm-granite/granite-4.0-h-tiny-GGUF",
+    "ggufRevision": "08d5a8a9741dd5c1a95d2d39e25253226aa1464e",
+    "quantizer": "ibm-granite",
+    "ggufRepoLicense": "apache-2.0",
+    "ggufRepoGated": false,
+    "contextLength": 131072,
+    "contextLengthSource": "original config.json max_position_embeddings",
+    "artifacts": [
+      {
+        "quantization": "Q4_K_M",
+        "default": true,
+        "files": [
+          {
+            "path": "granite-4.0-h-tiny-Q4_K_M.gguf",
+            "sizeBytes": 4230976352,
+            "sha256": "5a38b08c441ae1adbafb1d2b8a7167e0d48734d83af68b268cefea1eec553dcd",
+            "url": "https://huggingface.co/ibm-granite/granite-4.0-h-tiny-GGUF/resolve/08d5a8a9741dd5c1a95d2d39e25253226aa1464e/granite-4.0-h-tiny-Q4_K_M.gguf"
+          }
+        ],
+        "totalBytes": 4230976352
+      },
+      {
+        "quantization": "Q8_0",
+        "default": false,
+        "files": [
+          {
+            "path": "granite-4.0-h-tiny-Q8_0.gguf",
+            "sizeBytes": 7390331744,
+            "sha256": "6d89e0698c7e88ebe26efcf59aa22786bf36b729705edbd76c6b118c8df9b297",
+            "url": "https://huggingface.co/ibm-granite/granite-4.0-h-tiny-GGUF/resolve/08d5a8a9741dd5c1a95d2d39e25253226aa1464e/granite-4.0-h-tiny-Q8_0.gguf"
+          }
+        ],
+        "totalBytes": 7390331744
+      }
+    ],
+    "chatTemplateNote": "embedded GGUF tokenizer.chat_template present (per HF API gguf metadata)",
+    "notes": [
+      "no license file in repo; license URL taken from README link (cardData.license=apache-2.0)",
+      "official GGUF from the model publisher",
+      "no LICENSE file in HF repo; licenseUrl is the generic Apache-2.0 text linked from README; newer granite-4.1/4.2 GGUF repos exist (granite-4.1-3b is #129 in snapshot)"
+    ],
+    "blockers": [],
+    "complete": true
+  },
+  {
+    "releaseId": "LiquidAI/LFM2-1.2B",
+    "displayName": "LFM2-1.2B",
+    "organization": "Liquid AI",
+    "family": "LFM2",
+    "parameterCount": 1170340608,
+    "parameterCountSource": "original repo HF API safetensors.total",
+    "architecture": "lfm2",
+    "architectureSource": "HF API gguf.architecture (parsed from GGUF header general.architecture)",
+    "originalRepo": "LiquidAI/LFM2-1.2B",
+    "originalRevision": "40f3da0d0164913923aee9462c23077868b816a3",
+    "originalGated": false,
+    "license": "other:lfm1.0",
+    "licenseUrl": "https://huggingface.co/LiquidAI/LFM2-1.2B/blob/40f3da0d0164913923aee9462c23077868b816a3/LICENSE",
+    "ggufRepo": "LiquidAI/LFM2-1.2B-GGUF",
+    "ggufRevision": "5399e76c648f4eb8c053feb1ab747277dea5bf8b",
+    "quantizer": "LiquidAI",
+    "ggufRepoLicense": "other",
+    "ggufRepoGated": false,
+    "contextLength": 128000,
+    "contextLengthSource": "original config.json max_position_embeddings",
+    "artifacts": [
+      {
+        "quantization": "Q4_K_M",
+        "default": true,
+        "files": [
+          {
+            "path": "LFM2-1.2B-Q4_K_M.gguf",
+            "sizeBytes": 730893248,
+            "sha256": "55175400e3f509a9616227afeffd58d87e80b9f628a5d3d54ada884d85221fed",
+            "url": "https://huggingface.co/LiquidAI/LFM2-1.2B-GGUF/resolve/5399e76c648f4eb8c053feb1ab747277dea5bf8b/LFM2-1.2B-Q4_K_M.gguf"
+          }
+        ],
+        "totalBytes": 730893248
+      },
+      {
+        "quantization": "Q8_0",
+        "default": false,
+        "files": [
+          {
+            "path": "LFM2-1.2B-Q8_0.gguf",
+            "sizeBytes": 1246251968,
+            "sha256": "0d9ec100a0f33048168d1d5b9fb6403f4836adcbbe9c3f2ab7794c96ffee3c3b",
+            "url": "https://huggingface.co/LiquidAI/LFM2-1.2B-GGUF/resolve/5399e76c648f4eb8c053feb1ab747277dea5bf8b/LFM2-1.2B-Q8_0.gguf"
+          }
+        ],
+        "totalBytes": 1246251968
+      }
+    ],
+    "chatTemplateNote": "embedded GGUF tokenizer.chat_template present (per HF API gguf metadata)",
+    "notes": [
+      "official GGUF from the model publisher",
+      "LFM Open License v1.0 (non-SPDX; commercial-use revenue threshold - read before shipping); newer LFM2.5 official GGUF repos exist and are more downloaded"
+    ],
+    "blockers": [
+      "license review: LFM Open License v1.0 is not OSI-approved; confirm terms for redistribution in Juniper"
+    ],
+    "complete": true
+  },
+  {
+    "releaseId": "LiquidAI/LFM2-2.6B",
+    "displayName": "LFM2-2.6B",
+    "organization": "Liquid AI",
+    "family": "LFM2",
+    "parameterCount": 2569272320,
+    "parameterCountSource": "original repo HF API safetensors.total",
+    "architecture": "lfm2",
+    "architectureSource": "HF API gguf.architecture (parsed from GGUF header general.architecture)",
+    "originalRepo": "LiquidAI/LFM2-2.6B",
+    "originalRevision": "36ed799f7024ef169ba92ffe184821835e15cc66",
+    "originalGated": false,
+    "license": "other:lfm1.0",
+    "licenseUrl": "https://huggingface.co/LiquidAI/LFM2-2.6B/blob/36ed799f7024ef169ba92ffe184821835e15cc66/LICENSE",
+    "ggufRepo": "LiquidAI/LFM2-2.6B-GGUF",
+    "ggufRevision": "a759abdc5955d4ca97763e5cb7ff3940589ba898",
+    "quantizer": "LiquidAI",
+    "ggufRepoLicense": "other",
+    "ggufRepoGated": false,
+    "contextLength": 128000,
+    "contextLengthSource": "original config.json max_position_embeddings",
+    "artifacts": [
+      {
+        "quantization": "Q4_K_M",
+        "default": true,
+        "files": [
+          {
+            "path": "LFM2-2.6B-Q4_K_M.gguf",
+            "sizeBytes": 1563668704,
+            "sha256": "384bc877b6c37064982f96885bef69e4475919f5969218ed4e3b9399ae0340df",
+            "url": "https://huggingface.co/LiquidAI/LFM2-2.6B-GGUF/resolve/a759abdc5955d4ca97763e5cb7ff3940589ba898/LFM2-2.6B-Q4_K_M.gguf"
+          }
+        ],
+        "totalBytes": 1563668704
+      },
+      {
+        "quantization": "Q8_0",
+        "default": false,
+        "files": [
+          {
+            "path": "LFM2-2.6B-Q8_0.gguf",
+            "sizeBytes": 2733011168,
+            "sha256": "36bddde1745f1330872b7c2acfd011663ba30477b049bc01c77c81d0e3241685",
+            "url": "https://huggingface.co/LiquidAI/LFM2-2.6B-GGUF/resolve/a759abdc5955d4ca97763e5cb7ff3940589ba898/LFM2-2.6B-Q8_0.gguf"
+          }
+        ],
+        "totalBytes": 2733011168
+      }
+    ],
+    "chatTemplateNote": "embedded GGUF tokenizer.chat_template present (per HF API gguf metadata)",
+    "notes": [
+      "official GGUF from the model publisher",
+      "LFM Open License v1.0 (non-SPDX; commercial-use revenue threshold - read before shipping); newer LFM2.5 official GGUF repos exist and are more downloaded"
+    ],
+    "blockers": [
+      "license review: LFM Open License v1.0 is not OSI-approved; confirm terms for redistribution in Juniper"
+    ],
+    "complete": true
+  },
+  {
+    "releaseId": "zai-org/GLM-4.7-Flash",
+    "displayName": "GLM-4.7-Flash",
+    "organization": "Z.ai (Zhipu)",
+    "family": "GLM-4.7",
+    "parameterCount": 31221488576,
+    "parameterCountSource": "original repo HF API safetensors.total",
+    "architecture": "deepseek2",
+    "architectureSource": "HF API gguf.architecture (parsed from GGUF header general.architecture)",
+    "originalRepo": "zai-org/GLM-4.7-Flash",
+    "originalRevision": "7dd20894a642a0aa287e9827cb1a1f7f91386b67",
+    "originalGated": false,
+    "license": "mit",
+    "licenseUrl": null,
+    "ggufRepo": "ggml-org/GLM-4.7-Flash-GGUF",
+    "ggufRevision": "7559e96b7e324ab405897dc2b91492b0f376ad4a",
+    "quantizer": "ggml-org",
+    "ggufRepoLicense": null,
+    "ggufRepoGated": false,
+    "contextLength": 202752,
+    "contextLengthSource": "original config.json max_position_embeddings",
+    "artifacts": [
+      {
+        "quantization": "Q4_K",
+        "default": true,
+        "files": [
+          {
+            "path": "GLM-4.7-Flash-Q4_K.gguf",
+            "sizeBytes": 18244193920,
+            "sha256": "b6019edc5fbe37d3660d2e994d16c839a7855a6f03362c5dcf8142ba479cd0d2",
+            "url": "https://huggingface.co/ggml-org/GLM-4.7-Flash-GGUF/resolve/7559e96b7e324ab405897dc2b91492b0f376ad4a/GLM-4.7-Flash-Q4_K.gguf"
+          }
+        ],
+        "totalBytes": 18244193920
+      },
+      {
+        "quantization": "Q8_0",
+        "default": false,
+        "files": [
+          {
+            "path": "GLM-4.7-Flash-Q8_0.gguf",
+            "sizeBytes": 31842799232,
+            "sha256": "35ad96a0d4efd05a99045adb13a18c21a5be858726d9c2c5773406cd25909fd3",
+            "url": "https://huggingface.co/ggml-org/GLM-4.7-Flash-GGUF/resolve/7559e96b7e324ab405897dc2b91492b0f376ad4a/GLM-4.7-Flash-Q8_0.gguf"
+          }
+        ],
+        "totalBytes": 31842799232
+      }
+    ],
+    "chatTemplateNote": "embedded GGUF tokenizer.chat_template present (per HF API gguf metadata)",
+    "notes": [
+      "licenseUrl null: no LICENSE file, license_link, or README license URL in original repo; cardData.license=mit",
+      "third-party quantization by ggml-org (not the model publisher)",
+      "GGUF general.architecture reported as deepseek2 (llama.cpp maps glm4_moe_lite onto its deepseek2 graph); file named Q4_K (ggml-org naming, Q4_K_M-class mix)"
+    ],
+    "blockers": [
+      "size: ~30B-total MoE; default Q4_K file is 18.2 GB (Q8_0 31.8 GB) - exceeds typical 8-16 GB consumer RAM/VRAM budget; catalog only as \"large/advanced\" tier"
+    ],
+    "complete": true
+  },
+  {
+    "releaseId": "nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16",
+    "displayName": "NVIDIA-Nemotron-3-Nano-4B-BF16",
+    "organization": "NVIDIA",
+    "family": "Nemotron 3 Nano",
+    "parameterCount": 3973556832,
+    "parameterCountSource": "original repo HF API safetensors.total",
+    "architecture": "nemotron_h",
+    "architectureSource": "HF API gguf.architecture (parsed from GGUF header general.architecture)",
+    "originalRepo": "nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16",
+    "originalRevision": "dfaf35de3e30f1867dd8dbc38a7fc9fb52d3914f",
+    "originalGated": false,
+    "license": "other:nvidia-nemotron-open-model-license",
+    "licenseUrl": "https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16/blob/dfaf35de3e30f1867dd8dbc38a7fc9fb52d3914f/LICENSE",
+    "ggufRepo": "nvidia/NVIDIA-Nemotron-3-Nano-4B-GGUF",
+    "ggufRevision": "ba223d14e45525f7fae81db77ea8cabeb2fc6c25",
+    "quantizer": "nvidia",
+    "ggufRepoLicense": "other",
+    "ggufRepoGated": false,
+    "contextLength": 262144,
+    "contextLengthSource": "original config.json max_position_embeddings",
+    "artifacts": [
+      {
+        "quantization": "Q4_K_M",
+        "default": true,
+        "files": [
+          {
+            "path": "NVIDIA-Nemotron3-Nano-4B-Q4_K_M.gguf",
+            "sizeBytes": 2837072864,
+            "sha256": "be5d9a656a51922f24f1f09a759cebb694e1f5d9728bf0ef9f8c972c5a0b5ef2",
+            "url": "https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-4B-GGUF/resolve/ba223d14e45525f7fae81db77ea8cabeb2fc6c25/NVIDIA-Nemotron3-Nano-4B-Q4_K_M.gguf"
+          }
+        ],
+        "totalBytes": 2837072864
+      }
+    ],
+    "chatTemplateNote": "embedded GGUF tokenizer.chat_template present (per HF API gguf metadata)",
+    "notes": [
+      "official GGUF from the model publisher",
+      "official GGUF ships only Q4_K_M; no alternative quant in official repo; hybrid Mamba-Transformer (nemotron_h) requires recent llama.cpp"
+    ],
+    "blockers": [],
+    "complete": true
+  },
+  {
+    "releaseId": "openbmb/MiniCPM5-2B",
+    "displayName": "MiniCPM5-2B",
+    "organization": "OpenBMB",
+    "family": "MiniCPM5",
+    "parameterCount": 2516756480,
+    "parameterCountSource": "original repo HF API safetensors.total",
+    "architecture": "llama",
+    "architectureSource": "HF API gguf.architecture (parsed from GGUF header general.architecture)",
+    "originalRepo": "openbmb/MiniCPM5-2B",
+    "originalRevision": "f97400052a43d642bbc6e9975e2397e3ae6a6b52",
+    "originalGated": false,
+    "license": "apache-2.0",
+    "licenseUrl": "https://github.com/OpenBMB/MiniCPM/blob/main/LICENSE",
+    "ggufRepo": "openbmb/MiniCPM5-2B-GGUF",
+    "ggufRevision": "2079a22f3beaa4e306449978533478fe0522f4b3",
+    "quantizer": "openbmb",
+    "ggufRepoLicense": "apache-2.0",
+    "ggufRepoGated": false,
+    "contextLength": 131072,
+    "contextLengthSource": "original config.json max_position_embeddings",
+    "artifacts": [
+      {
+        "quantization": "Q4_K_M",
+        "default": true,
+        "files": [
+          {
+            "path": "MiniCPM5-2B-Q4_K_M.gguf",
+            "sizeBytes": 1561318368,
+            "sha256": "ec2d5801640099e97d8d7e8003ad4d81f336e757811f03a26173dddf386602fd",
+            "url": "https://huggingface.co/openbmb/MiniCPM5-2B-GGUF/resolve/2079a22f3beaa4e306449978533478fe0522f4b3/MiniCPM5-2B-Q4_K_M.gguf"
+          }
+        ],
+        "totalBytes": 1561318368
+      },
+      {
+        "quantization": "Q8_0",
+        "default": false,
+        "files": [
+          {
+            "path": "MiniCPM5-2B-Q8_0.gguf",
+            "sizeBytes": 2679710688,
+            "sha256": "c5415f8989bf88a8288f1b55a3cc371af53c07b0faa220a63bd7a990cfaba078",
+            "url": "https://huggingface.co/openbmb/MiniCPM5-2B-GGUF/resolve/2079a22f3beaa4e306449978533478fe0522f4b3/MiniCPM5-2B-Q8_0.gguf"
+          }
+        ],
+        "totalBytes": 2679710688
+      }
+    ],
+    "chatTemplateNote": "embedded GGUF tokenizer.chat_template present (per HF API gguf metadata)",
+    "notes": [
+      "no license file in repo; license URL taken from README link (cardData.license=apache-2.0)",
+      "official GGUF from the model publisher",
+      "no LICENSE file in HF repo; licenseUrl from README link to GitHub LICENSE (mutable branch URL)"
+    ],
+    "blockers": [],
+    "complete": true
+  },
+  {
+    "releaseId": "openai/gpt-oss-20b",
+    "displayName": "gpt-oss-20b",
+    "organization": "OpenAI",
+    "family": "gpt-oss",
+    "parameterCount": 20914757184,
+    "parameterCountSource": "original repo HF API safetensors.total",
+    "architecture": "gpt-oss",
+    "architectureSource": "HF API gguf.architecture (parsed from GGUF header general.architecture)",
+    "originalRepo": "openai/gpt-oss-20b",
+    "originalRevision": "6cee5e81ee83917806bbde320786a8fb61efebee",
+    "originalGated": false,
+    "license": "apache-2.0",
+    "licenseUrl": "https://huggingface.co/openai/gpt-oss-20b/blob/6cee5e81ee83917806bbde320786a8fb61efebee/LICENSE",
+    "ggufRepo": "ggml-org/gpt-oss-20b-GGUF",
+    "ggufRevision": "ef9b12f2ff56c69cf32153a02784e7a3c88bf524",
+    "quantizer": "ggml-org",
+    "ggufRepoLicense": "apache-2.0",
+    "ggufRepoGated": false,
+    "contextLength": 131072,
+    "contextLengthSource": "original config.json max_position_embeddings",
+    "artifacts": [
+      {
+        "quantization": "MXFP4",
+        "default": true,
+        "files": [
+          {
+            "path": "gpt-oss-20b-MXFP4.gguf",
+            "sizeBytes": 12109566624,
+            "sha256": "27cd6c432c7672cb812a92f611cf3ba7bbc35928262bb1e1253ff4ee6ae35901",
+            "url": "https://huggingface.co/ggml-org/gpt-oss-20b-GGUF/resolve/ef9b12f2ff56c69cf32153a02784e7a3c88bf524/gpt-oss-20b-MXFP4.gguf"
+          }
+        ],
+        "totalBytes": 12109566624
+      }
+    ],
+    "chatTemplateNote": "embedded GGUF tokenizer.chat_template present (per HF API gguf metadata)",
+    "notes": [
+      "third-party quantization by ggml-org (not the model publisher)",
+      "only MXFP4 (native) weights provided by ggml-org; eagle3 draft GGUFs omitted; uses harmony chat format"
+    ],
+    "blockers": ["size: 12.1 GB single file; needs ~16 GB RAM - large tier only"],
+    "complete": true
+  },
+  {
+    "releaseId": "moonshotai/Kimi-Linear-48B-A3B-Instruct",
+    "displayName": "Kimi-Linear-48B-A3B-Instruct",
+    "organization": "Moonshot AI",
+    "family": "Kimi Linear",
+    "parameterCount": 49122681728,
+    "parameterCountSource": "original repo HF API safetensors.total",
+    "architecture": "kimi-linear",
+    "architectureSource": "HF API gguf.architecture (parsed from GGUF header general.architecture)",
+    "originalRepo": "moonshotai/Kimi-Linear-48B-A3B-Instruct",
+    "originalRevision": "e1df551a447157d4658b573f9a695d57658590e9",
+    "originalGated": false,
+    "license": "mit",
+    "licenseUrl": null,
+    "ggufRepo": "bartowski/moonshotai_Kimi-Linear-48B-A3B-Instruct-GGUF",
+    "ggufRevision": "228dbe476e5a02091624a19068f4c962caa8a1c5",
+    "quantizer": "bartowski",
+    "ggufRepoLicense": "mit",
+    "ggufRepoGated": false,
+    "contextLength": 1048576,
+    "contextLengthSource": "GGUF metadata context_length via HF API (original config.json not fetched: unavailable)",
+    "artifacts": [
+      {
+        "quantization": "Q4_K_M",
+        "default": true,
+        "files": [
+          {
+            "path": "moonshotai_Kimi-Linear-48B-A3B-Instruct-Q4_K_M.gguf",
+            "sizeBytes": 30061058720,
+            "sha256": "a1a7d865370652221f937163f7e94c99e1f114861335ba4f8666606843f1620f",
+            "url": "https://huggingface.co/bartowski/moonshotai_Kimi-Linear-48B-A3B-Instruct-GGUF/resolve/228dbe476e5a02091624a19068f4c962caa8a1c5/moonshotai_Kimi-Linear-48B-A3B-Instruct-Q4_K_M.gguf"
+          }
+        ],
+        "totalBytes": 30061058720
+      }
+    ],
+    "chatTemplateNote": "embedded GGUF tokenizer.chat_template present (per HF API gguf metadata)",
+    "notes": [
+      "licenseUrl null: no LICENSE file, license_link, or README license URL in original repo; cardData.license=mit",
+      "third-party quantization by bartowski (not the model publisher)",
+      "smallest open-weight text-only Kimi chat model found; smaller Kimi-VL-A3B-Instruct (16.4B, image-text-to-text) has only community (mradermacher) GGUF; flagship Kimi-K3 is 2.78T params, Kimi-K2-Instruct 1.03T"
+    ],
+    "blockers": [
+      "size: 49.1B total params; Q4_K_M single file 30.1 GB - not consumer-desktop feasible",
+      "only third-party (bartowski) GGUF; no official/ggml-org/unsloth GGUF",
+      "kimi-linear architecture: needs a llama.cpp build with kimi-linear support (verify version before shipping)"
+    ],
+    "complete": true
+  }
+]

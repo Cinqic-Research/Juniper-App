@@ -8,8 +8,8 @@
       "organization": "Qwen",
       "family": "Qwen3",
       "parameterCount": 600000000,
-      "description": "A compact general-purpose instruct model with strong everyday answers and tool-aware chat formatting.",
-      "useCases": ["Everyday chat", "Reasoning", "Tools"],
+      "description": "A compact general-purpose instruct model with strong everyday answers and reasoning.",
+      "useCases": ["Everyday chat", "Reasoning"],
       "instructionTuned": true,
       "architecture": "qwen3",
       "sourceRepository": "https://huggingface.co/Qwen/Qwen3-0.6B-GGUF",
@@ -23,7 +23,7 @@
       "recommendedRamBytes": 6442450944,
       "minimumStorageBytes": 1000000000,
       "supportedArchitectures": ["x86_64", "aarch64", "arm64"],
-      "tags": ["general", "reasoning", "tools"],
+      "tags": ["general", "reasoning"],
       "releaseStatus": "available",
       "artifacts": [
         {
@@ -48,7 +48,13 @@
           "maturity": "beta",
           "qualification": "package-only"
         }
-      ]
+      ],
+      "popularity": {
+        "source": "huggingface-downloads-30d",
+        "snapshot": "2026-10-15T05:53:53Z",
+        "eligibleRank": 1,
+        "downloads": 30452693
+      }
     },
     {
       "id": "qwen2.5-0.5b-instruct-q4",
@@ -96,7 +102,13 @@
           "maturity": "beta",
           "qualification": "package-only"
         }
-      ]
+      ],
+      "popularity": {
+        "source": "huggingface-downloads-30d",
+        "snapshot": "2026-10-15T05:53:53Z",
+        "eligibleRank": 7,
+        "downloads": 6276110
+      }
     },
     {
       "id": "smollm2-360m-instruct-q4",
@@ -245,6 +257,1357 @@
           ],
           "maturity": "experimental",
           "qualification": "qualified"
+        }
+      ],
+      "popularity": {
+        "source": "huggingface-downloads-30d",
+        "snapshot": "2026-10-15T05:53:53Z",
+        "eligibleRank": 10,
+        "downloads": 5982456
+      }
+    },
+    {
+      "id": "qwen3-1.7b",
+      "displayName": "Qwen3 1.7B",
+      "organization": "Alibaba Qwen",
+      "family": "Qwen3",
+      "parameterCount": 2031739904,
+      "description": "A small Qwen3 model with a thinking mode for step-by-step answers; a step up from 0.6B on modest machines.",
+      "useCases": ["Everyday chat", "Reasoning"],
+      "instructionTuned": true,
+      "architecture": "qwen3",
+      "sourceRepository": "https://huggingface.co/Qwen/Qwen3-1.7B-GGUF",
+      "sourceRevision": "90862c4b9d2787eaed51d12237eafdfe7c5f6077",
+      "originalModel": "https://huggingface.co/Qwen/Qwen3-1.7B",
+      "originalRevision": "70d244cc86ccca08cf5af4e1e306ecf908b1ad5e",
+      "license": "Apache-2.0",
+      "licenseUrl": "https://huggingface.co/Qwen/Qwen3-1.7B/blob/70d244cc86ccca08cf5af4e1e306ecf908b1ad5e/LICENSE",
+      "attribution": "Qwen3-1.7B by Alibaba Qwen; GGUF conversion by Qwen (Qwen/Qwen3-1.7B-GGUF).",
+      "chatTemplate": "gguf-embedded",
+      "contextLength": 40960,
+      "minimumRecommendedRamBytes": 2507644685,
+      "recommendedRamBytes": 3990429780,
+      "minimumStorageBytes": 2908167840,
+      "supportedArchitectures": ["x86_64"],
+      "tags": ["general", "reasoning", "small"],
+      "releaseStatus": "available",
+      "popularity": {
+        "source": "huggingface-downloads-30d",
+        "snapshot": "2026-10-15T05:53:53Z",
+        "eligibleRank": 14,
+        "downloads": 4034338
+      },
+      "artifacts": [
+        {
+          "id": "qwen3-1.7b-q8-0",
+          "runtimeId": "llama.cpp",
+          "format": "GGUF",
+          "platforms": ["linux", "windows"],
+          "architectures": ["x86_64"],
+          "quantization": "Q8_0",
+          "sizeBytes": 1834426016,
+          "sha256": "061b54daade076b5d3362dac252678d17da8c68f07560be70818cace6590cb1a",
+          "sourceRevision": "90862c4b9d2787eaed51d12237eafdfe7c5f6077",
+          "files": [
+            {
+              "path": "Qwen3-1.7B-Q8_0.gguf",
+              "sizeBytes": 1834426016,
+              "sha256": "061b54daade076b5d3362dac252678d17da8c68f07560be70818cace6590cb1a",
+              "url": "https://huggingface.co/Qwen/Qwen3-1.7B-GGUF/resolve/90862c4b9d2787eaed51d12237eafdfe7c5f6077/Qwen3-1.7B-Q8_0.gguf"
+            }
+          ],
+          "maturity": "beta",
+          "qualification": "package-only"
+        }
+      ]
+    },
+    {
+      "id": "qwen3-4b",
+      "displayName": "Qwen3 4B",
+      "organization": "Alibaba Qwen",
+      "family": "Qwen3",
+      "parameterCount": 4022468096,
+      "description": "A capable mid-size Qwen3 model for everyday chat and reasoning on laptops with 8 GB or more.",
+      "useCases": ["Everyday chat", "Reasoning"],
+      "instructionTuned": true,
+      "architecture": "qwen3",
+      "sourceRepository": "https://huggingface.co/Qwen/Qwen3-4B-GGUF",
+      "sourceRevision": "bc640142c66e1fdd12af0bd68f40445458f3869b",
+      "originalModel": "https://huggingface.co/Qwen/Qwen3-4B",
+      "originalRevision": "1cfa9a7208912126459214e8b04321603b3df60c",
+      "license": "Apache-2.0",
+      "licenseUrl": "https://huggingface.co/Qwen/Qwen3-4B/blob/1cfa9a7208912126459214e8b04321603b3df60c/LICENSE",
+      "attribution": "Qwen3-4B by Alibaba Qwen; GGUF conversion by Qwen (Qwen/Qwen3-4B-GGUF).",
+      "chatTemplate": "gguf-embedded",
+      "contextLength": 40960,
+      "minimumRecommendedRamBytes": 3304094432,
+      "recommendedRamBytes": 5187666050,
+      "minimumStorageBytes": 5354146528,
+      "supportedArchitectures": ["x86_64"],
+      "tags": ["general", "reasoning"],
+      "releaseStatus": "available",
+      "popularity": {
+        "source": "huggingface-downloads-30d",
+        "snapshot": "2026-10-15T05:53:53Z",
+        "eligibleRank": 2,
+        "downloads": 12585505
+      },
+      "artifacts": [
+        {
+          "id": "qwen3-4b-q4-k-m",
+          "runtimeId": "llama.cpp",
+          "format": "GGUF",
+          "platforms": ["linux", "windows"],
+          "architectures": ["x86_64"],
+          "quantization": "Q4_K_M",
+          "sizeBytes": 2497280256,
+          "sha256": "7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5",
+          "sourceRevision": "bc640142c66e1fdd12af0bd68f40445458f3869b",
+          "files": [
+            {
+              "path": "Qwen3-4B-Q4_K_M.gguf",
+              "sizeBytes": 2497280256,
+              "sha256": "7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5",
+              "url": "https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/bc640142c66e1fdd12af0bd68f40445458f3869b/Qwen3-4B-Q4_K_M.gguf"
+            }
+          ],
+          "maturity": "beta",
+          "qualification": "package-only"
+        },
+        {
+          "id": "qwen3-4b-q8-0",
+          "runtimeId": "llama.cpp",
+          "format": "GGUF",
+          "platforms": ["linux", "windows"],
+          "architectures": ["x86_64"],
+          "quantization": "Q8_0",
+          "sizeBytes": 4280404704,
+          "sha256": "8c2f07f26af9747e41988551106f149b03eb9b5cb6df636027b6bf6278473300",
+          "sourceRevision": "bc640142c66e1fdd12af0bd68f40445458f3869b",
+          "files": [
+            {
+              "path": "Qwen3-4B-Q8_0.gguf",
+              "sizeBytes": 4280404704,
+              "sha256": "8c2f07f26af9747e41988551106f149b03eb9b5cb6df636027b6bf6278473300",
+              "url": "https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/bc640142c66e1fdd12af0bd68f40445458f3869b/Qwen3-4B-Q8_0.gguf"
+            }
+          ],
+          "maturity": "beta",
+          "qualification": "package-only"
+        }
+      ]
+    },
+    {
+      "id": "qwen3-4b-instruct-2507",
+      "displayName": "Qwen3 4B Instruct 2507",
+      "organization": "Alibaba Qwen",
+      "family": "Qwen3",
+      "parameterCount": 4022468096,
+      "description": "The July 2025 non-thinking Qwen3 4B update: direct answers without a reasoning phase, with long-context support.",
+      "useCases": ["Everyday chat", "Writing"],
+      "instructionTuned": true,
+      "architecture": "qwen3",
+      "sourceRepository": "https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF",
+      "sourceRevision": "a06e946bb6b655725eafa393f4a9745d460374c9",
+      "originalModel": "https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507",
+      "originalRevision": "cdbee75f17c01a7cc42f958dc650907174af0554",
+      "license": "Apache-2.0",
+      "licenseUrl": "https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507/blob/cdbee75f17c01a7cc42f958dc650907174af0554/LICENSE",
+      "attribution": "Qwen3-4B-Instruct-2507 by Alibaba Qwen; GGUF conversion by unsloth (unsloth/Qwen3-4B-Instruct-2507-GGUF).",
+      "chatTemplate": "gguf-embedded",
+      "contextLength": 262144,
+      "minimumRecommendedRamBytes": 3304095296,
+      "recommendedRamBytes": 5187666914,
+      "minimumStorageBytes": 3571022944,
+      "supportedArchitectures": ["x86_64"],
+      "tags": ["general"],
+      "releaseStatus": "available",
+      "popularity": {
+        "source": "huggingface-downloads-30d",
+        "snapshot": "2026-10-15T05:53:53Z",
+        "eligibleRank": 16,
+        "downloads": 3293032
+      },
+      "artifacts": [
+        {
+          "id": "qwen3-4b-instruct-2507-q4-k-m",
+          "runtimeId": "llama.cpp",
+          "format": "GGUF",
+          "platforms": ["linux", "windows"],
+          "architectures": ["x86_64"],
+          "quantization": "Q4_K_M",
+          "sizeBytes": 2497281120,
+          "sha256": "3605803b982cb64aead44f6c1b2ae36e3acdb41d8e46c8a94c6533bc4c67e597",
+          "sourceRevision": "a06e946bb6b655725eafa393f4a9745d460374c9",
+          "files": [
+            {
+              "path": "Qwen3-4B-Instruct-2507-Q4_K_M.gguf",
+              "sizeBytes": 2497281120,
+              "sha256": "3605803b982cb64aead44f6c1b2ae36e3acdb41d8e46c8a94c6533bc4c67e597",
+              "url": "https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF/resolve/a06e946bb6b655725eafa393f4a9745d460374c9/Qwen3-4B-Instruct-2507-Q4_K_M.gguf"
+            }
+          ],
+          "maturity": "beta",
+          "qualification": "package-only"
+        }
+      ]
+    },
+    {
+      "id": "qwen3-8b",
+      "displayName": "Qwen3 8B",
+      "organization": "Alibaba Qwen",
+      "family": "Qwen3",
+      "parameterCount": 8190735360,
+      "description": "A strong general Qwen3 model for chat, reasoning, and coding help on machines with 16 GB.",
+      "useCases": ["Everyday chat", "Reasoning", "Coding"],
+      "instructionTuned": true,
+      "architecture": "qwen3",
+      "sourceRepository": "https://huggingface.co/Qwen/Qwen3-8B-GGUF",
+      "sourceRevision": "7c41481f57cb95916b40956ab2f0b139b296d974",
+      "originalModel": "https://huggingface.co/Qwen/Qwen3-8B",
+      "originalRevision": "b968826d9c46dd6066d109eabc6255188de91218",
+      "license": "Apache-2.0",
+      "licenseUrl": "https://huggingface.co/Qwen/Qwen3-8B/blob/b968826d9c46dd6066d109eabc6255188de91218/LICENSE",
+      "attribution": "Qwen3-8B by Alibaba Qwen; GGUF conversion by Qwen (Qwen/Qwen3-8B-GGUF).",
+      "chatTemplate": "gguf-embedded",
+      "contextLength": 40960,
+      "minimumRecommendedRamBytes": 6114325345,
+      "recommendedRamBytes": 8837080005,
+      "minimumStorageBytes": 6101525312,
+      "supportedArchitectures": ["x86_64"],
+      "tags": ["general", "reasoning", "coding"],
+      "releaseStatus": "available",
+      "popularity": {
+        "source": "huggingface-downloads-30d",
+        "snapshot": "2026-10-15T05:53:53Z",
+        "eligibleRank": 3,
+        "downloads": 9739109
+      },
+      "artifacts": [
+        {
+          "id": "qwen3-8b-q4-k-m",
+          "runtimeId": "llama.cpp",
+          "format": "GGUF",
+          "platforms": ["linux", "windows"],
+          "architectures": ["x86_64"],
+          "quantization": "Q4_K_M",
+          "sizeBytes": 5027783488,
+          "sha256": "d98cdcbd03e17ce47681435b5150e34c1417f50b5c0019dd560e4882c5745785",
+          "sourceRevision": "7c41481f57cb95916b40956ab2f0b139b296d974",
+          "files": [
+            {
+              "path": "Qwen3-8B-Q4_K_M.gguf",
+              "sizeBytes": 5027783488,
+              "sha256": "d98cdcbd03e17ce47681435b5150e34c1417f50b5c0019dd560e4882c5745785",
+              "url": "https://huggingface.co/Qwen/Qwen3-8B-GGUF/resolve/7c41481f57cb95916b40956ab2f0b139b296d974/Qwen3-8B-Q4_K_M.gguf"
+            }
+          ],
+          "maturity": "beta",
+          "qualification": "package-only"
+        }
+      ]
+    },
+    {
+      "id": "qwen3-14b",
+      "displayName": "Qwen3 14B",
+      "organization": "Alibaba Qwen",
+      "family": "Qwen3",
+      "parameterCount": 14768307200,
+      "description": "The largest Qwen3 dense model in the catalog; better answers at the cost of memory and speed.",
+      "useCases": ["Reasoning", "Writing", "Coding"],
+      "instructionTuned": true,
+      "architecture": "qwen3",
+      "sourceRepository": "https://huggingface.co/Qwen/Qwen3-14B-GGUF",
+      "sourceRevision": "530227a7d994db8eca5ab5ced2fb692b614357fd",
+      "originalModel": "https://huggingface.co/Qwen/Qwen3-14B",
+      "originalRevision": "40c069824f4251a91eefaf281ebe4c544efd3e18",
+      "license": "Apache-2.0",
+      "licenseUrl": "https://huggingface.co/Qwen/Qwen3-14B/blob/40c069824f4251a91eefaf281ebe4c544efd3e18/LICENSE",
+      "attribution": "Qwen3-14B by Alibaba Qwen; GGUF conversion by Qwen (Qwen/Qwen3-14B-GGUF).",
+      "chatTemplate": "gguf-embedded",
+      "contextLength": 40960,
+      "minimumRecommendedRamBytes": 10529708191,
+      "recommendedRamBytes": 14576702974,
+      "minimumStorageBytes": 10075494784,
+      "supportedArchitectures": ["x86_64"],
+      "tags": ["general", "reasoning", "large"],
+      "releaseStatus": "available",
+      "popularity": {
+        "source": "huggingface-downloads-30d",
+        "snapshot": "2026-10-15T05:53:53Z",
+        "eligibleRank": 5,
+        "downloads": 6913178
+      },
+      "artifacts": [
+        {
+          "id": "qwen3-14b-q4-k-m",
+          "runtimeId": "llama.cpp",
+          "format": "GGUF",
+          "platforms": ["linux", "windows"],
+          "architectures": ["x86_64"],
+          "quantization": "Q4_K_M",
+          "sizeBytes": 9001752960,
+          "sha256": "500a8806e85ee9c83f3ae08420295592451379b4f8cf2d0f41c15dffeb6b81f0",
+          "sourceRevision": "530227a7d994db8eca5ab5ced2fb692b614357fd",
+          "files": [
+            {
+              "path": "Qwen3-14B-Q4_K_M.gguf",
+              "sizeBytes": 9001752960,
+              "sha256": "500a8806e85ee9c83f3ae08420295592451379b4f8cf2d0f41c15dffeb6b81f0",
+              "url": "https://huggingface.co/Qwen/Qwen3-14B-GGUF/resolve/530227a7d994db8eca5ab5ced2fb692b614357fd/Qwen3-14B-Q4_K_M.gguf"
+            }
+          ],
+          "maturity": "beta",
+          "qualification": "package-only"
+        }
+      ]
+    },
+    {
+      "id": "qwen2.5-1.5b-instruct",
+      "displayName": "Qwen2.5 1.5B Instruct",
+      "organization": "Alibaba Qwen",
+      "family": "Qwen2.5",
+      "parameterCount": 1543714304,
+      "description": "A fast small instruct model for everyday chat and drafting.",
+      "useCases": ["Everyday chat", "Writing"],
+      "instructionTuned": true,
+      "architecture": "qwen2",
+      "sourceRepository": "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF",
+      "sourceRevision": "91cad51170dc346986eccefdc2dd33a9da36ead9",
+      "originalModel": "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct",
+      "originalRevision": "989aa7980e4cf806f80c7fef2b1adb7bc71aa306",
+      "license": "Apache-2.0",
+      "licenseUrl": "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct/blob/989aa7980e4cf806f80c7fef2b1adb7bc71aa306/LICENSE",
+      "attribution": "Qwen2.5-1.5B-Instruct by Alibaba Qwen; GGUF conversion by Qwen (Qwen/Qwen2.5-1.5B-Instruct-GGUF).",
+      "chatTemplate": "gguf-embedded",
+      "contextLength": 32768,
+      "minimumRecommendedRamBytes": 1757788561,
+      "recommendedRamBytes": 3142321125,
+      "minimumStorageBytes": 2968273952,
+      "supportedArchitectures": ["x86_64"],
+      "tags": ["general", "fast", "small"],
+      "releaseStatus": "available",
+      "popularity": {
+        "source": "huggingface-downloads-30d",
+        "snapshot": "2026-10-15T05:53:53Z",
+        "eligibleRank": 9,
+        "downloads": 6018399
+      },
+      "artifacts": [
+        {
+          "id": "qwen2.5-1.5b-instruct-q4-k-m",
+          "runtimeId": "llama.cpp",
+          "format": "GGUF",
+          "platforms": ["linux", "windows"],
+          "architectures": ["x86_64"],
+          "quantization": "Q4_K_M",
+          "sizeBytes": 1117320736,
+          "sha256": "6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e",
+          "sourceRevision": "91cad51170dc346986eccefdc2dd33a9da36ead9",
+          "files": [
+            {
+              "path": "qwen2.5-1.5b-instruct-q4_k_m.gguf",
+              "sizeBytes": 1117320736,
+              "sha256": "6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e",
+              "url": "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/91cad51170dc346986eccefdc2dd33a9da36ead9/qwen2.5-1.5b-instruct-q4_k_m.gguf"
+            }
+          ],
+          "maturity": "beta",
+          "qualification": "package-only"
+        },
+        {
+          "id": "qwen2.5-1.5b-instruct-q8-0",
+          "runtimeId": "llama.cpp",
+          "format": "GGUF",
+          "platforms": ["linux", "windows"],
+          "architectures": ["x86_64"],
+          "quantization": "Q8_0",
+          "sizeBytes": 1894532128,
+          "sha256": "d7efb072e7724d25048a4fda0a3e10b04bdef5d06b1403a1c93bd9f1240a63c8",
+          "sourceRevision": "91cad51170dc346986eccefdc2dd33a9da36ead9",
+          "files": [
+            {
+              "path": "qwen2.5-1.5b-instruct-q8_0.gguf",
+              "sizeBytes": 1894532128,
+              "sha256": "d7efb072e7724d25048a4fda0a3e10b04bdef5d06b1403a1c93bd9f1240a63c8",
+              "url": "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/91cad51170dc346986eccefdc2dd33a9da36ead9/qwen2.5-1.5b-instruct-q8_0.gguf"
+            }
+          ],
+          "maturity": "beta",
+          "qualification": "package-only"
+        }
+      ]
+    },
+    {
+      "id": "qwen2.5-7b-instruct",
+      "displayName": "Qwen2.5 7B Instruct",
+      "organization": "Alibaba Qwen",
+      "family": "Qwen2.5",
+      "parameterCount": 7615616512,
+      "description": "A widely used 7B instruct model for writing, analysis, and structured answers. Published as a two-part download.",
+      "useCases": ["Everyday chat", "Writing", "Analysis"],
+      "instructionTuned": true,
+      "architecture": "qwen2",
+      "sourceRepository": "https://huggingface.co/Qwen/Qwen2.5-7B-Instruct-GGUF",
+      "sourceRevision": "bb5d59e06d9551d752d08b292a50eb208b07ab1f",
+      "originalModel": "https://huggingface.co/Qwen/Qwen2.5-7B-Instruct",
+      "originalRevision": "a09a35458c702b33eeacc393d103063234e8bc28",
+      "license": "Apache-2.0",
+      "licenseUrl": "https://huggingface.co/Qwen/Qwen2.5-7B-Instruct/blob/a09a35458c702b33eeacc393d103063234e8bc28/LICENSE",
+      "attribution": "Qwen2.5-7B-Instruct by Alibaba Qwen; GGUF conversion by Qwen (Qwen/Qwen2.5-7B-Instruct-GGUF).",
+      "chatTemplate": "gguf-embedded",
+      "contextLength": 32768,
+      "minimumRecommendedRamBytes": 5731019917,
+      "recommendedRamBytes": 8337987859,
+      "minimumStorageBytes": 5756815456,
+      "supportedArchitectures": ["x86_64"],
+      "tags": ["general", "writing"],
+      "releaseStatus": "available",
+      "popularity": {
+        "source": "huggingface-downloads-30d",
+        "snapshot": "2026-10-15T05:53:53Z",
+        "eligibleRank": 4,
+        "downloads": 7357696
+      },
+      "artifacts": [
+        {
+          "id": "qwen2.5-7b-instruct-q4-k-m",
+          "runtimeId": "llama.cpp",
+          "format": "GGUF",
+          "platforms": ["linux", "windows"],
+          "architectures": ["x86_64"],
+          "quantization": "Q4_K_M",
+          "sizeBytes": 4683073632,
+          "sourceRevision": "bb5d59e06d9551d752d08b292a50eb208b07ab1f",
+          "files": [
+            {
+              "path": "qwen2.5-7b-instruct-q4_k_m-00001-of-00002.gguf",
+              "sizeBytes": 3993201344,
+              "sha256": "dfce12e3862a5283ccfb88221b48480e58745165de856439950d0f22590580db",
+              "url": "https://huggingface.co/Qwen/Qwen2.5-7B-Instruct-GGUF/resolve/bb5d59e06d9551d752d08b292a50eb208b07ab1f/qwen2.5-7b-instruct-q4_k_m-00001-of-00002.gguf"
+            },
+            {
+              "path": "qwen2.5-7b-instruct-q4_k_m-00002-of-00002.gguf",
+              "sizeBytes": 689872288,
+              "sha256": "539cf93f78e887edea1c04e2d7d8cdaca9d01dae9c9025bcb8accbe29df3d72a",
+              "url": "https://huggingface.co/Qwen/Qwen2.5-7B-Instruct-GGUF/resolve/bb5d59e06d9551d752d08b292a50eb208b07ab1f/qwen2.5-7b-instruct-q4_k_m-00002-of-00002.gguf"
+            }
+          ],
+          "maturity": "beta",
+          "qualification": "package-only"
+        }
+      ]
+    },
+    {
+      "id": "qwen2.5-coder-7b-instruct",
+      "displayName": "Qwen2.5 Coder 7B Instruct",
+      "organization": "Alibaba Qwen",
+      "family": "Qwen2.5-Coder",
+      "parameterCount": 7615616512,
+      "description": "A coding-focused Qwen2.5 model for explaining, writing, and reviewing code.",
+      "useCases": ["Coding", "Code review"],
+      "instructionTuned": true,
+      "architecture": "qwen2",
+      "sourceRepository": "https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF",
+      "sourceRevision": "13fb94bfda8c8cf22497dc57b78f391a9acb426a",
+      "originalModel": "https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct",
+      "originalRevision": "c03e6d358207e414f1eca0bb1891e29f1db0e242",
+      "license": "Apache-2.0",
+      "licenseUrl": "https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct/blob/c03e6d358207e414f1eca0bb1891e29f1db0e242/LICENSE",
+      "attribution": "Qwen2.5-Coder-7B-Instruct by Alibaba Qwen; GGUF conversion by Qwen (Qwen/Qwen2.5-Coder-7B-Instruct-GGUF).",
+      "chatTemplate": "gguf-embedded",
+      "contextLength": 32768,
+      "minimumRecommendedRamBytes": 5731019821,
+      "recommendedRamBytes": 8337987763,
+      "minimumStorageBytes": 5756815360,
+      "supportedArchitectures": ["x86_64"],
+      "tags": ["coding"],
+      "releaseStatus": "available",
+      "popularity": {
+        "source": "huggingface-downloads-30d",
+        "snapshot": "2026-10-15T05:53:53Z",
+        "eligibleRank": 22,
+        "downloads": 1589786
+      },
+      "artifacts": [
+        {
+          "id": "qwen2.5-coder-7b-instruct-q4-k-m",
+          "runtimeId": "llama.cpp",
+          "format": "GGUF",
+          "platforms": ["linux", "windows"],
+          "architectures": ["x86_64"],
+          "quantization": "Q4_K_M",
+          "sizeBytes": 4683073536,
+          "sha256": "509287f78cb4d4cf6b3843734733b914b2c158e43e22a7f4bf5e963800894d3c",
+          "sourceRevision": "13fb94bfda8c8cf22497dc57b78f391a9acb426a",
+          "files": [
+            {
+              "path": "qwen2.5-coder-7b-instruct-q4_k_m.gguf",
+              "sizeBytes": 4683073536,
+              "sha256": "509287f78cb4d4cf6b3843734733b914b2c158e43e22a7f4bf5e963800894d3c",
+              "url": "https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF/resolve/13fb94bfda8c8cf22497dc57b78f391a9acb426a/qwen2.5-coder-7b-instruct-q4_k_m.gguf"
+            }
+          ],
+          "maturity": "beta",
+          "qualification": "package-only"
+        }
+      ]
+    },
+    {
+      "id": "llama-3.2-1b-instruct",
+      "displayName": "Llama 3.2 1B Instruct",
+      "organization": "Meta",
+      "family": "Llama 3.2",
+      "parameterCount": 1235814400,
+      "description": "Meta’s small Llama 3.2 instruct model for quick everyday chat.",
+      "useCases": ["Everyday chat", "Fast chat"],
+      "instructionTuned": true,
+      "architecture": "llama",
+      "sourceRepository": "https://huggingface.co/unsloth/Llama-3.2-1B-Instruct-GGUF",
+      "sourceRevision": "b69aef112e9f895e6f98d7ae0949f72ff09aa401",
+      "originalModel": "https://huggingface.co/meta-llama/Llama-3.2-1B-Instruct",
+      "originalRevision": "9213176726f574b556790deb65791e0c5aa438b6",
+      "license": "Llama 3.2 Community License",
+      "licenseUrl": "https://huggingface.co/meta-llama/Llama-3.2-1B-Instruct/blob/9213176726f574b556790deb65791e0c5aa438b6/LICENSE.txt",
+      "licenseAcceptance": "required",
+      "licenseTermsRevision": "9213176726f574b556790deb65791e0c5aa438b6",
+      "attribution": "Llama-3.2-1B-Instruct by Meta; GGUF conversion by unsloth (unsloth/Llama-3.2-1B-Instruct-GGUF).",
+      "chatTemplate": "gguf-embedded",
+      "contextLength": 131072,
+      "minimumRecommendedRamBytes": 1427499380,
+      "recommendedRamBytes": 2750043506,
+      "minimumStorageBytes": 2394824352,
+      "supportedArchitectures": ["x86_64"],
+      "tags": ["general", "fast", "small"],
+      "releaseStatus": "available",
+      "popularity": {
+        "source": "huggingface-downloads-30d",
+        "snapshot": "2026-10-15T05:53:53Z",
+        "eligibleRank": 6,
+        "downloads": 6380305
+      },
+      "artifacts": [
+        {
+          "id": "llama-3.2-1b-instruct-q8-0",
+          "runtimeId": "llama.cpp",
+          "format": "GGUF",
+          "platforms": ["linux", "windows"],
+          "architectures": ["x86_64"],
+          "quantization": "Q8_0",
+          "sizeBytes": 1321082528,
+          "sha256": "3f87a880027e7b9ea8e0da9e4009584336f352af444a0e6e5c20721ac4c7ffd1",
+          "sourceRevision": "b69aef112e9f895e6f98d7ae0949f72ff09aa401",
+          "files": [
+            {
+              "path": "Llama-3.2-1B-Instruct-Q8_0.gguf",
+              "sizeBytes": 1321082528,
+              "sha256": "3f87a880027e7b9ea8e0da9e4009584336f352af444a0e6e5c20721ac4c7ffd1",
+              "url": "https://huggingface.co/unsloth/Llama-3.2-1B-Instruct-GGUF/resolve/b69aef112e9f895e6f98d7ae0949f72ff09aa401/Llama-3.2-1B-Instruct-Q8_0.gguf"
+            }
+          ],
+          "maturity": "beta",
+          "qualification": "package-only"
+        },
+        {
+          "id": "llama-3.2-1b-instruct-q4-k-m",
+          "runtimeId": "llama.cpp",
+          "format": "GGUF",
+          "platforms": ["linux", "windows"],
+          "architectures": ["x86_64"],
+          "quantization": "Q4_K_M",
+          "sizeBytes": 807694368,
+          "sha256": "3f5a22426976ab26cfe84dba63c1d08391717abb1af893e10f1b2968d862dcc1",
+          "sourceRevision": "b69aef112e9f895e6f98d7ae0949f72ff09aa401",
+          "files": [
+            {
+              "path": "Llama-3.2-1B-Instruct-Q4_K_M.gguf",
+              "sizeBytes": 807694368,
+              "sha256": "3f5a22426976ab26cfe84dba63c1d08391717abb1af893e10f1b2968d862dcc1",
+              "url": "https://huggingface.co/unsloth/Llama-3.2-1B-Instruct-GGUF/resolve/b69aef112e9f895e6f98d7ae0949f72ff09aa401/Llama-3.2-1B-Instruct-Q4_K_M.gguf"
+            }
+          ],
+          "maturity": "beta",
+          "qualification": "package-only"
+        }
+      ]
+    },
+    {
+      "id": "llama-3.2-3b-instruct",
+      "displayName": "Llama 3.2 3B Instruct",
+      "organization": "Meta",
+      "family": "Llama 3.2",
+      "parameterCount": 3212749824,
+      "description": "Meta’s 3B Llama 3.2 instruct model; a balanced choice for chat and summaries.",
+      "useCases": ["Everyday chat", "Summaries"],
+      "instructionTuned": true,
+      "architecture": "llama",
+      "sourceRepository": "https://huggingface.co/unsloth/Llama-3.2-3B-Instruct-GGUF",
+      "sourceRevision": "e7d0997e49c9cb00d88b4c1a6a16aa894b0bbc31",
+      "originalModel": "https://huggingface.co/meta-llama/Llama-3.2-3B-Instruct",
+      "originalRevision": "0cb88a4f764b7a12671c53f0838cd831a0843b95",
+      "license": "Llama 3.2 Community License",
+      "licenseUrl": "https://huggingface.co/meta-llama/Llama-3.2-3B-Instruct/blob/0cb88a4f764b7a12671c53f0838cd831a0843b95/LICENSE.txt",
+      "licenseAcceptance": "required",
+      "licenseTermsRevision": "0cb88a4f764b7a12671c53f0838cd831a0843b95",
+      "attribution": "Llama-3.2-3B-Instruct by Meta; GGUF conversion by unsloth (unsloth/Llama-3.2-3B-Instruct-GGUF).",
+      "chatTemplate": "gguf-embedded",
+      "contextLength": 131072,
+      "minimumRecommendedRamBytes": 2771852503,
+      "recommendedRamBytes": 4492406300,
+      "minimumStorageBytes": 3093119424,
+      "supportedArchitectures": ["x86_64"],
+      "tags": ["general"],
+      "releaseStatus": "available",
+      "popularity": {
+        "source": "huggingface-downloads-30d",
+        "snapshot": "2026-10-15T05:53:53Z",
+        "eligibleRank": 25,
+        "downloads": 1352983
+      },
+      "artifacts": [
+        {
+          "id": "llama-3.2-3b-instruct-q4-k-m",
+          "runtimeId": "llama.cpp",
+          "format": "GGUF",
+          "platforms": ["linux", "windows"],
+          "architectures": ["x86_64"],
+          "quantization": "Q4_K_M",
+          "sizeBytes": 2019377600,
+          "sha256": "6c99cc00ae910f6a532a80022cb4bc1939094527a089c29294b841c0bd87f74d",
+          "sourceRevision": "e7d0997e49c9cb00d88b4c1a6a16aa894b0bbc31",
+          "files": [
+            {
+              "path": "Llama-3.2-3B-Instruct-Q4_K_M.gguf",
+              "sizeBytes": 2019377600,
+              "sha256": "6c99cc00ae910f6a532a80022cb4bc1939094527a089c29294b841c0bd87f74d",
+              "url": "https://huggingface.co/unsloth/Llama-3.2-3B-Instruct-GGUF/resolve/e7d0997e49c9cb00d88b4c1a6a16aa894b0bbc31/Llama-3.2-3B-Instruct-Q4_K_M.gguf"
+            }
+          ],
+          "maturity": "beta",
+          "qualification": "package-only"
+        }
+      ]
+    },
+    {
+      "id": "llama-3.1-8b-instruct",
+      "displayName": "Llama 3.1 8B Instruct",
+      "organization": "Meta",
+      "family": "Llama 3.1",
+      "parameterCount": 8030261248,
+      "description": "Meta’s popular 8B Llama 3.1 instruct model for general chat, writing, and analysis.",
+      "useCases": ["Everyday chat", "Writing", "Analysis"],
+      "instructionTuned": true,
+      "architecture": "llama",
+      "sourceRepository": "https://huggingface.co/unsloth/Llama-3.1-8B-Instruct-GGUF",
+      "sourceRevision": "600b0020115fd6b17f0752848fe7b5a1be686bcd",
+      "originalModel": "https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct",
+      "originalRevision": "0e9e39f249a16976918f6564b8830bc894c89659",
+      "license": "Llama 3.1 Community License",
+      "licenseUrl": "https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct/blob/0e9e39f249a16976918f6564b8830bc894c89659/LICENSE",
+      "licenseAcceptance": "required",
+      "licenseTermsRevision": "0e9e39f249a16976918f6564b8830bc894c89659",
+      "attribution": "Llama-3.1-8B-Instruct by Meta; GGUF conversion by unsloth (unsloth/Llama-3.1-8B-Instruct-GGUF).",
+      "chatTemplate": "gguf-embedded",
+      "contextLength": 131072,
+      "minimumRecommendedRamBytes": 5996511822,
+      "recommendedRamBytes": 8686958776,
+      "minimumStorageBytes": 5994481024,
+      "supportedArchitectures": ["x86_64"],
+      "tags": ["general"],
+      "releaseStatus": "available",
+      "popularity": {
+        "source": "huggingface-downloads-30d",
+        "snapshot": "2026-10-15T05:53:53Z",
+        "eligibleRank": 8,
+        "downloads": 6034692
+      },
+      "artifacts": [
+        {
+          "id": "llama-3.1-8b-instruct-q4-k-m",
+          "runtimeId": "llama.cpp",
+          "format": "GGUF",
+          "platforms": ["linux", "windows"],
+          "architectures": ["x86_64"],
+          "quantization": "Q4_K_M",
+          "sizeBytes": 4920739200,
+          "sha256": "b3bdbf23b47d7e6bb791c99b206deb169cd5a96362a9e3399028df2faacdc506",
+          "sourceRevision": "600b0020115fd6b17f0752848fe7b5a1be686bcd",
+          "files": [
+            {
+              "path": "Llama-3.1-8B-Instruct-Q4_K_M.gguf",
+              "sizeBytes": 4920739200,
+              "sha256": "b3bdbf23b47d7e6bb791c99b206deb169cd5a96362a9e3399028df2faacdc506",
+              "url": "https://huggingface.co/unsloth/Llama-3.1-8B-Instruct-GGUF/resolve/600b0020115fd6b17f0752848fe7b5a1be686bcd/Llama-3.1-8B-Instruct-Q4_K_M.gguf"
+            }
+          ],
+          "maturity": "beta",
+          "qualification": "package-only"
+        }
+      ]
+    },
+    {
+      "id": "gemma-3-1b-it",
+      "displayName": "Gemma 3 1B IT",
+      "organization": "Google",
+      "family": "Gemma 3",
+      "parameterCount": 999885952,
+      "description": "Google’s small Gemma 3 instruct model for quick text chat.",
+      "useCases": ["Everyday chat", "Fast chat"],
+      "instructionTuned": true,
+      "architecture": "gemma3",
+      "sourceRepository": "https://huggingface.co/ggml-org/gemma-3-1b-it-GGUF",
+      "sourceRevision": "f9c28bcd85737ffc5aef028638d3341d49869c27",
+      "originalModel": "https://huggingface.co/google/gemma-3-1b-it",
+      "originalRevision": "dcc83ea841ab6100d6b47a070329e1ba4cf78752",
+      "license": "Gemma Terms of Use",
+      "licenseUrl": "https://ai.google.dev/gemma/terms",
+      "licenseAcceptance": "required",
+      "licenseTermsRevision": "gemma-terms-2026-04-01-sha256-971c1f26bda668f56567a7545df993d297b6f331ce9d2ad677ee0dee588ff86f",
+      "attribution": "gemma-3-1b-it by Google; GGUF conversion by ggml-org (ggml-org/gemma-3-1b-it-GGUF).",
+      "chatTemplate": "gguf-embedded",
+      "contextLength": 32768,
+      "minimumRecommendedRamBytes": 1410030362,
+      "recommendedRamBytes": 2685075817,
+      "minimumStorageBytes": 2143048192,
+      "supportedArchitectures": ["x86_64"],
+      "tags": ["general", "fast", "small"],
+      "releaseStatus": "available",
+      "popularity": {
+        "source": "huggingface-downloads-30d",
+        "snapshot": "2026-10-15T05:53:53Z",
+        "eligibleRank": 18,
+        "downloads": 2247811
+      },
+      "artifacts": [
+        {
+          "id": "gemma-3-1b-it-q8-0",
+          "runtimeId": "llama.cpp",
+          "format": "GGUF",
+          "platforms": ["linux", "windows"],
+          "architectures": ["x86_64"],
+          "quantization": "Q8_0",
+          "sizeBytes": 1069306368,
+          "sha256": "b205840c5dcef55078e37d344677869a714ffd42a4ae448c48dcfb52e4bb10d5",
+          "sourceRevision": "f9c28bcd85737ffc5aef028638d3341d49869c27",
+          "files": [
+            {
+              "path": "gemma-3-1b-it-Q8_0.gguf",
+              "sizeBytes": 1069306368,
+              "sha256": "b205840c5dcef55078e37d344677869a714ffd42a4ae448c48dcfb52e4bb10d5",
+              "url": "https://huggingface.co/ggml-org/gemma-3-1b-it-GGUF/resolve/f9c28bcd85737ffc5aef028638d3341d49869c27/gemma-3-1b-it-Q8_0.gguf"
+            }
+          ],
+          "maturity": "beta",
+          "qualification": "package-only"
+        },
+        {
+          "id": "gemma-3-1b-it-q4-k-m",
+          "runtimeId": "llama.cpp",
+          "format": "GGUF",
+          "platforms": ["linux", "windows"],
+          "architectures": ["x86_64"],
+          "quantization": "Q4_K_M",
+          "sizeBytes": 806058240,
+          "sha256": "8ccc5cd1f1b3602548715ae25a66ed73fd5dc68a210412eea643eb20eb75a135",
+          "sourceRevision": "f9c28bcd85737ffc5aef028638d3341d49869c27",
+          "files": [
+            {
+              "path": "gemma-3-1b-it-Q4_K_M.gguf",
+              "sizeBytes": 806058240,
+              "sha256": "8ccc5cd1f1b3602548715ae25a66ed73fd5dc68a210412eea643eb20eb75a135",
+              "url": "https://huggingface.co/ggml-org/gemma-3-1b-it-GGUF/resolve/f9c28bcd85737ffc5aef028638d3341d49869c27/gemma-3-1b-it-Q4_K_M.gguf"
+            }
+          ],
+          "maturity": "beta",
+          "qualification": "package-only"
+        }
+      ]
+    },
+    {
+      "id": "gemma-3-4b-it",
+      "displayName": "Gemma 3 4B IT (text)",
+      "organization": "Google",
+      "family": "Gemma 3",
+      "parameterCount": 4300079472,
+      "description": "Google’s Gemma 3 4B instruct model, used for text only: Juniper does not load its image component.",
+      "useCases": ["Everyday chat", "Writing"],
+      "instructionTuned": true,
+      "architecture": "gemma3",
+      "sourceRepository": "https://huggingface.co/ggml-org/gemma-3-4b-it-GGUF",
+      "sourceRevision": "d0976223747697cb51e056d85c532013931fe52e",
+      "originalModel": "https://huggingface.co/google/gemma-3-4b-it",
+      "originalRevision": "093f9f388b31de276ce2de164bdc2081324b9767",
+      "license": "Gemma Terms of Use",
+      "licenseUrl": "https://ai.google.dev/gemma/terms",
+      "licenseAcceptance": "required",
+      "licenseTermsRevision": "gemma-terms-2026-04-01-sha256-971c1f26bda668f56567a7545df993d297b6f331ce9d2ad677ee0dee588ff86f",
+      "attribution": "gemma-3-4b-it by Google; GGUF conversion by ggml-org (ggml-org/gemma-3-4b-it-GGUF).",
+      "chatTemplate": "gguf-embedded",
+      "contextLength": 131072,
+      "minimumRecommendedRamBytes": 3315202216,
+      "recommendedRamBytes": 5254664386,
+      "minimumStorageBytes": 3563499680,
+      "supportedArchitectures": ["x86_64"],
+      "tags": ["general"],
+      "releaseStatus": "available",
+      "artifacts": [
+        {
+          "id": "gemma-3-4b-it-q4-k-m",
+          "runtimeId": "llama.cpp",
+          "format": "GGUF",
+          "platforms": ["linux", "windows"],
+          "architectures": ["x86_64"],
+          "quantization": "Q4_K_M",
+          "sizeBytes": 2489757856,
+          "sha256": "882e8d2db44dc554fb0ea5077cb7e4bc49e7342a1f0da57901c0802ea21a0863",
+          "sourceRevision": "d0976223747697cb51e056d85c532013931fe52e",
+          "files": [
+            {
+              "path": "gemma-3-4b-it-Q4_K_M.gguf",
+              "sizeBytes": 2489757856,
+              "sha256": "882e8d2db44dc554fb0ea5077cb7e4bc49e7342a1f0da57901c0802ea21a0863",
+              "url": "https://huggingface.co/ggml-org/gemma-3-4b-it-GGUF/resolve/d0976223747697cb51e056d85c532013931fe52e/gemma-3-4b-it-Q4_K_M.gguf"
+            }
+          ],
+          "maturity": "beta",
+          "qualification": "package-only"
+        }
+      ]
+    },
+    {
+      "id": "deepseek-r1-distill-qwen-1.5b",
+      "displayName": "DeepSeek R1 Distill Qwen 1.5B",
+      "organization": "DeepSeek",
+      "family": "DeepSeek-R1-Distill",
+      "parameterCount": 1777088000,
+      "description": "A small Qwen2.5 model distilled from DeepSeek-R1 reasoning traces; it reasons at length before answering. Not the original DeepSeek-R1.",
+      "useCases": ["Reasoning", "Math"],
+      "instructionTuned": true,
+      "architecture": "qwen2",
+      "sourceRepository": "https://huggingface.co/unsloth/DeepSeek-R1-Distill-Qwen-1.5B-GGUF",
+      "sourceRevision": "3cb4d15544a2a5e07439592b9a0965b6445fbd34",
+      "originalModel": "https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B",
+      "originalRevision": "ad9f0ae0864d7fbcd1cd905e3c6c5b069cc8b562",
+      "license": "MIT",
+      "licenseUrl": "https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B/blob/ad9f0ae0864d7fbcd1cd905e3c6c5b069cc8b562/LICENSE",
+      "attribution": "DeepSeek-R1-Distill-Qwen-1.5B by DeepSeek; GGUF conversion by unsloth (unsloth/DeepSeek-R1-Distill-Qwen-1.5B-GGUF).",
+      "chatTemplate": "gguf-embedded",
+      "contextLength": 131072,
+      "minimumRecommendedRamBytes": 1773450581,
+      "recommendedRamBytes": 3204967476,
+      "minimumStorageBytes": 2191063136,
+      "supportedArchitectures": ["x86_64"],
+      "tags": ["reasoning", "small"],
+      "releaseStatus": "available",
+      "popularity": {
+        "source": "huggingface-downloads-30d",
+        "snapshot": "2026-10-15T05:53:53Z",
+        "eligibleRank": 27,
+        "downloads": 1333486
+      },
+      "artifacts": [
+        {
+          "id": "deepseek-r1-distill-qwen-1.5b-q4-k-m",
+          "runtimeId": "llama.cpp",
+          "format": "GGUF",
+          "platforms": ["linux", "windows"],
+          "architectures": ["x86_64"],
+          "quantization": "Q4_K_M",
+          "sizeBytes": 1117321312,
+          "sha256": "f3bdf9cf31dee4b57ae4e455a1cb0d01b5c2c1b50d72d3112141c195506c2840",
+          "sourceRevision": "3cb4d15544a2a5e07439592b9a0965b6445fbd34",
+          "files": [
+            {
+              "path": "DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf",
+              "sizeBytes": 1117321312,
+              "sha256": "f3bdf9cf31dee4b57ae4e455a1cb0d01b5c2c1b50d72d3112141c195506c2840",
+              "url": "https://huggingface.co/unsloth/DeepSeek-R1-Distill-Qwen-1.5B-GGUF/resolve/3cb4d15544a2a5e07439592b9a0965b6445fbd34/DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf"
+            }
+          ],
+          "maturity": "beta",
+          "qualification": "package-only"
+        }
+      ]
+    },
+    {
+      "id": "deepseek-r1-distill-qwen-7b",
+      "displayName": "DeepSeek R1 Distill Qwen 7B",
+      "organization": "DeepSeek",
+      "family": "DeepSeek-R1-Distill",
+      "parameterCount": 7615616512,
+      "description": "A 7B Qwen2.5 model distilled from DeepSeek-R1 reasoning traces, for math and step-by-step problems. Not the original DeepSeek-R1.",
+      "useCases": ["Reasoning", "Math"],
+      "instructionTuned": true,
+      "architecture": "qwen2",
+      "sourceRepository": "https://huggingface.co/unsloth/DeepSeek-R1-Distill-Qwen-7B-GGUF",
+      "sourceRevision": "097680e4eed7a83b3df6b0bb5e5134099cadf1b0",
+      "originalModel": "https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-7B",
+      "originalRevision": "916b56a44061fd5cd7d6a8fb632557ed4f724f60",
+      "license": "MIT",
+      "licenseUrl": "https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-7B/blob/916b56a44061fd5cd7d6a8fb632557ed4f724f60/LICENSE",
+      "attribution": "DeepSeek-R1-Distill-Qwen-7B by DeepSeek; GGUF conversion by unsloth (unsloth/DeepSeek-R1-Distill-Qwen-7B-GGUF).",
+      "chatTemplate": "gguf-embedded",
+      "contextLength": 131072,
+      "minimumRecommendedRamBytes": 5731019533,
+      "recommendedRamBytes": 8337987475,
+      "minimumStorageBytes": 5756815072,
+      "supportedArchitectures": ["x86_64"],
+      "tags": ["reasoning"],
+      "releaseStatus": "available",
+      "artifacts": [
+        {
+          "id": "deepseek-r1-distill-qwen-7b-q4-k-m",
+          "runtimeId": "llama.cpp",
+          "format": "GGUF",
+          "platforms": ["linux", "windows"],
+          "architectures": ["x86_64"],
+          "quantization": "Q4_K_M",
+          "sizeBytes": 4683073248,
+          "sha256": "78272d8d32084548bd450394a560eb2d70de8232ab96a725769b1f9171235c1c",
+          "sourceRevision": "097680e4eed7a83b3df6b0bb5e5134099cadf1b0",
+          "files": [
+            {
+              "path": "DeepSeek-R1-Distill-Qwen-7B-Q4_K_M.gguf",
+              "sizeBytes": 4683073248,
+              "sha256": "78272d8d32084548bd450394a560eb2d70de8232ab96a725769b1f9171235c1c",
+              "url": "https://huggingface.co/unsloth/DeepSeek-R1-Distill-Qwen-7B-GGUF/resolve/097680e4eed7a83b3df6b0bb5e5134099cadf1b0/DeepSeek-R1-Distill-Qwen-7B-Q4_K_M.gguf"
+            }
+          ],
+          "maturity": "beta",
+          "qualification": "package-only"
+        }
+      ]
+    },
+    {
+      "id": "mistral-7b-instruct-v0.3",
+      "displayName": "Mistral 7B Instruct v0.3",
+      "organization": "Mistral AI",
+      "family": "Mistral",
+      "parameterCount": 7248023552,
+      "description": "Mistral AI’s Apache-licensed 7B instruct model for general chat and writing.",
+      "useCases": ["Everyday chat", "Writing"],
+      "instructionTuned": true,
+      "architecture": "llama",
+      "sourceRepository": "https://huggingface.co/lmstudio-community/Mistral-7B-Instruct-v0.3-GGUF",
+      "sourceRevision": "29a785419661afc70b5cd91b5023a835b0092281",
+      "originalModel": "https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.3",
+      "originalRevision": "c170c708c41dac9275d15a8fff4eca08d52bab71",
+      "license": "Apache-2.0",
+      "licenseUrl": "https://www.apache.org/licenses/LICENSE-2.0",
+      "attribution": "Mistral-7B-Instruct-v0.3 by Mistral AI; GGUF conversion by lmstudio-community (lmstudio-community/Mistral-7B-Instruct-v0.3-GGUF).",
+      "chatTemplate": "gguf-embedded",
+      "contextLength": 32768,
+      "minimumRecommendedRamBytes": 5396089539,
+      "recommendedRamBytes": 7929051243,
+      "minimumStorageBytes": 5446553824,
+      "supportedArchitectures": ["x86_64"],
+      "tags": ["general"],
+      "releaseStatus": "available",
+      "artifacts": [
+        {
+          "id": "mistral-7b-instruct-v0.3-q4-k-m",
+          "runtimeId": "llama.cpp",
+          "format": "GGUF",
+          "platforms": ["linux", "windows"],
+          "architectures": ["x86_64"],
+          "quantization": "Q4_K_M",
+          "sizeBytes": 4372812000,
+          "sha256": "1270d22c0fbb3d092fb725d4d96c457b7b687a5f5a715abe1e818da303e562b6",
+          "sourceRevision": "29a785419661afc70b5cd91b5023a835b0092281",
+          "files": [
+            {
+              "path": "Mistral-7B-Instruct-v0.3-Q4_K_M.gguf",
+              "sizeBytes": 4372812000,
+              "sha256": "1270d22c0fbb3d092fb725d4d96c457b7b687a5f5a715abe1e818da303e562b6",
+              "url": "https://huggingface.co/lmstudio-community/Mistral-7B-Instruct-v0.3-GGUF/resolve/29a785419661afc70b5cd91b5023a835b0092281/Mistral-7B-Instruct-v0.3-Q4_K_M.gguf"
+            }
+          ],
+          "maturity": "beta",
+          "qualification": "package-only"
+        }
+      ]
+    },
+    {
+      "id": "ministral-3-3b-instruct-2512",
+      "displayName": "Ministral 3 3B Instruct",
+      "organization": "Mistral AI",
+      "family": "Ministral 3",
+      "parameterCount": 3849090048,
+      "description": "Mistral AI’s small December 2025 instruct model, used for text only.",
+      "useCases": ["Everyday chat", "Writing"],
+      "instructionTuned": true,
+      "architecture": "mistral3",
+      "sourceRepository": "https://huggingface.co/mistralai/Ministral-3-3B-Instruct-2512-GGUF",
+      "sourceRevision": "eb599d408350ea2bb60452cb86be7c7b2fc28227",
+      "originalModel": "https://huggingface.co/mistralai/Ministral-3-3B-Instruct-2512",
+      "originalRevision": "b35d4dfe56c142746f54dbd64f579faab2744308",
+      "license": "Apache-2.0",
+      "licenseUrl": "https://www.apache.org/licenses/LICENSE-2.0",
+      "attribution": "Ministral-3-3B-Instruct-2512 by Mistral AI; GGUF conversion by mistralai (mistralai/Ministral-3-3B-Instruct-2512-GGUF).",
+      "chatTemplate": "gguf-embedded",
+      "contextLength": 262144,
+      "minimumRecommendedRamBytes": 2942201981,
+      "recommendedRamBytes": 4790867986,
+      "minimumStorageBytes": 3220764832,
+      "supportedArchitectures": ["x86_64"],
+      "tags": ["general", "small"],
+      "releaseStatus": "available",
+      "artifacts": [
+        {
+          "id": "ministral-3-3b-instruct-2512-q4-k-m",
+          "runtimeId": "llama.cpp",
+          "format": "GGUF",
+          "platforms": ["linux", "windows"],
+          "architectures": ["x86_64"],
+          "quantization": "Q4_K_M",
+          "sizeBytes": 2147023008,
+          "sha256": "9ed150d4367e68df0ac8e1540f6ddc65b42d0ee26378329d1ecbca60f93fc5f8",
+          "sourceRevision": "eb599d408350ea2bb60452cb86be7c7b2fc28227",
+          "files": [
+            {
+              "path": "Ministral-3-3B-Instruct-2512-Q4_K_M.gguf",
+              "sizeBytes": 2147023008,
+              "sha256": "9ed150d4367e68df0ac8e1540f6ddc65b42d0ee26378329d1ecbca60f93fc5f8",
+              "url": "https://huggingface.co/mistralai/Ministral-3-3B-Instruct-2512-GGUF/resolve/eb599d408350ea2bb60452cb86be7c7b2fc28227/Ministral-3-3B-Instruct-2512-Q4_K_M.gguf"
+            }
+          ],
+          "maturity": "beta",
+          "qualification": "package-only"
+        }
+      ]
+    },
+    {
+      "id": "phi-4-mini-instruct",
+      "displayName": "Phi-4 mini Instruct",
+      "organization": "Microsoft",
+      "family": "Phi-4",
+      "parameterCount": 3836021760,
+      "description": "Microsoft’s 3.8B Phi-4 mini model for reasoning, math, and concise answers.",
+      "useCases": ["Reasoning", "Math", "Everyday chat"],
+      "instructionTuned": true,
+      "architecture": "phi3",
+      "sourceRepository": "https://huggingface.co/unsloth/Phi-4-mini-instruct-GGUF",
+      "sourceRevision": "78eb92a46fc37e6b524df991ed9aca9bc6aa7b80",
+      "originalModel": "https://huggingface.co/microsoft/Phi-4-mini-instruct",
+      "originalRevision": "cfbefacb99257ffa30c83adab238a50856ac3083",
+      "license": "MIT",
+      "licenseUrl": "https://huggingface.co/microsoft/Phi-4-mini-instruct/blob/cfbefacb99257ffa30c83adab238a50856ac3083/LICENSE",
+      "attribution": "Phi-4-mini-instruct by Microsoft; GGUF conversion by unsloth (unsloth/Phi-4-mini-instruct-GGUF).",
+      "chatTemplate": "gguf-embedded",
+      "contextLength": 131072,
+      "minimumRecommendedRamBytes": 3286176247,
+      "recommendedRamBytes": 5132211258,
+      "minimumStorageBytes": 5158352864,
+      "supportedArchitectures": ["x86_64"],
+      "tags": ["reasoning"],
+      "releaseStatus": "available",
+      "artifacts": [
+        {
+          "id": "phi-4-mini-instruct-q4-k-m",
+          "runtimeId": "llama.cpp",
+          "format": "GGUF",
+          "platforms": ["linux", "windows"],
+          "architectures": ["x86_64"],
+          "quantization": "Q4_K_M",
+          "sizeBytes": 2491874272,
+          "sha256": "88c00229914083cd112853aab84ed51b87bdf6b9ce42f532d8c85c7c63b1730a",
+          "sourceRevision": "78eb92a46fc37e6b524df991ed9aca9bc6aa7b80",
+          "files": [
+            {
+              "path": "Phi-4-mini-instruct-Q4_K_M.gguf",
+              "sizeBytes": 2491874272,
+              "sha256": "88c00229914083cd112853aab84ed51b87bdf6b9ce42f532d8c85c7c63b1730a",
+              "url": "https://huggingface.co/unsloth/Phi-4-mini-instruct-GGUF/resolve/78eb92a46fc37e6b524df991ed9aca9bc6aa7b80/Phi-4-mini-instruct-Q4_K_M.gguf"
+            }
+          ],
+          "maturity": "beta",
+          "qualification": "package-only"
+        },
+        {
+          "id": "phi-4-mini-instruct-q8-0",
+          "runtimeId": "llama.cpp",
+          "format": "GGUF",
+          "platforms": ["linux", "windows"],
+          "architectures": ["x86_64"],
+          "quantization": "Q8_0",
+          "sizeBytes": 4084611040,
+          "sha256": "26188c6050d525376a88b04514c236c5e28a36730f1e936f2a00314212b7ba42",
+          "sourceRevision": "78eb92a46fc37e6b524df991ed9aca9bc6aa7b80",
+          "files": [
+            {
+              "path": "Phi-4-mini-instruct.Q8_0.gguf",
+              "sizeBytes": 4084611040,
+              "sha256": "26188c6050d525376a88b04514c236c5e28a36730f1e936f2a00314212b7ba42",
+              "url": "https://huggingface.co/unsloth/Phi-4-mini-instruct-GGUF/resolve/78eb92a46fc37e6b524df991ed9aca9bc6aa7b80/Phi-4-mini-instruct.Q8_0.gguf"
+            }
+          ],
+          "maturity": "beta",
+          "qualification": "package-only"
+        }
+      ]
+    },
+    {
+      "id": "smollm3-3b",
+      "displayName": "SmolLM3 3B",
+      "organization": "Hugging Face",
+      "family": "SmolLM3",
+      "parameterCount": 3075098624,
+      "description": "Hugging Face’s fully open 3B model with optional reasoning; the next step up from SmolLM2.",
+      "useCases": ["Everyday chat", "Reasoning"],
+      "instructionTuned": true,
+      "architecture": "smollm3",
+      "sourceRepository": "https://huggingface.co/ggml-org/SmolLM3-3B-GGUF",
+      "sourceRevision": "4965cb60b150737b68a0408c36aeefb65078f894",
+      "originalModel": "https://huggingface.co/HuggingFaceTB/SmolLM3-3B",
+      "originalRevision": "a07cc9a04f16550a088caea529712d1d335b0ac1",
+      "license": "Apache-2.0",
+      "licenseUrl": "https://www.apache.org/licenses/LICENSE-2.0",
+      "attribution": "SmolLM3-3B by Hugging Face; GGUF conversion by ggml-org (ggml-org/SmolLM3-3B-GGUF).",
+      "chatTemplate": "gguf-embedded",
+      "contextLength": 65536,
+      "minimumRecommendedRamBytes": 2658542599,
+      "recommendedRamBytes": 4351383549,
+      "minimumStorageBytes": 2989047136,
+      "supportedArchitectures": ["x86_64"],
+      "tags": ["general", "small", "offline"],
+      "releaseStatus": "available",
+      "popularity": {
+        "source": "huggingface-downloads-30d",
+        "snapshot": "2026-10-15T05:53:53Z",
+        "eligibleRank": 40,
+        "downloads": 764561
+      },
+      "artifacts": [
+        {
+          "id": "smollm3-3b-q4-k-m",
+          "runtimeId": "llama.cpp",
+          "format": "GGUF",
+          "platforms": ["linux", "windows"],
+          "architectures": ["x86_64"],
+          "quantization": "Q4_K_M",
+          "sizeBytes": 1915305312,
+          "sha256": "8334b850b7bd46238c16b0c550df2138f0889bf433809008cc17a8b05761863e",
+          "sourceRevision": "4965cb60b150737b68a0408c36aeefb65078f894",
+          "files": [
+            {
+              "path": "SmolLM3-Q4_K_M.gguf",
+              "sizeBytes": 1915305312,
+              "sha256": "8334b850b7bd46238c16b0c550df2138f0889bf433809008cc17a8b05761863e",
+              "url": "https://huggingface.co/ggml-org/SmolLM3-3B-GGUF/resolve/4965cb60b150737b68a0408c36aeefb65078f894/SmolLM3-Q4_K_M.gguf"
+            }
+          ],
+          "maturity": "beta",
+          "qualification": "package-only"
+        }
+      ]
+    },
+    {
+      "id": "granite-4.0-micro",
+      "displayName": "Granite 4.0 Micro",
+      "organization": "IBM",
+      "family": "Granite 4.0",
+      "parameterCount": 3402836480,
+      "description": "IBM’s 3B Granite 4.0 instruct model for business writing and summaries.",
+      "useCases": ["Writing", "Summaries"],
+      "instructionTuned": true,
+      "architecture": "granite",
+      "sourceRepository": "https://huggingface.co/ibm-granite/granite-4.0-micro-GGUF",
+      "sourceRevision": "ec48475f0c811d812fbfb61975717a9c36eeb652",
+      "originalModel": "https://huggingface.co/ibm-granite/granite-4.0-micro",
+      "originalRevision": "56111ae135df9c53a78c99028e7bc24035a9e979",
+      "license": "Apache-2.0",
+      "licenseUrl": "https://www.apache.org/licenses/LICENSE-2.0",
+      "attribution": "granite-4.0-micro by IBM; GGUF conversion by ibm-granite (ibm-granite/granite-4.0-micro-GGUF).",
+      "chatTemplate": "gguf-embedded",
+      "contextLength": 131072,
+      "minimumRecommendedRamBytes": 2864733931,
+      "recommendedRamBytes": 4623557226,
+      "minimumStorageBytes": 3173244352,
+      "supportedArchitectures": ["x86_64"],
+      "tags": ["general"],
+      "releaseStatus": "available",
+      "artifacts": [
+        {
+          "id": "granite-4.0-micro-q4-k-m",
+          "runtimeId": "llama.cpp",
+          "format": "GGUF",
+          "platforms": ["linux", "windows"],
+          "architectures": ["x86_64"],
+          "quantization": "Q4_K_M",
+          "sizeBytes": 2099502528,
+          "sha256": "97c417dcc0534b0737c74016fb2af083cb17c3b51eaac621192d23961b7024eb",
+          "sourceRevision": "ec48475f0c811d812fbfb61975717a9c36eeb652",
+          "files": [
+            {
+              "path": "granite-4.0-micro-Q4_K_M.gguf",
+              "sizeBytes": 2099502528,
+              "sha256": "97c417dcc0534b0737c74016fb2af083cb17c3b51eaac621192d23961b7024eb",
+              "url": "https://huggingface.co/ibm-granite/granite-4.0-micro-GGUF/resolve/ec48475f0c811d812fbfb61975717a9c36eeb652/granite-4.0-micro-Q4_K_M.gguf"
+            }
+          ],
+          "maturity": "beta",
+          "qualification": "package-only"
+        }
+      ]
+    },
+    {
+      "id": "granite-4.0-h-tiny",
+      "displayName": "Granite 4.0 H Tiny",
+      "organization": "IBM",
+      "family": "Granite 4.0",
+      "parameterCount": 6939037248,
+      "description": "IBM’s hybrid Mamba-transformer mixture-of-experts model (7B total, about 1B active) with a light memory footprint for long inputs.",
+      "useCases": ["Summaries", "Long documents"],
+      "instructionTuned": true,
+      "architecture": "granitehybrid",
+      "sourceRepository": "https://huggingface.co/ibm-granite/granite-4.0-h-tiny-GGUF",
+      "sourceRevision": "08d5a8a9741dd5c1a95d2d39e25253226aa1464e",
+      "originalModel": "https://huggingface.co/ibm-granite/granite-4.0-h-tiny",
+      "originalRevision": "791e0d3d28c86e106c9b6e0b4cecdee0375b6124",
+      "license": "Apache-2.0",
+      "licenseUrl": "https://www.apache.org/licenses/LICENSE-2.0",
+      "attribution": "granite-4.0-h-tiny by IBM; GGUF conversion by ibm-granite (ibm-granite/granite-4.0-h-tiny-GGUF).",
+      "chatTemplate": "gguf-embedded",
+      "contextLength": 131072,
+      "minimumRecommendedRamBytes": 4879608282,
+      "recommendedRamBytes": 6288633159,
+      "minimumStorageBytes": 5304718176,
+      "supportedArchitectures": ["x86_64"],
+      "tags": ["general"],
+      "releaseStatus": "available",
+      "artifacts": [
+        {
+          "id": "granite-4.0-h-tiny-q4-k-m",
+          "runtimeId": "llama.cpp",
+          "format": "GGUF",
+          "platforms": ["linux", "windows"],
+          "architectures": ["x86_64"],
+          "quantization": "Q4_K_M",
+          "sizeBytes": 4230976352,
+          "sha256": "5a38b08c441ae1adbafb1d2b8a7167e0d48734d83af68b268cefea1eec553dcd",
+          "sourceRevision": "08d5a8a9741dd5c1a95d2d39e25253226aa1464e",
+          "files": [
+            {
+              "path": "granite-4.0-h-tiny-Q4_K_M.gguf",
+              "sizeBytes": 4230976352,
+              "sha256": "5a38b08c441ae1adbafb1d2b8a7167e0d48734d83af68b268cefea1eec553dcd",
+              "url": "https://huggingface.co/ibm-granite/granite-4.0-h-tiny-GGUF/resolve/08d5a8a9741dd5c1a95d2d39e25253226aa1464e/granite-4.0-h-tiny-Q4_K_M.gguf"
+            }
+          ],
+          "maturity": "beta",
+          "qualification": "package-only"
+        }
+      ]
+    },
+    {
+      "id": "minicpm5-2b",
+      "displayName": "MiniCPM5 2B",
+      "organization": "OpenBMB",
+      "family": "MiniCPM5",
+      "parameterCount": 2516756480,
+      "description": "OpenBMB’s compact 2B model tuned for capable on-device chat.",
+      "useCases": ["Everyday chat", "Fast chat"],
+      "instructionTuned": true,
+      "architecture": "llama",
+      "sourceRepository": "https://huggingface.co/openbmb/MiniCPM5-2B-GGUF",
+      "sourceRevision": "2079a22f3beaa4e306449978533478fe0522f4b3",
+      "originalModel": "https://huggingface.co/openbmb/MiniCPM5-2B",
+      "originalRevision": "f97400052a43d642bbc6e9975e2397e3ae6a6b52",
+      "license": "Apache-2.0",
+      "licenseUrl": "https://github.com/OpenBMB/MiniCPM/blob/main/LICENSE",
+      "attribution": "MiniCPM5-2B by OpenBMB; GGUF conversion by openbmb (openbmb/MiniCPM5-2B-GGUF).",
+      "chatTemplate": "gguf-embedded",
+      "contextLength": 131072,
+      "minimumRecommendedRamBytes": 2267085948,
+      "recommendedRamBytes": 3847517777,
+      "minimumStorageBytes": 2635060192,
+      "supportedArchitectures": ["x86_64"],
+      "tags": ["general", "small"],
+      "releaseStatus": "available",
+      "popularity": {
+        "source": "huggingface-downloads-30d",
+        "snapshot": "2026-10-15T05:53:53Z",
+        "eligibleRank": 30,
+        "downloads": 1247513
+      },
+      "artifacts": [
+        {
+          "id": "minicpm5-2b-q4-k-m",
+          "runtimeId": "llama.cpp",
+          "format": "GGUF",
+          "platforms": ["linux", "windows"],
+          "architectures": ["x86_64"],
+          "quantization": "Q4_K_M",
+          "sizeBytes": 1561318368,
+          "sha256": "ec2d5801640099e97d8d7e8003ad4d81f336e757811f03a26173dddf386602fd",
+          "sourceRevision": "2079a22f3beaa4e306449978533478fe0522f4b3",
+          "files": [
+            {
+              "path": "MiniCPM5-2B-Q4_K_M.gguf",
+              "sizeBytes": 1561318368,
+              "sha256": "ec2d5801640099e97d8d7e8003ad4d81f336e757811f03a26173dddf386602fd",
+              "url": "https://huggingface.co/openbmb/MiniCPM5-2B-GGUF/resolve/2079a22f3beaa4e306449978533478fe0522f4b3/MiniCPM5-2B-Q4_K_M.gguf"
+            }
+          ],
+          "maturity": "beta",
+          "qualification": "package-only"
+        }
+      ]
+    },
+    {
+      "id": "nemotron-3-nano-4b",
+      "displayName": "Nemotron 3 Nano 4B",
+      "organization": "NVIDIA",
+      "family": "Nemotron 3 Nano",
+      "parameterCount": 3973556832,
+      "description": "NVIDIA’s small hybrid Mamba-transformer reasoning model.",
+      "useCases": ["Reasoning", "Everyday chat"],
+      "instructionTuned": true,
+      "architecture": "nemotron_h",
+      "sourceRepository": "https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-4B-GGUF",
+      "sourceRevision": "ba223d14e45525f7fae81db77ea8cabeb2fc6c25",
+      "originalModel": "https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16",
+      "originalRevision": "dfaf35de3e30f1867dd8dbc38a7fc9fb52d3914f",
+      "license": "NVIDIA Open Model License",
+      "licenseUrl": "https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16/blob/dfaf35de3e30f1867dd8dbc38a7fc9fb52d3914f/LICENSE",
+      "licenseAcceptance": "required",
+      "licenseTermsRevision": "dfaf35de3e30f1867dd8dbc38a7fc9fb52d3914f",
+      "attribution": "NVIDIA-Nemotron-3-Nano-4B-BF16 by NVIDIA; GGUF conversion by nvidia (nvidia/NVIDIA-Nemotron-3-Nano-4B-GGUF).",
+      "chatTemplate": "gguf-embedded",
+      "contextLength": 262144,
+      "minimumRecommendedRamBytes": 3437942388,
+      "recommendedRamBytes": 4703680050,
+      "minimumStorageBytes": 3910814688,
+      "supportedArchitectures": ["x86_64"],
+      "tags": ["reasoning"],
+      "releaseStatus": "available",
+      "popularity": {
+        "source": "huggingface-downloads-30d",
+        "snapshot": "2026-10-15T05:53:53Z",
+        "eligibleRank": 23,
+        "downloads": 1565119
+      },
+      "artifacts": [
+        {
+          "id": "nemotron-3-nano-4b-q4-k-m",
+          "runtimeId": "llama.cpp",
+          "format": "GGUF",
+          "platforms": ["linux", "windows"],
+          "architectures": ["x86_64"],
+          "quantization": "Q4_K_M",
+          "sizeBytes": 2837072864,
+          "sha256": "be5d9a656a51922f24f1f09a759cebb694e1f5d9728bf0ef9f8c972c5a0b5ef2",
+          "sourceRevision": "ba223d14e45525f7fae81db77ea8cabeb2fc6c25",
+          "files": [
+            {
+              "path": "NVIDIA-Nemotron3-Nano-4B-Q4_K_M.gguf",
+              "sizeBytes": 2837072864,
+              "sha256": "be5d9a656a51922f24f1f09a759cebb694e1f5d9728bf0ef9f8c972c5a0b5ef2",
+              "url": "https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-4B-GGUF/resolve/ba223d14e45525f7fae81db77ea8cabeb2fc6c25/NVIDIA-Nemotron3-Nano-4B-Q4_K_M.gguf"
+            }
+          ],
+          "maturity": "beta",
+          "qualification": "package-only"
         }
       ]
     }

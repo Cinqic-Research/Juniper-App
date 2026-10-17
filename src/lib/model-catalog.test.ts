@@ -2,10 +2,13 @@ import { describe, expect, it } from 'vitest'
 import {
   MODEL_CATALOG,
   parseCatalog,
+  isRecommendedModel,
   recommendModel,
   recommendModels,
   type DeviceCapabilities,
   isImportOnly,
+  artifactMemoryEstimate,
+  licenseAcceptanceValue,
 } from './model-catalog'
 
 const device: DeviceCapabilities = {
@@ -73,15 +76,72 @@ describe('model catalog', () => {
     expect(artifact.maturity).toBe('experimental')
     expect(artifact.qualification).toBe('unknown')
   })
-  it('ships four under-1B downloads with verified HTTPS variants', () => {
-    const downloads = MODEL_CATALOG.models.filter((model) => !isImportOnly(model.artifacts[0]!))
-    expect(downloads).toHaveLength(4)
-    expect(downloads.every((model) => model.parameterCount < 1_000_000_000)).toBe(true)
-    for (const model of MODEL_CATALOG.models) {
-      expect(model.variants[0]?.sha256).toMatch(/^[a-f0-9]{64}$/)
-      expect(model.license).toBe('Apache-2.0')
+  it('pins every download to an exact revision, size, and SHA-256 with stated license terms', () => {
+    const downloads = MODEL_CATALOG.models.flatMap((model) =>
+      model.artifacts
+        .filter((artifact) => !isImportOnly(artifact))
+        .map((artifact) => ({ model, artifact })),
+    )
+    expect(downloads.length).toBeGreaterThan(0)
+    for (const { model, artifact } of downloads) {
+      for (const file of artifact.files) {
+        expect(file.sha256).toMatch(/^[a-f0-9]{64}$/)
+        expect(file.url).toBe(
+          `${model.sourceRepository}/resolve/${artifact.sourceRevision}/${file.path}`,
+        )
+      }
     }
-    for (const model of downloads) expect(model.variants[0]?.url).toMatch(/^https:\/\//)
+    for (const model of MODEL_CATALOG.models) {
+      expect(model.license.length).toBeGreaterThan(0)
+      expect(model.licenseUrl).toMatch(/^https:\/\//)
+      if (model.licenseAcceptance) {
+        expect(model.license).not.toMatch(/^(Apache-2\.0|MIT)$/)
+        expect(model.licenseTermsRevision).toBeTruthy()
+        expect(model.licenseUrl).not.toMatch(/\/blob\/main\//)
+        if (model.licenseTermsRevision === model.originalRevision) {
+          expect(model.licenseUrl).toContain(`/blob/${model.originalRevision}/`)
+        } else {
+          expect(model.licenseTermsRevision).toMatch(/-sha256-[a-f0-9]{64}$/)
+        }
+      }
+    }
+    const toolCatalogEntries = MODEL_CATALOG.models.filter(
+      (model) =>
+        model.tags.includes('tools') ||
+        model.useCases.some((useCase) => /tool|agent/i.test(useCase)) ||
+        /tool|agent/i.test(model.description),
+    )
+    expect(toolCatalogEntries.length).toBeGreaterThan(0)
+    expect(
+      toolCatalogEntries.every((model) =>
+        model.artifacts.every((artifact) => artifact.capabilities?.tools === 'supported'),
+      ),
+    ).toBe(true)
+  })
+
+  it('does not persist acceptance for reported hashes without bundled terms bytes', () => {
+    const gemma = MODEL_CATALOG.models.find((item) => item.id === 'gemma-3-1b-it')!
+    const llama = MODEL_CATALOG.models.find((item) => item.id === 'llama-3.2-1b-instruct')!
+
+    expect(licenseAcceptanceValue(gemma)).toBeNull()
+    expect(licenseAcceptanceValue(llama)).toBe(
+      JSON.stringify([llama.license, llama.licenseUrl, llama.licenseTermsRevision]),
+    )
+  })
+
+  it('labels popularity with its dated source and keeps quantizations under one release', () => {
+    const ranked = MODEL_CATALOG.models.filter((model) => model.popularity)
+    const ranks = new Set(ranked.map((model) => model.popularity!.eligibleRank))
+    for (let rank = 1; rank <= 10; rank += 1) expect(ranks.has(rank)).toBe(true)
+    for (const model of ranked) {
+      expect(model.popularity!.source).toBe('huggingface-downloads-30d')
+      expect(model.popularity!.snapshot).toMatch(/^2026-10-15/)
+    }
+    // One entry per release: alternative quantizations are artifacts, not models.
+    const releases = MODEL_CATALOG.models.map(
+      (model) => model.originalModel ?? model.sourceRepository,
+    )
+    expect(new Set(releases).size).toBe(releases.length)
   })
 
   it('ships gpt-oss-20b as an import-only artifact with qualified capabilities', () => {
@@ -120,18 +180,25 @@ describe('model catalog', () => {
       minimumAppVersion: MODEL_CATALOG.minimumAppVersion,
       // The v1 format had no way to express an import-only artifact.
       models: MODEL_CATALOG.models
-        .filter((model) => !isImportOnly(model.artifacts[0]!))
+        .filter(
+          (model) =>
+            !isImportOnly(model.artifacts[0]!) &&
+            model.artifacts.some((artifact) => artifact.files.length === 1),
+        )
         .map(({ artifacts, ...model }) => ({
           ...model,
-          variants: artifacts.map((artifact) => ({
-            id: artifact.id,
-            fileName: artifact.files[0]!.path,
-            quantization: artifact.quantization,
-            sizeBytes: artifact.sizeBytes,
-            sha256: artifact.sha256,
-            url: artifact.sourceUrl,
-            sourceRevision: artifact.sourceRevision,
-          })),
+          // v1 could describe only single-file downloads.
+          variants: artifacts
+            .filter((artifact) => artifact.files.length === 1)
+            .map((artifact) => ({
+              id: artifact.id,
+              fileName: artifact.files[0]!.path,
+              quantization: artifact.quantization,
+              sizeBytes: artifact.sizeBytes,
+              sha256: artifact.files[0]!.sha256,
+              url: artifact.sourceUrl ?? artifact.files[0]!.url,
+              sourceRevision: artifact.sourceRevision,
+            })),
         })),
     }
     const parsed = parseCatalog(legacy)
@@ -154,6 +221,66 @@ describe('model catalog', () => {
     const unsafe = recommendModel(MODEL_CATALOG.models[0]!, lowStorage)
     expect(unsafe.storageSafe).toBe(false)
     expect(unsafe.fit).toBe('not-recommended')
+  })
+
+  it('recommends memory and storage for the selected artifact', () => {
+    const model = MODEL_CATALOG.models.find((item) => item.id === 'qwen3-4b')!
+    const q4 = model.artifacts.find((artifact) => artifact.quantization === 'Q4_K_M')!
+    const q8 = model.artifacts.find((artifact) => artifact.quantization === 'Q8_0')!
+    const q4Memory = artifactMemoryEstimate(model, q4)
+    const q8Recommendation = recommendModel(
+      model,
+      {
+        ...device,
+        availableMemoryBytes: Math.round(5.9 * 1024 ** 3),
+        freeStorageBytes: q4.sizeBytes + 1100 * 1024 ** 2,
+      },
+      q8.id,
+    )
+    const q4Recommendation = recommendModel(
+      model,
+      {
+        ...device,
+        availableMemoryBytes: Math.round(5.9 * 1024 ** 3),
+        freeStorageBytes: q4.sizeBytes + 1100 * 1024 ** 2,
+      },
+      q4.id,
+    )
+
+    expect(q8Recommendation.artifact.id).toBe(q8.id)
+    expect(q8Recommendation.memory.recommended).toBeGreaterThan(q4Memory.recommended)
+    expect(q8Recommendation.fit).toBe('not-recommended')
+    expect(q4Recommendation.storageSafe).toBe(true)
+    expect(isRecommendedModel(q4Recommendation)).toBe(true)
+    expect(isRecommendedModel(q8Recommendation)).toBe(false)
+  })
+
+  it('does not treat an unknown architecture as support for an unsupported platform', () => {
+    const model = MODEL_CATALOG.models.find((item) => item.id === 'qwen3-1.7b')!
+    const recommendation = recommendModel(model, {
+      ...device,
+      os: 'android',
+      architecture: 'unknown',
+    })
+
+    expect(recommendation.artifactCompatible).toBe(false)
+    expect(recommendation.artifactCompatibilityKnown).toBe(true)
+    expect(recommendation.fit).toBe('not-recommended')
+  })
+
+  it('does not recommend or enable a download when desktop architecture is unknown', () => {
+    const model = MODEL_CATALOG.models.find((item) => item.id === 'qwen3-1.7b')!
+    const recommendation = recommendModel(model, {
+      ...device,
+      os: 'linux',
+      architecture: 'unknown',
+    })
+
+    expect(recommendation.artifactCompatible).toBe(false)
+    expect(recommendation.artifactCompatibilityKnown).toBe(false)
+    expect(recommendation.fit).toBe('not-recommended')
+    expect(recommendation.reasons[0]).toContain('compatibility cannot be confirmed')
+    expect(isRecommendedModel(recommendation)).toBe(false)
   })
 
   it('ranks an appropriate catalog for a device rather than returning fixed order', () => {

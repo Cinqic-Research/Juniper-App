@@ -1,6 +1,7 @@
 /* global URL, console, process */
 
 import { readFile } from 'node:fs/promises'
+import { releaseNumbers } from './lib/version-scheme.mjs'
 
 const packageJson = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'))
 const tauri = JSON.parse(
@@ -48,14 +49,8 @@ const releaseTag = process.env.RELEASE_TAG
 if (releaseTag && releaseTag !== `v${expected}`) {
   throw new Error(`Release tag mismatch: expected v${expected}, received ${releaseTag}.`)
 }
-const rcMatch = expected.match(/^0\.3\.0-rc\.([1-9][0-9]*)$/)
-if (!rcMatch) throw new Error(`Unsupported release-candidate version: ${expected}`)
-const rcNumber = Number(rcMatch[1])
-if (!Number.isSafeInteger(rcNumber) || rcNumber > 999) {
-  throw new Error(`Release-candidate number is outside the supported range: ${expected}`)
-}
-const expectedAndroidVersionCode = 3000 + rcNumber
-const expectedMsiVersion = `0.3.0.${rcNumber}`
+const { androidVersionCode: expectedAndroidVersionCode, msiVersion: expectedMsiVersion } =
+  releaseNumbers(expected)
 const androidVersionCode = tauri.bundle?.android?.versionCode
 if (androidVersionCode !== expectedAndroidVersionCode) {
   throw new Error(

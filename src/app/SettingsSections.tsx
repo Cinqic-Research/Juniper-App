@@ -1015,8 +1015,8 @@ export function AdvancedSettings({
         </div>
       </Section>
       <Section
-        title="Not available in this release"
-        description="Listed so you know they are intentionally off, not hidden."
+        title="Limits and integrations"
+        description="Listed so you know where they are, or that they are intentionally off."
       >
         <div className="setting-row">
           <div className="setting-text">
@@ -1030,10 +1030,13 @@ export function AdvancedSettings({
         <div className="setting-row">
           <div className="setting-text">
             <span className="label">MCP servers</span>
-            <small>MCP is an explicitly unavailable advanced feature in this release.</small>
+            <small>
+              Connect optional MCP servers in Agent › Skills &amp; plugins. Agents can use their
+              tools after you enable them; chat does not.
+            </small>
           </div>
           <div className="setting-control">
-            <span className="chip">Unavailable</span>
+            <span className="chip">In Agent (Beta)</span>
           </div>
         </div>
         <p className="muted small">

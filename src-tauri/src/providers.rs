@@ -9,8 +9,10 @@ use crate::domain::{
 use crate::tools;
 use futures_util::StreamExt;
 use reqwest::{Client, Response};
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, HashSet};
+use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 use std::time::Instant;
 use tauri::{AppHandle, Emitter, Runtime};
 use tokio::sync::oneshot;
@@ -31,6 +33,8 @@ const MAX_HOST_CONTEXT_ITEMS: usize = 1_000;
 const MAX_HOST_CONTEXT_BYTES: usize = 4 * 1024 * 1024;
 const PROVIDER_TIMEOUT: Duration = Duration::from_secs(300);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+const PROVIDER_DNS_TIMEOUT: Duration = Duration::from_secs(5);
+const MAX_PROVIDER_DNS_ADDRESSES: usize = 16;
 #[cfg(not(test))]
 pub const STREAM_IDLE_TIMEOUT: Duration = Duration::from_secs(60);
 #[cfg(test)]
@@ -42,34 +46,166 @@ const MAX_VALIDATED_ANSWER_BYTES: usize = 1024 * 1024;
 const MAX_TOOL_CALL_REASONING_BYTES: usize = 64 * 1024;
 const MAX_CONTEXT_MEMORIES: usize = 64;
 
-fn provider_client() -> Result<Client, ProviderError> {
-    Client::builder()
-        .connect_timeout(CONNECT_TIMEOUT)
-        .timeout(PROVIDER_TIMEOUT)
-        .build()
-        .map_err(|_| {
-            ProviderError::new(
-                "PROVIDER_CLIENT_ERROR",
-                "The provider client could not be initialized.",
-            )
-        })
+#[derive(Debug)]
+struct ResolvedProviderEndpoint {
+    domain: Option<String>,
+    addresses: Vec<SocketAddr>,
 }
 
-/// A chat stream has no whole-request deadline: a long qualified answer can
-/// take longer than `PROVIDER_TIMEOUT`. Silence is bounded instead, by the
-/// policy's idle limit while streaming and by this read timeout (with margin,
-/// so the idle check reports first) while waiting for the response.
-fn streaming_client(policy: &RequestPolicy) -> Result<Client, ProviderError> {
-    let builder = Client::builder()
-        .connect_timeout(CONNECT_TIMEOUT)
-        .read_timeout(policy.idle_timeout + Duration::from_secs(5));
-    let builder = if policy.loopback_key.is_some() {
-        // A bearer key for Juniper's private loopback server must never be
-        // forwarded to an HTTP(S) proxy from the user's environment.
-        builder.no_proxy()
-    } else {
-        builder
+fn is_local_provider_address(address: IpAddr) -> bool {
+    match address {
+        IpAddr::V4(address) => {
+            address.is_loopback() || address.is_private() || address.is_link_local()
+        }
+        IpAddr::V6(address) => {
+            address.to_ipv4_mapped().is_some_and(|mapped| {
+                mapped.is_loopback() || mapped.is_private() || mapped.is_link_local()
+            }) || address == Ipv6Addr::LOCALHOST
+                || address.is_unique_local()
+                || address.is_unicast_link_local()
+        }
+    }
+}
+
+/// Cloud metadata services live on otherwise-local or reserved addresses.
+/// Provider URLs must never be able to use those endpoints as a confused
+/// deputy to read instance credentials or configuration.
+pub(crate) fn is_provider_metadata_address(address: IpAddr) -> bool {
+    match address {
+        IpAddr::V4(address) => matches!(
+            address.octets(),
+            [169, 254, 169, 254] | [169, 254, 170, 2] | [168, 63, 129, 16]
+        ),
+        IpAddr::V6(address) => {
+            address.to_ipv4_mapped().is_some_and(|mapped| {
+                matches!(
+                    mapped.octets(),
+                    [169, 254, 169, 254] | [169, 254, 170, 2] | [168, 63, 129, 16]
+                )
+            }) || address == Ipv6Addr::new(0xfd00, 0x0ec2, 0, 0, 0, 0, 0, 0x0254)
+                || address == Ipv6Addr::new(0xfd20, 0x00ce, 0, 0, 0, 0, 0, 0x0254)
+        }
+    }
+}
+
+fn provider_endpoint_from_addresses(
+    domain: Option<&str>,
+    addresses: &[SocketAddr],
+) -> Result<ResolvedProviderEndpoint, ProviderError> {
+    let rejected = || {
+        ProviderError::new(
+            "PROVIDER_ADDRESS_REJECTED",
+            "The provider address did not resolve consistently to a public or local endpoint.",
+        )
     };
+    if addresses.is_empty() || addresses.len() > MAX_PROVIDER_DNS_ADDRESSES {
+        return Err(rejected());
+    }
+
+    let mut unique = Vec::with_capacity(addresses.len());
+    let mut seen = HashSet::new();
+    let mut local = None;
+    for address in addresses {
+        if is_provider_metadata_address(address.ip()) {
+            return Err(rejected());
+        }
+        let is_local = if is_local_provider_address(address.ip()) {
+            true
+        } else if crate::agent::web::is_public(address.ip()) {
+            false
+        } else {
+            return Err(rejected());
+        };
+        if local.is_some_and(|previous| previous != is_local) {
+            return Err(rejected());
+        }
+        local = Some(is_local);
+        if seen.insert(address.ip()) {
+            unique.push(SocketAddr::new(address.ip(), 0));
+        }
+    }
+
+    if let Some(domain) = domain {
+        let normalized = domain.trim_end_matches('.').to_ascii_lowercase();
+        let loopback_name = normalized == "localhost" || normalized.ends_with(".localhost");
+        let local_name = normalized.ends_with(".local");
+        if (loopback_name && !unique.iter().all(|address| address.ip().is_loopback()))
+            || (local_name && !local.unwrap_or(false))
+            || (!loopback_name && !local_name && local.unwrap_or(false))
+        {
+            return Err(rejected());
+        }
+    }
+
+    Ok(ResolvedProviderEndpoint {
+        domain: domain.map(str::to_owned),
+        addresses: unique,
+    })
+}
+
+async fn resolve_provider_endpoint(
+    base_url: &str,
+) -> Result<ResolvedProviderEndpoint, ProviderError> {
+    let base_url = validated_base_url(base_url)?;
+    let url = reqwest::Url::parse(&base_url)
+        .map_err(|_| ProviderError::new("INVALID_PROVIDER_URL", "Enter a valid provider URL."))?;
+    let port = url
+        .port_or_known_default()
+        .ok_or_else(|| ProviderError::new("INVALID_PROVIDER_URL", "Enter a valid provider URL."))?;
+    match url.host() {
+        Some(url::Host::Domain(domain)) => {
+            let resolved = timeout(
+                PROVIDER_DNS_TIMEOUT,
+                tokio::net::lookup_host((domain, port)),
+            )
+            .await
+            .map_err(|_| {
+                ProviderError::new(
+                    "PROVIDER_DNS_TIMEOUT",
+                    "The provider address did not resolve in time.",
+                )
+            })?
+            .map_err(|_| {
+                ProviderError::new(
+                    "PROVIDER_DNS_FAILED",
+                    "The provider address could not be resolved.",
+                )
+            })?;
+            let addresses: Vec<_> = resolved.take(MAX_PROVIDER_DNS_ADDRESSES + 1).collect();
+            provider_endpoint_from_addresses(Some(domain), &addresses)
+        }
+        Some(url::Host::Ipv4(address)) => {
+            provider_endpoint_from_addresses(None, &[SocketAddr::new(IpAddr::V4(address), port)])
+        }
+        Some(url::Host::Ipv6(address)) => {
+            provider_endpoint_from_addresses(None, &[SocketAddr::new(IpAddr::V6(address), port)])
+        }
+        None => Err(ProviderError::new(
+            "INVALID_PROVIDER_URL",
+            "Enter a valid provider URL.",
+        )),
+    }
+}
+
+fn build_provider_client(
+    endpoint: &ResolvedProviderEndpoint,
+    timeout: Duration,
+    read_timeout: Option<Duration>,
+) -> Result<Client, ProviderError> {
+    let mut builder = Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .connect_timeout(CONNECT_TIMEOUT);
+    builder = if let Some(read_timeout) = read_timeout {
+        builder.read_timeout(read_timeout)
+    } else {
+        builder.timeout(timeout)
+    };
+    // Provider requests use the vetted and pinned destination directly. A
+    // system proxy can resolve the name independently and bypass that check.
+    builder = builder.no_proxy();
+    if let Some(domain) = &endpoint.domain {
+        builder = builder.resolve_to_addrs(domain, &endpoint.addresses);
+    }
     builder.build().map_err(|_| {
         ProviderError::new(
             "PROVIDER_CLIENT_ERROR",
@@ -78,9 +214,29 @@ fn streaming_client(policy: &RequestPolicy) -> Result<Client, ProviderError> {
     })
 }
 
-fn provider_client_for(
+async fn provider_client_for_endpoint(
+    base_url: &str,
+    read_timeout: Option<Duration>,
+) -> Result<Client, ProviderError> {
+    let endpoint = resolve_provider_endpoint(base_url).await?;
+    build_provider_client(&endpoint, PROVIDER_TIMEOUT, read_timeout)
+}
+
+/// A chat stream has no whole-request deadline: a long qualified answer can
+/// take longer than `PROVIDER_TIMEOUT`. Silence is bounded instead, by the
+/// policy's idle limit while streaming and by this read timeout (with margin,
+/// so the idle check reports first) while waiting for the response.
+async fn streaming_client(
+    policy: &RequestPolicy,
+    _provider_kind: &str,
+    base_url: &str,
+) -> Result<Client, ProviderError> {
+    provider_client_for_endpoint(base_url, Some(policy.idle_timeout + Duration::from_secs(5))).await
+}
+
+async fn provider_client_for(
     provider_kind: &str,
-    _base_url: &str,
+    base_url: &str,
     _device_link_fingerprint: Option<&str>,
 ) -> Result<Client, ProviderError> {
     if provider_kind == "juniper-network" {
@@ -89,7 +245,7 @@ fn provider_client_for(
             "Juniper Network is a preview policy only; no Device Link transport ships in this candidate.",
         ));
     }
-    provider_client()
+    provider_client_for_endpoint(base_url, None).await
 }
 
 fn validated_base_url(base_url: &str) -> Result<String, ProviderError> {
@@ -126,7 +282,7 @@ fn openai_api_base(base_url: &str) -> Result<String, ProviderError> {
     })
 }
 
-fn validate_chat_request(request: &ChatRequest) -> Result<(), ProviderError> {
+pub(crate) fn validate_chat_request(request: &ChatRequest) -> Result<(), ProviderError> {
     if request.provider.kind == "juniper-network" {
         return Err(ProviderError::new(
             "DEVICE_LINK_TRANSPORT_UNAVAILABLE",
@@ -513,6 +669,24 @@ fn add_credential(
     Ok(call)
 }
 
+/// A stored secret for a host-side connector (web search key, plugin token).
+/// Desktop keychain only; the value never leaves the native host.
+pub(crate) fn stored_secret(reference: &str) -> Result<String, String> {
+    if !valid_credential_reference(reference) {
+        return Err("The credential reference is invalid.".into());
+    }
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        keyring::Entry::new("com.cinqic.juniper", reference)
+            .and_then(|entry| entry.get_password())
+            .map_err(|_| "The saved credential is unavailable.".to_owned())
+    }
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        Err("Connector credentials are available on desktop in this beta.".into())
+    }
+}
+
 fn add_credential_with_app<R: Runtime>(
     app: &AppHandle<R>,
     call: reqwest::RequestBuilder,
@@ -540,6 +714,8 @@ struct TurnOutcome {
     /// Analysis from this turn, kept only while a Harmony tool call is pending.
     reasoning: String,
     finish_reason: Option<String>,
+    /// Token counts the provider reported for this turn, if any.
+    usage: Option<Usage>,
 }
 
 impl TurnOutcome {
@@ -796,7 +972,15 @@ fn request_messages(
                 })
             }),
     );
-    if let Some(attachments) = behavior::attachments_message(&request.attachments) {
+    let offers_attachment_tools = offered_tools(request)
+        .iter()
+        .any(|tool| tool.name == "file.read" || tool.name == "file.metadata");
+    let attachments = if offers_attachment_tools {
+        behavior::attachments_message_with_ids(&request.attachments)
+    } else {
+        behavior::attachments_message(&request.attachments)
+    };
+    if let Some(attachments) = attachments {
         let insertion = messages
             .iter()
             .rposition(|message| message["role"] == "user")
@@ -877,7 +1061,7 @@ async fn check_context<R: Runtime>(
             "Juniper could not measure this conversation against the model's context.",
         )
     };
-    let client = provider_client()?;
+    let client = provider_client_for_endpoint(base, None).await?;
     let rendered = execute_request(
         authorize(
             app,
@@ -1559,6 +1743,144 @@ pub(crate) fn emit_reasoning_activity<R: Runtime>(
     let _ = app.emit(topic, event);
 }
 
+/// One model turn for the agent runtime: the agent owns the transcript, the
+/// tool policy, and the loop, so nothing here executes a tool.
+pub(crate) struct AgentTurn {
+    pub(crate) content: String,
+    pub(crate) tool_calls: Vec<NormalizedToolCall>,
+    pub(crate) usage: Option<Usage>,
+}
+
+/// A provider-neutral transcript message, converted to each provider's
+/// wire shape here so the agent's persisted transcript survives a model switch.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct TranscriptMessage {
+    pub(crate) role: String,
+    #[serde(default)]
+    pub(crate) content: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) tool_calls: Vec<TranscriptToolCall>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) tool_call_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) tool_name: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub(crate) struct TranscriptToolCall {
+    pub(crate) id: String,
+    pub(crate) name: String,
+    pub(crate) arguments: Value,
+}
+
+fn wire_messages(kind: &str, messages: &[TranscriptMessage]) -> Vec<Value> {
+    messages
+        .iter()
+        .map(|message| {
+            let content = behavior::neutralize_control_tokens(&message.content).into_owned();
+            match message.role.as_str() {
+                "assistant" if !message.tool_calls.is_empty() => {
+                    if kind == "ollama" {
+                        json!({
+                            "role": "assistant",
+                            "content": content,
+                            "tool_calls": message.tool_calls.iter().map(|call| json!({
+                                "function": { "name": call.name, "arguments": neutralized_arguments(&call.arguments) }
+                            })).collect::<Vec<_>>()
+                        })
+                    } else {
+                        json!({
+                            "role": "assistant",
+                            "content": if content.is_empty() { Value::Null } else { json!(content) },
+                            "tool_calls": message.tool_calls.iter().map(|call| json!({
+                                "id": call.id,
+                                "type": "function",
+                                "function": {
+                                    "name": call.name,
+                                    "arguments": behavior::neutralize_control_tokens(&call.arguments.to_string())
+                                }
+                            })).collect::<Vec<_>>()
+                        })
+                    }
+                }
+                "tool" if kind == "ollama" => json!({
+                    "role": "tool",
+                    "tool_name": message.tool_name.clone().unwrap_or_default(),
+                    "content": content
+                }),
+                "tool" => json!({
+                    "role": "tool",
+                    "tool_call_id": message.tool_call_id.clone().unwrap_or_default(),
+                    "content": content
+                }),
+                role => json!({ "role": role, "content": content }),
+            }
+        })
+        .collect()
+}
+
+pub(crate) async fn agent_turn<R: Runtime>(
+    request: &ChatRequest,
+    messages: &[TranscriptMessage],
+    tools: &[Value],
+    app: &AppHandle<R>,
+    topic: &str,
+    cancellation: &Cancellation,
+    policy: &RequestPolicy,
+) -> Result<AgentTurn, ProviderError> {
+    let wire = wire_messages(&request.provider.kind, messages);
+    let outcome = if request.provider.kind == "ollama" {
+        let endpoint = format!(
+            "{}/api/chat",
+            validated_base_url(&request.provider.base_url)?
+        );
+        stream_one_ollama_turn(
+            request,
+            &endpoint,
+            &wire,
+            tools,
+            app,
+            topic,
+            cancellation,
+            policy,
+        )
+        .await?
+    } else {
+        let base = openai_api_base(&request.provider.base_url)?;
+        let body = openai_body(request, &wire, tools, policy);
+        check_context(
+            request,
+            policy,
+            base.trim_end_matches("/v1"),
+            &body,
+            app,
+            cancellation,
+        )
+        .await?;
+        stream_one_openai_turn(
+            request,
+            &format!("{base}/chat/completions"),
+            &body,
+            app,
+            topic,
+            cancellation,
+            policy,
+        )
+        .await?
+    };
+    if outcome.tool_calls.is_empty() {
+        outcome.accept_answer(policy)?;
+    } else {
+        outcome.validate_content(policy)?;
+    }
+    Ok(AgentTurn {
+        content: outcome.content,
+        tool_calls: outcome.tool_calls,
+        usage: outcome.usage,
+    })
+}
+
 fn openai_body(
     request: &ChatRequest,
     messages: &[Value],
@@ -1816,7 +2138,8 @@ async fn stream_one_openai_turn<R: Runtime>(
     cancellation: &Cancellation,
     policy: &RequestPolicy,
 ) -> Result<TurnOutcome, ProviderError> {
-    let client = streaming_client(policy)?;
+    let client =
+        streaming_client(policy, &request.provider.kind, &request.provider.base_url).await?;
     let call = client
         .post(endpoint)
         .header("user-agent", CLIENT_NAME)
@@ -1856,6 +2179,7 @@ async fn stream_one_openai_turn<R: Runtime>(
             return Err(stream_error(policy, message));
         }
         if let Some(usage) = provider_usage(&value, None) {
+            outcome.usage = Some(usage.clone());
             let mut event = ChatStreamEvent::for_request(&request.request_id);
             event.usage = Some(usage);
             let _ = app.emit(topic, event);
@@ -2023,7 +2347,8 @@ async fn stream_one_ollama_turn<R: Runtime>(
     cancellation: &Cancellation,
     policy: &RequestPolicy,
 ) -> Result<TurnOutcome, ProviderError> {
-    let call = streaming_client(policy)?
+    let call = streaming_client(policy, &request.provider.kind, &request.provider.base_url)
+        .await?
         .post(endpoint)
         .header("user-agent", CLIENT_NAME)
         .json(&ollama_body(request, messages, tools));
@@ -2058,6 +2383,7 @@ async fn stream_one_ollama_turn<R: Runtime>(
             terminal_record_seen = true;
             outcome.finish_reason = value["done_reason"].as_str().map(str::to_owned);
             if let Some(usage) = provider_usage(&value, Some("total_duration")) {
+                outcome.usage = Some(usage.clone());
                 let mut event = ChatStreamEvent::for_request(&request.request_id);
                 event.usage = Some(usage);
                 let _ = app.emit(topic, event);
@@ -2144,6 +2470,7 @@ pub async fn health_check_with_pin(
     };
     let response = add_credential(
         provider_client_for(provider_kind, base_url, device_link_fingerprint)
+            .await
             .map_err(|error| error.message)?
             .get(url),
         api_key_ref,
@@ -2189,6 +2516,7 @@ pub async fn list_models_with_pin(
     };
     let value: Value = add_credential(
         provider_client_for(provider_kind, base_url, device_link_fingerprint)
+            .await
             .map_err(|error| error.message)?
             .get(url),
         api_key_ref,
@@ -2287,6 +2615,7 @@ pub async fn inspect_model_with_pin(
     );
     let value: Value = add_credential(
         provider_client_for(provider_kind, base_url, device_link_fingerprint)
+            .await
             .map_err(|error| error.message)?
             .post(url)
             .json(&json!({ "model": model_id, "verbose": true })),
@@ -2448,7 +2777,8 @@ pub async fn pull_model<R: Runtime>(
         validated_base_url(base_url).map_err(|error| error.message)?
     );
     let call = add_credential(
-        provider_client()
+        provider_client_for_endpoint(base_url, None)
+            .await
             .map_err(|error| error.message)?
             .post(endpoint)
             .json(&json!({ "model": model, "stream": true })),
@@ -2585,7 +2915,8 @@ pub async fn delete_model(
         return Err("Invalid model identifier.".into());
     }
     add_credential(
-        provider_client()
+        provider_client_for_endpoint(base_url, None)
+            .await
             .map_err(|error| error.message)?
             .delete(format!(
                 "{}/api/delete",
@@ -2611,7 +2942,8 @@ pub async fn running_models(
         return Ok(Vec::new());
     }
     let value: Value = add_credential(
-        provider_client()
+        provider_client_for_endpoint(base_url, None)
+            .await
             .map_err(|error| error.message)?
             .get(format!(
                 "{}/api/ps",
@@ -2705,10 +3037,11 @@ mod tests {
         assert_eq!(openai["reasoning_effort"], "none");
     }
 
-    #[test]
-    fn juniper_network_is_rejected_while_transport_is_deferred() {
+    #[tokio::test]
+    async fn juniper_network_is_rejected_while_transport_is_deferred() {
         assert_eq!(
             provider_client_for("juniper-network", "https://192.168.1.20:8443", None)
+                .await
                 .unwrap_err()
                 .code,
             "DEVICE_LINK_TRANSPORT_UNAVAILABLE"
@@ -2821,6 +3154,39 @@ mod tests {
         assert_eq!(
             validate_chat_request(&unscoped).unwrap_err().code,
             "INVALID_PERMISSION_GRANTS"
+        );
+    }
+
+    #[test]
+    fn attachment_ids_are_shown_only_when_attachment_tools_are_offered() {
+        let mut request = request();
+        request.attachments = serde_json::from_value(json!([{
+            "id": "attachment-7f3",
+            "name": "notes.txt",
+            "content": "quarterly notes"
+        }]))
+        .expect("attachments should deserialize");
+        let policy = RequestPolicy::generic(STREAM_IDLE_TIMEOUT);
+        let host = scoped_host_context(&request);
+        let without = request_messages(&request, &policy, &host).expect("messages");
+        assert!(
+            !serde_json::to_string(&without)
+                .unwrap()
+                .contains("attachment-7f3")
+        );
+        request.tools = serde_json::from_value(json!([{
+            "name": "file.read",
+            "description": "Read an attachment",
+            "risk": "filesystem-read",
+            "enabled": true,
+            "schema": { "type": "object" }
+        }]))
+        .expect("tools should deserialize");
+        let with = request_messages(&request, &policy, &host).expect("messages");
+        let text = serde_json::to_string(&with).unwrap();
+        assert!(
+            text.contains(r#"name=\"notes.txt\" id=\"attachment-7f3\""#),
+            "{text}"
         );
     }
 
@@ -3305,6 +3671,78 @@ mod tests {
         ] {
             assert!(validated_base_url(invalid).is_err(), "accepted {invalid}");
         }
+    }
+
+    #[test]
+    fn provider_dns_routes_reject_mixed_and_reserved_answers() {
+        let mixed = [
+            "8.8.8.8:0".parse().unwrap(),
+            "192.168.1.2:0".parse().unwrap(),
+        ];
+        assert_eq!(
+            provider_endpoint_from_addresses(Some("llm.corp.example"), &mixed)
+                .unwrap_err()
+                .code,
+            "PROVIDER_ADDRESS_REJECTED"
+        );
+        for address in [
+            "100.64.0.1:0",
+            "169.254.169.254:0",
+            "169.254.170.2:0",
+            "168.63.129.16:0",
+            "[fd00:ec2::254]:0",
+            "[fd20:ce::254]:0",
+            "[2d00::1]:0",
+            "[2e00::1]:0",
+            "[3000::1]:0",
+            "[3f00::1]:0",
+            "[3ffe::1]:0",
+            "[3fff::1]:0",
+        ] {
+            let parsed = address.parse::<SocketAddr>().unwrap();
+            assert!(
+                provider_endpoint_from_addresses(None, &[parsed]).is_err(),
+                "rejected reserved provider address {address}"
+            );
+        }
+
+        assert!(
+            provider_endpoint_from_addresses(Some("localhost"), &["8.8.8.8:0".parse().unwrap()])
+                .is_err()
+        );
+        assert!(
+            provider_endpoint_from_addresses(
+                Some("service.local"),
+                &["8.8.8.8:0".parse().unwrap()]
+            )
+            .is_err()
+        );
+        assert!(
+            provider_endpoint_from_addresses(
+                Some("llm.corp.example"),
+                &["192.168.1.20:0".parse().unwrap()]
+            )
+            .is_err(),
+            "private DNS destinations require a literal address or a .local name"
+        );
+        assert!(
+            provider_endpoint_from_addresses(Some("llm.local"), &["127.0.0.1:0".parse().unwrap()])
+                .is_ok()
+        );
+        for address in ["169.254.3.4:0", "[fe80::1]:0"] {
+            assert!(
+                provider_endpoint_from_addresses(Some("llm.local"), &[address.parse().unwrap()])
+                    .is_ok(),
+                "link-local endpoint {address} should remain a local provider route"
+            );
+        }
+        assert!(
+            provider_endpoint_from_addresses(
+                Some("api.example.com"),
+                &["8.8.8.8:0".parse().unwrap()]
+            )
+            .is_ok()
+        );
     }
 
     #[test]
@@ -4137,7 +4575,7 @@ data: [DONE]"#,
     }
 
     #[test]
-    fn loopback_bearer_requests_ignore_proxy_environment() {
+    fn provider_requests_ignore_proxy_environment_for_local_and_public_routes() {
         use std::io::{Read, Write};
         use std::net::TcpListener;
         use std::process::Command;
@@ -4182,55 +4620,78 @@ data: [DONE]"#,
         }
 
         if let Ok(target_url) = std::env::var("JUNIPER_PROXY_TEST_CHILD_URL") {
+            let route_class = std::env::var("JUNIPER_PROXY_TEST_ROUTE")
+                .expect("the child test should receive a route class");
             let runtime = tokio::runtime::Runtime::new().expect("test runtime should start");
             let response = runtime
                 .block_on(async {
-                    streaming_client(&RequestPolicy {
-                        loopback_key: Some("local-secret".into()),
-                        ..policy()
-                    })
-                    .expect("local client should build")
-                    .get(target_url)
-                    .bearer_auth("local-secret")
-                    .send()
-                    .await
+                    let url = reqwest::Url::parse(&target_url).expect("test URL should parse");
+                    let endpoint = match route_class.as_str() {
+                        "local" => provider_endpoint_from_addresses(
+                            url.host_str(),
+                            &["127.0.0.1:0".parse().expect("test address should parse")],
+                        )
+                        .expect("test hostname should map to its local address"),
+                        "public" => ResolvedProviderEndpoint {
+                            // The fixture's pinned socket is loopback so the
+                            // test can reach its local server; this fixture
+                            // path still exercises public-route proxy policy.
+                            domain: url.host_str().map(str::to_owned),
+                            addresses: vec![std::net::SocketAddr::new(
+                                IpAddr::V4(std::net::Ipv4Addr::LOCALHOST),
+                                url.port().expect("fixture URL should include a port"),
+                            )],
+                        },
+                        _ => panic!("unexpected fixture route class"),
+                    };
+                    build_provider_client(&endpoint, PROVIDER_TIMEOUT, None)
+                        .expect("direct provider client should build")
+                        .get(target_url)
+                        .send()
+                        .await
                 })
-                .expect("direct local request should succeed");
+                .expect("direct provider request should succeed");
             assert!(response.status().is_success());
             return;
         }
 
-        let target = TcpListener::bind("127.0.0.1:0").expect("target should bind");
-        let target_url = format!("http://{}", target.local_addr().expect("target address"));
-        let target_thread =
-            std::thread::spawn(move || receive_once(target, Duration::from_secs(3)));
-        let proxy = TcpListener::bind("127.0.0.1:0").expect("proxy should bind");
-        let proxy_url = format!("http://{}", proxy.local_addr().expect("proxy address"));
-        let proxy_thread = std::thread::spawn(move || receive_once(proxy, Duration::from_secs(1)));
-        let status = Command::new(std::env::current_exe().expect("test binary path"))
-            .args([
-                "--exact",
-                "providers::tests::loopback_bearer_requests_ignore_proxy_environment",
-            ])
-            .env("JUNIPER_PROXY_TEST_CHILD_URL", target_url)
-            .env("HTTP_PROXY", &proxy_url)
-            .env("ALL_PROXY", &proxy_url)
-            .env("http_proxy", &proxy_url)
-            .env("all_proxy", &proxy_url)
-            .env("NO_PROXY", "")
-            .env("no_proxy", "")
-            .status()
-            .expect("isolated test process should start");
-        let target_request = target_thread.join().expect("target thread should join");
-        let proxy_request = proxy_thread.join().expect("proxy thread should join");
-        assert!(status.success(), "isolated client request failed");
-        let target_request = target_request.expect("target should receive request");
-        assert!(
-            target_request
-                .to_ascii_lowercase()
-                .contains("authorization: bearer local-secret")
-        );
-        assert!(proxy_request.is_none(), "proxy saw a local bearer request");
+        for (route_class, hostname) in [("local", "llm.local"), ("public", "provider.example")] {
+            let target = TcpListener::bind("127.0.0.1:0").expect("target should bind");
+            let target_url = format!(
+                "http://{hostname}:{}",
+                target.local_addr().expect("target address").port()
+            );
+            let target_thread =
+                std::thread::spawn(move || receive_once(target, Duration::from_secs(3)));
+            let proxy = TcpListener::bind("127.0.0.1:0").expect("proxy should bind");
+            let proxy_url = format!("http://{}", proxy.local_addr().expect("proxy address"));
+            let proxy_thread =
+                std::thread::spawn(move || receive_once(proxy, Duration::from_secs(1)));
+            let status = Command::new(std::env::current_exe().expect("test binary path"))
+                .args([
+                    "--exact",
+                    "providers::tests::provider_requests_ignore_proxy_environment_for_local_and_public_routes",
+                ])
+                .env("JUNIPER_PROXY_TEST_CHILD_URL", &target_url)
+                .env("JUNIPER_PROXY_TEST_ROUTE", route_class)
+                .env("HTTP_PROXY", &proxy_url)
+                .env("ALL_PROXY", &proxy_url)
+                .env("http_proxy", &proxy_url)
+                .env("all_proxy", &proxy_url)
+                .env("NO_PROXY", "")
+                .env("no_proxy", "")
+                .status()
+                .expect("isolated test process should start");
+            let target_request = target_thread.join().expect("target thread should join");
+            let proxy_request = proxy_thread.join().expect("proxy thread should join");
+            assert!(status.success(), "isolated {route_class} request failed");
+            let target_request = target_request.expect("target should receive request");
+            assert!(target_request.starts_with("GET / HTTP/1.1"));
+            assert!(
+                proxy_request.is_none(),
+                "proxy saw a {route_class} provider request"
+            );
+        }
     }
 
     #[cfg(target_os = "linux")]

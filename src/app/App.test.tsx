@@ -103,10 +103,18 @@ describe('Juniper application shell', () => {
   it('shows onboarding with truthful runtime copy and a real way back to it', async () => {
     expect(document.body.textContent).toContain('Your AI. Your models. Your machine.')
     expect(document.body.textContent).toContain('No account. No telemetry.')
+    // Dark mode is one choice away on the first screen.
+    const dark = document.querySelector<HTMLInputElement>(
+      '.onboarding-theme input[type="radio"][value="dark"]',
+    )!
+    await click(dark)
+    expect(stored().settings.theme).toBe('dark')
     await click(buttonByText(document.body, 'Continue'))
     await click(buttonByText(document.body, 'Continue'))
     expect(document.body.textContent).toContain('Browser development preview')
     expect(document.body.textContent).not.toContain('Ollama detected')
+    await click(buttonByText(document.body, 'Continue'))
+    expect(document.body.textContent).toContain('Agent (Beta)')
     await click(buttonByText(document.body, 'Continue'))
     await click(buttonByText(document.body, 'Enter Juniper'))
     expect(document.querySelector('[role="dialog"]')).toBeNull()
@@ -125,17 +133,22 @@ describe('Juniper application shell', () => {
     expect(byLabel<HTMLButtonElement>(container, 'Send message').disabled).toBe(true)
   })
 
-  it('keeps exactly three primary destinations', async () => {
+  it('puts Agent, marked Beta, directly beside Chat in the four primary destinations', async () => {
     await mount(settingsFor())
     const primary = Array.from(document.querySelectorAll('.sidebar-nav button')).map((button) =>
       button.textContent?.trim(),
     )
-    expect(primary).toEqual(['Chats', 'Models', 'Settings'])
+    expect(primary).toEqual(['Chat', 'Agent Beta', 'Models', 'Settings'])
+    const phone = Array.from(document.querySelectorAll('.bottom-nav button')).map((button) =>
+      button.textContent?.trim(),
+    )
+    if (phone.length > 0) expect(phone).toEqual(['Chat', 'Agent (Beta)', 'Models', 'Settings'])
   })
 
   it('keeps every pre-redesign surface reachable from the new navigation', async () => {
     await mount(settingsFor())
     await click(buttonByText(document.querySelector('.sidebar-nav')!, 'Models'))
+    await click(container.querySelector<HTMLInputElement>('.segmented input[value="all"]')!)
     expect(container.textContent).toContain('SmolLM2 135M Instruct')
     expect(container.textContent).toContain('From your connections')
     expect(container.textContent).toContain('Hosted reviewer model')
@@ -624,7 +637,7 @@ describe('Juniper application shell', () => {
     await click(buttonByText(document.querySelector('[role="alertdialog"]')!, 'Clear chats'))
     expect(stored().conversations).toHaveLength(0)
 
-    await click(buttonByText(document.querySelector('.sidebar-nav')!, 'Chats'))
+    await click(buttonByText(document.querySelector('.sidebar-nav')!, 'Chat'))
     expect(container.querySelector('.chat-title h1')?.textContent).not.toBe('Plan the garden beds')
     const textarea = container.querySelector('textarea')!
     await act(async () => {

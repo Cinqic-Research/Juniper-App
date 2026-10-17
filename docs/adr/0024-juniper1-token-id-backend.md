@@ -3,6 +3,11 @@
 Status: Proposed for review (branch `a02/native-token-id-adapter`). Requires
 independent review before merge.
 
+Correction (2026-10-15): this was merged to `main` on 2026-10-14 as
+`77f5da7` (PR #46) under the owner's standing delegation. GitHub records no
+review on the PR. The reviews before merge were same-vendor (Claude) checks and
+are not independent review.
+
 ## Context
 
 Juniper 1 finding A-02 (Juniper-1-Train

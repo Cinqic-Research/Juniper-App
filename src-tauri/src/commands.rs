@@ -30,6 +30,7 @@ pub struct AppState {
     pub runtime_logs: Mutex<VecDeque<RuntimeLogEntry>>,
     #[cfg(not(target_os = "android"))]
     pub local_runtime: crate::local_runtime::LocalRuntime,
+    pub agent: crate::agent::AgentState,
 }
 
 struct PickerGuard<'a>(&'a AtomicBool);
@@ -209,7 +210,15 @@ impl Cancellation {
     }
 
     pub async fn wait(&self) {
-        self.notify.notified().await;
+        loop {
+            let notified = self.notify.notified();
+            tokio::pin!(notified);
+            notified.as_mut().enable();
+            if self.is_cancelled() {
+                return;
+            }
+            notified.await;
+        }
     }
 }
 
@@ -243,7 +252,7 @@ pub fn system_info() -> HashMap<String, String> {
     let mut result = HashMap::from([
         (
             String::from("application"),
-            String::from("Juniper 0.3.0-rc.33"),
+            String::from("Juniper 0.4.0-alpha.1"),
         ),
         (String::from("os"), std::env::consts::OS.to_owned()),
         (
@@ -341,8 +350,12 @@ pub fn managed_models(app: AppHandle) -> Result<Vec<managed_models::ManagedModel
 }
 
 #[tauri::command]
-pub fn delete_managed_model(app: AppHandle, catalog_id: String) -> Result<(), String> {
-    managed_models::remove(&app, &catalog_id)
+pub fn delete_managed_model(
+    app: AppHandle,
+    catalog_id: String,
+    artifact_id: Option<String>,
+) -> Result<(), String> {
+    managed_models::remove(&app, &catalog_id, artifact_id.as_deref())
 }
 
 #[tauri::command]
@@ -350,17 +363,39 @@ pub async fn download_managed_model(
     app: AppHandle,
     state: State<'_, AppState>,
     catalog_id: String,
+    artifact_id: Option<String>,
     request_id: String,
 ) -> Result<(), String> {
     let cancellation = begin_cancellable_operation(state.inner(), &request_id)?;
-    let result =
-        managed_models::download(app, state.inner(), &catalog_id, &request_id, cancellation).await;
+    let result = managed_models::download(
+        app,
+        state.inner(),
+        &catalog_id,
+        artifact_id.as_deref(),
+        &request_id,
+        cancellation,
+    )
+    .await;
     state
         .cancellations
         .lock()
         .map_err(|_| "Cancellation state unavailable.")?
         .remove(&request_id);
     result
+}
+
+/// Whether the user accepted this catalog model's license (always true when
+/// the catalog requires no acceptance). The host decides; see model_licenses.
+#[tauri::command]
+pub fn model_license_accepted(app: AppHandle, catalog_id: String) -> Result<bool, String> {
+    crate::model_licenses::accepted(&app, &catalog_id)
+}
+
+/// Records acceptance after the user confirmed the license dialog. Download
+/// and import refuse `MODEL_LICENSE_NOT_ACCEPTED` without it.
+#[tauri::command]
+pub fn accept_model_license(app: AppHandle, catalog_id: String) -> Result<(), String> {
+    crate::model_licenses::accept(&app, &catalog_id)
 }
 
 #[tauri::command]
@@ -376,6 +411,7 @@ pub async fn import_managed_model(
     state: State<'_, AppState>,
     selection_id: String,
     catalog_id: String,
+    artifact_id: Option<String>,
     request_id: String,
 ) -> Result<(), String> {
     let path = state
@@ -390,6 +426,7 @@ pub async fn import_managed_model(
         app,
         state.inner(),
         &catalog_id,
+        artifact_id.as_deref(),
         &path,
         &request_id,
         cancellation,
@@ -567,6 +604,7 @@ pub fn save_app_data(
     {
         return Err("Application data is outside the allowed size or shape.".into());
     }
+    let _route_configuration = state.agent.lock_route_configuration();
     let path = app
         .path()
         .app_data_dir()
@@ -577,8 +615,69 @@ pub fn save_app_data(
         .lock()
         .map_err(|_| "Attachment state unavailable.")?
         .clone();
+    let old_data =
+        crate::storage::load_app_data(&path).map_err(|error| format!("DATABASE_ERROR: {error}"))?;
+    // The Agent service can be stopped or not yet initialized while its
+    // persisted tasks still exist. Open the shared database directly so a
+    // route change cannot silently skip waiting tasks.
+    let agent_connection = crate::agent::store::open(&path)?;
+    // Run startup and route resolution use the same gate. While it is held no
+    // new run can capture the old route after this pass or the new route before
+    // the snapshot commit.
+    crate::agent::context::pause_tasks_with_route_changes(
+        &state.agent,
+        &agent_connection,
+        old_data.as_ref(),
+        &data,
+    )?;
     crate::storage::save_app_data_with_paths(&path, &data, &attachment_paths)
-        .map_err(|error| format!("DATABASE_ERROR: {error}"))
+        .map_err(|error| format!("DATABASE_ERROR: {error}"))?;
+    for reference in replaced_provider_credentials(old_data.as_ref(), &data) {
+        secure_delete_credential(app.clone(), reference).map_err(|error| {
+            format!(
+                "Application data was saved, but an unused provider credential could not be removed: {error}"
+            )
+        })?;
+    }
+    Ok(())
+}
+
+fn replaced_provider_credentials(
+    old_snapshot: Option<&Value>,
+    new_snapshot: &Value,
+) -> Vec<String> {
+    let Some(old_snapshot) = old_snapshot else {
+        return Vec::new();
+    };
+    let new_providers: HashMap<String, Option<String>> = new_snapshot["providers"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|provider| {
+            Some((
+                provider["id"].as_str()?.to_owned(),
+                provider["apiKeyRef"].as_str().map(str::to_owned),
+            ))
+        })
+        .collect();
+    let retained_references: std::collections::HashSet<&str> = new_providers
+        .values()
+        .filter_map(Option::as_deref)
+        .collect();
+    old_snapshot["providers"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|provider| {
+            let id = provider["id"].as_str()?;
+            let old_reference = provider["apiKeyRef"].as_str()?;
+            let new_reference = new_providers.get(id)?.as_deref();
+            (new_reference != Some(old_reference)
+                && !retained_references.contains(old_reference)
+                && valid_credential_reference(old_reference))
+            .then(|| old_reference.to_owned())
+        })
+        .collect()
 }
 
 #[tauri::command]
@@ -905,8 +1004,20 @@ pub async fn running_models(
 pub async fn chat_stream(
     app: AppHandle,
     state: State<'_, AppState>,
-    request: ChatRequest,
+    mut request: ChatRequest,
 ) -> Result<(), String> {
+    let location = crate::agent::context::route_location_for_endpoint(
+        &request.provider.kind,
+        &request.provider.base_url,
+    );
+    request.provider.transport_location = location.into();
+    request.provider.locality = match location {
+        "remote" => "remote",
+        "unknown" => "unknown",
+        _ => "local",
+    }
+    .into();
+    request.model.execution_location = location.into();
     let cancellation = begin_cancellable_operation(state.inner(), &request.request_id)?;
     if request.provider.kind == "juniper-local" {
         let event_app = app.clone();
@@ -1247,6 +1358,47 @@ mod tests {
     use super::*;
 
     #[test]
+    fn provider_credential_rotation_retires_only_unreferenced_replaced_keys() {
+        let old = serde_json::json!({
+            "providers": [
+                { "id": "edited", "apiKeyRef": "credential-old" },
+                { "id": "shared-a", "apiKeyRef": "credential-shared" },
+                { "id": "shared-b", "apiKeyRef": "credential-shared" }
+            ]
+        });
+        let new = serde_json::json!({
+            "providers": [
+                { "id": "edited", "apiKeyRef": "credential-new" },
+                { "id": "shared-a", "apiKeyRef": "credential-new-shared" },
+                { "id": "shared-b", "apiKeyRef": "credential-shared" }
+            ]
+        });
+        assert_eq!(
+            replaced_provider_credentials(Some(&old), &new),
+            vec!["credential-old"]
+        );
+
+        let shared_old = serde_json::json!({
+            "providers": [
+                { "id": "edited", "apiKeyRef": "credential-old" },
+                { "id": "other", "apiKeyRef": "credential-old" }
+            ]
+        });
+        let still_shared = serde_json::json!({
+            "providers": [
+                { "id": "edited", "apiKeyRef": "credential-new" },
+                { "id": "other", "apiKeyRef": "credential-old" }
+            ]
+        });
+        assert!(replaced_provider_credentials(Some(&shared_old), &still_shared).is_empty());
+        assert!(
+            replaced_provider_credentials(Some(&old), &serde_json::json!({"providers": []}))
+                .is_empty()
+        );
+        assert!(replaced_provider_credentials(None, &new).is_empty());
+    }
+
+    #[test]
     fn native_picker_guard_allows_only_one_dialog_until_it_closes() {
         let flag = AtomicBool::new(false);
         let first = PickerGuard::acquire(&flag).expect("first picker may open");
@@ -1388,6 +1540,15 @@ mod tests {
         assert!(begin_cancellable_operation(&state, "request-1").is_err());
         assert!(begin_cancellable_operation(&state, "bad\nrequest").is_err());
         first.cancel();
+    }
+
+    #[tokio::test]
+    async fn cancellation_wait_observes_a_cancel_sent_before_the_waiter_starts() {
+        let cancellation = Cancellation::default();
+        cancellation.cancel();
+        tokio::time::timeout(std::time::Duration::from_millis(100), cancellation.wait())
+            .await
+            .expect("a pre-existing cancellation must be observable");
     }
 
     #[test]

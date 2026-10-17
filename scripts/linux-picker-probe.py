@@ -316,7 +316,7 @@ def main():
             wait_for_rendered_capture(
                 app, evidence, "after-valid-selection-stable", require_stable=True
             )
-            click(dpy, app, 80, 210)  # Settings: must still respond after cancellation
+            click(dpy, app, 80, 252)  # Settings (after Chat, Agent, Models): must still respond after cancellation
             wait_for_rendered_change(
                 app,
                 evidence,
