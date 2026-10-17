@@ -879,6 +879,92 @@ fn citations_without_sources_are_reported_and_budgets_stop_runaway_tasks() {
     );
 }
 
+/// F-01 (review of 406a0be): a reply that claims a save no tool performed is
+/// recorded as needing review, never as completed work. The first case is
+/// the recorded gate workflow: reads and a document, then "saved as
+/// `summary.md` in the project folder" with no workspace write.
+#[test]
+fn an_answer_claiming_an_unperformed_save_needs_review_instead_of_completing() {
+    let script = vec![
+        sse_tool_calls(&[(
+            "r1",
+            "workspace.read",
+            json!({ "rootId": "root-1", "path": "notes.md" }),
+        )]),
+        sse_tool_calls(&[(
+            "r2",
+            "artifact.create",
+            json!({ "title": "Summary", "fileName": "summary.md", "content": "# Summary\nQ4 budget [S1].", "sourceIds": ["S1"] }),
+        )]),
+        sse_answer(
+            "The summary has already been saved as `summary.md` in the project folder [S1].",
+        ),
+    ];
+    let fixture = new_fixture(script);
+    let id = fixture.start(
+        "Summarize the notes and save summary.md in the project.",
+        true,
+    );
+    let task = fixture.run(&id);
+    assert!(task.needs_review(), "{:?} {:?}", task.status, task.result);
+    let result = task.result.clone().unwrap();
+    assert_eq!(result.outcome, "needs-review");
+    assert!(
+        result
+            .unverified
+            .contains(&"claim: saved or changed a file".to_owned())
+    );
+    assert!(
+        task.status_reason
+            .as_deref()
+            .unwrap()
+            .contains("no tool in this task did that")
+    );
+    assert!(!fixture.folder.join("summary.md").exists());
+    let connection = fixture.connection();
+    let events = store::events(&connection, &id, 100).unwrap();
+    assert!(
+        events
+            .iter()
+            .any(|event| event.kind == "status" && event.summary.starts_with("Needs review")),
+        "the status event says Needs review"
+    );
+    assert!(
+        !events
+            .iter()
+            .any(|event| event.kind == "status" && event.summary.starts_with("Completed")),
+        "no status event calls it completed"
+    );
+    let inbox = store::inbox(&connection, 20).unwrap();
+    assert!(
+        inbox
+            .iter()
+            .any(|item| item.kind == "review" && item.title.starts_with("Needs review"))
+    );
+
+    // A tool-free reply claiming a save: the same.
+    let fixture = new_fixture(vec![sse_answer(
+        "I've saved the cleaned notes to notes-clean.md in your project folder.",
+    )]);
+    let task = fixture.run(&fixture.start("Clean up my notes.", true));
+    assert!(task.needs_review());
+    // A tool-free reply claiming it sent an email: no tool can send here.
+    let fixture = new_fixture(vec![sse_answer("Done. I emailed the report to Dana.")]);
+    let task = fixture.run(&fixture.start("Email the report to Dana.", false));
+    assert_eq!(
+        task.result.unwrap().unverified,
+        vec!["claim: sent or posted something"]
+    );
+    // An answer that only describes or offers an effect is still completed.
+    let fixture = new_fixture(vec![sse_answer(
+        "The file was not saved. I can save it as summary.md if you approve a write.",
+    )]);
+    let task = fixture.run(&fixture.start("Summarize.", false));
+    assert_eq!(task.status, TaskStatus::Completed);
+    assert!(!task.needs_review());
+    assert_eq!(task.result.unwrap().outcome, "answer");
+}
+
 fn fixture_with_budget(script: Vec<String>, steps: u32) -> Fixture {
     let fixture = new_fixture(script);
     let mut profile = AgentProfile::default_for("agent-1");

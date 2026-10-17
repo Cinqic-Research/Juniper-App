@@ -47,6 +47,22 @@ accepted it. If the answer cites a source the task never retrieved, the
 citation is listed under `result.unverified`. A task that runs out of budget
 ends **failed**, with `outcome: "partial"`, and keeps what it produced.
 
+A model's claim is not success. Before accepting a final answer the host
+checks it for asserted effects — a file saved or edited, a document saved, a
+memory saved, something sent, posted or uploaded, a download, a schedule — and
+compares each with the succeeded actions in the task tree (`workspace.write`
+for files in a project, `artifact.create` or `workspace.write` for documents,
+`memory.save`, `web.fetch`, `schedule.create`; a plugin tool can back any
+claim except memories and schedules). A claim with no matching succeeded
+action ends the task with `outcome: "needs-review"`, a status reason naming
+the claim, `claim: …` entries in `result.unverified`, a "Needs review" status
+event and inbox item, and a **Needs review** label in the interface; it is
+never shown as Completed. The lifecycle state stays the terminal `completed`
+(so schedules, follow-ups and the database constraint are unchanged); the
+outcome is what the interface reports. The check is a deliberate heuristic
+(past-tense effect verbs in sentences that are not negated, hedged or
+questions); it errs toward asking for review.
+
 ## The loop
 
 Each model step builds its prompt the same way:

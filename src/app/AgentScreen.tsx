@@ -40,8 +40,17 @@ const STATUS_LABEL: Record<TaskStatus, string> = {
 
 const ACTIVE: TaskStatus[] = ['queued', 'running', 'waiting-input', 'waiting-approval']
 
-export function StatusChip({ status }: { status: TaskStatus }) {
-  return <span className={`task-status ${status}`}>{STATUS_LABEL[status]}</span>
+/** A finished task whose answer claims work no tool did (see TaskResult). */
+function needsReview(task: Pick<AgentTask, 'status' | 'result'>) {
+  return task.status === 'completed' && task.result?.outcome === 'needs-review'
+}
+
+export function StatusChip({ task }: { task: Pick<AgentTask, 'status' | 'result'> }) {
+  return needsReview(task) ? (
+    <span className="task-status waiting-input">Needs review</span>
+  ) : (
+    <span className={`task-status ${task.status}`}>{STATUS_LABEL[task.status]}</span>
+  )
 }
 
 function BetaBadge() {
@@ -410,7 +419,7 @@ function TaskList({
                     {task.scheduleRunId ? ' · Scheduled' : ''}
                   </small>
                 </span>
-                <StatusChip status={task.status} />
+                <StatusChip task={task} />
               </button>
             </li>
           )
@@ -515,7 +524,7 @@ function TaskView({
         backLabel="Back to tasks"
         description={
           <>
-            {assistant?.avatar} {assistant?.name ?? 'Agent'} · <StatusChip status={task.status} />
+            {assistant?.avatar} {assistant?.name ?? 'Agent'} · <StatusChip task={task} />
             {task.role && <> · {task.role} subtask</>}
           </>
         }
@@ -632,15 +641,28 @@ function TaskView({
           <h2>
             {task.result.outcome === 'partial'
               ? 'Partial result'
-              : task.result.outcome === 'deliverable'
-                ? 'Result and documents'
-                : 'Answer'}
+              : task.result.outcome === 'needs-review'
+                ? 'Needs review'
+                : task.result.outcome === 'deliverable'
+                  ? 'Result and documents'
+                  : 'Answer'}
           </h2>
           {task.result.summary && <Markdown content={task.result.summary} />}
-          {task.result.unverified.length > 0 && (
+          {task.result.unverified.some((item) => item.startsWith('claim: ')) && (
             <p className="warning-line">
-              Not verified: {task.result.unverified.join(', ')} — these citations do not match a
-              source this task retrieved.
+              Not done by Juniper: the answer says it{' '}
+              {task.result.unverified
+                .filter((item) => item.startsWith('claim: '))
+                .map((item) => item.slice('claim: '.length))
+                .join(' and ')}
+              , but no tool in this task did that. Check before relying on it.
+            </p>
+          )}
+          {task.result.unverified.some((item) => !item.startsWith('claim: ')) && (
+            <p className="warning-line">
+              Not verified:{' '}
+              {task.result.unverified.filter((item) => !item.startsWith('claim: ')).join(', ')} —
+              these citations do not match a source this task retrieved.
             </p>
           )}
         </section>
@@ -706,7 +728,7 @@ function TaskView({
                     <strong>{child.title}</strong>
                     <small>{child.statusReason ?? child.currentAction ?? ''}</small>
                   </span>
-                  <StatusChip status={child.status} />
+                  <StatusChip task={child} />
                 </button>
               </li>
             ))}

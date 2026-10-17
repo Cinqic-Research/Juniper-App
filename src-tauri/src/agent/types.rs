@@ -226,7 +226,10 @@ pub struct SkillRef {
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct TaskResult {
-    /// `answer` (text only), `deliverable` (artifacts produced), or `partial`.
+    /// `answer` (text only), `deliverable` (artifacts produced), `partial`,
+    /// or `needs-review`: the answer claims an effect (a saved file, a sent
+    /// message) that no tool in the task performed, so the host does not
+    /// present the task as completed.
     pub outcome: String,
     pub summary: String,
     pub artifact_ids: Vec<String>,
@@ -277,6 +280,17 @@ pub struct TaskEvent {
     pub summary: String,
     pub detail: Option<Value>,
     pub created_at: String,
+}
+
+impl Task {
+    /// A finished task whose answer claims work the host did not see done.
+    pub fn needs_review(&self) -> bool {
+        self.status == TaskStatus::Completed
+            && self
+                .result
+                .as_ref()
+                .is_some_and(|result| result.outcome == "needs-review")
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]

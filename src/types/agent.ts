@@ -56,7 +56,8 @@ export interface PendingCalls {
 }
 
 export interface TaskResult {
-  outcome: 'answer' | 'deliverable' | 'partial'
+  /** `needs-review`: the answer claims an effect no tool performed; not shown as completed. */
+  outcome: 'answer' | 'deliverable' | 'partial' | 'needs-review'
   summary: string
   artifactIds: string[]
   sourceIds: string[]

@@ -197,6 +197,38 @@ describe('Agent screen (Beta)', () => {
     expect(invocations.some((call) => call.command === 'save_app_data')).toBe(false)
   })
 
+  it('shows a host-flagged unperformed claim as Needs review, never Completed', async () => {
+    const reviewed: AgentTask = {
+      ...task,
+      status: 'completed',
+      statusReason:
+        'The answer says it saved or changed a file, but no tool in this task did that. Check the result before relying on it.',
+      result: {
+        outcome: 'needs-review',
+        summary: 'The summary has already been saved as `summary.md` in the project folder.',
+        artifactIds: [],
+        sourceIds: [],
+        unverified: ['claim: saved or changed a file'],
+      },
+    }
+    respond = (command) => {
+      if (command === 'agent_overview') return { ...overview, tasks: [reviewed] }
+      if (command === 'task_detail') return { ...detail, task: reviewed, approvals: [] }
+      return null
+    }
+    await mount()
+    expect(container.querySelector('.task-status')?.textContent).toBe('Needs review')
+    await act(async () => button('Write the budget summary').click())
+    await settle()
+    const chips = Array.from(container.querySelectorAll('.task-status')).map(
+      (chip) => chip.textContent,
+    )
+    expect(chips).toContain('Needs review')
+    expect(chips).not.toContain('Completed')
+    expect(container.textContent).toContain('Not done by Juniper')
+    expect(container.textContent).not.toContain('these citations do not match')
+  })
+
   it('does not offer a standing grant for once-only actions such as memory changes', async () => {
     respond = (command) => {
       if (command === 'agent_overview') return overview

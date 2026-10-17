@@ -88,6 +88,205 @@ fn action_checkpoint_status(call_name: &str, outcome: &Outcome) -> Option<&'stat
     })
 }
 
+/// What a final answer says the task did, by the kind of tool that would have
+/// had to do it. A heuristic, not a parser: it looks for past-tense effect
+/// verbs in sentences that are not negated, hedged, or questions.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Claim {
+    /// A file saved, written, or edited in a project folder or on disk.
+    FileWrite,
+    /// A file or document saved without saying where.
+    Document,
+    Memory,
+    /// Sent, posted, uploaded, or otherwise delivered to someone else.
+    Delivery,
+    Download,
+    Schedule,
+}
+
+impl Claim {
+    fn describe(self) -> &'static str {
+        match self {
+            Self::FileWrite => "saved or changed a file",
+            Self::Document => "saved a document",
+            Self::Memory => "saved a memory",
+            Self::Delivery => "sent or posted something",
+            Self::Download => "downloaded something",
+            Self::Schedule => "scheduled something",
+        }
+    }
+
+    /// Whether a succeeded action with this tool could have done it. Plugin
+    /// (MCP) tools have unknown effects, so they can back any claim except
+    /// a memory or a schedule, which only Juniper's own tools create.
+    fn backed_by(self, tool: &str) -> bool {
+        let plugin = tool.starts_with("mcp.");
+        match self {
+            Self::FileWrite => tool == "workspace.write" || plugin,
+            Self::Document => matches!(tool, "workspace.write" | "artifact.create") || plugin,
+            Self::Memory => tool == "memory.save",
+            Self::Delivery => plugin,
+            Self::Download => matches!(tool, "web.fetch" | "workspace.write") || plugin,
+            Self::Schedule => tool == "schedule.create",
+        }
+    }
+}
+
+/// Splits on sentence ends and line breaks, but not inside names such as
+/// `summary.md` or `v1.2`.
+fn sentences(content: &str) -> Vec<&str> {
+    let mut parts = Vec::new();
+    let mut start = 0;
+    let mut chars = content.char_indices().peekable();
+    while let Some((index, c)) = chars.next() {
+        let next_is_break = chars.peek().is_none_or(|(_, next)| next.is_whitespace());
+        if c == '\n' || (matches!(c, '.' | '!' | ';' | '\u{2026}') && next_is_break) {
+            parts.push(&content[start..index]);
+            start = index + c.len_utf8();
+        }
+    }
+    parts.push(&content[start..]);
+    parts
+}
+
+fn claims_in(content: &str) -> Vec<Claim> {
+    const HEDGES: &[&str] = &[
+        "not", "never", "no", "unable", "cannot", "can't", "couldn't", "didn't", "don't",
+        "haven't", "hasn't", "wasn't", "weren't", "won't", "failed", "without", "would", "could",
+        "should", "can", "will", "may", "might", "if", "once", "before", "want", "please", "how",
+        "need", "needs",
+    ];
+    // Verbs that claim an effect on their own, and verbs that only do so in
+    // a first-person or completed-passive sentence ("I created", "has been
+    // updated"), since "the file was last updated in 2024" is a description.
+    const STRONG: &[&str] = &[
+        "saved",
+        "wrote",
+        "written",
+        "overwrote",
+        "overwritten",
+        "appended",
+        "sent",
+        "emailed",
+        "mailed",
+        "texted",
+        "messaged",
+        "posted",
+        "uploaded",
+        "published",
+        "submitted",
+        "forwarded",
+        "downloaded",
+        "deleted",
+        "renamed",
+        "scheduled",
+    ];
+    const WEAK: &[&str] = &[
+        "created", "updated", "edited", "modified", "stored", "added", "changed", "replaced",
+        "moved", "removed",
+    ];
+    const ACTOR: &[&str] = &[
+        "i",
+        "i've",
+        "we",
+        "we've",
+        "been",
+        "now",
+        "already",
+        "successfully",
+        "done",
+    ];
+    const PLACES: &[&str] = &[
+        "folder",
+        "directory",
+        "disk",
+        "workspace",
+        "project",
+        "drive",
+        "desktop",
+        "path",
+    ];
+    let mut found = Vec::new();
+    for sentence in sentences(content) {
+        if sentence.contains('?') {
+            continue;
+        }
+        let lower = sentence.to_lowercase();
+        // Dots stay inside words so `summary.md` reads as a file name.
+        let words: Vec<&str> = lower
+            .split(|c: char| !(c.is_alphanumeric() || matches!(c, '\'' | '\u{2019}' | '.')))
+            .map(|word| word.trim_matches('.'))
+            .filter(|word| !word.is_empty())
+            .collect();
+        let has = |set: &[&str]| words.iter().any(|word| set.contains(word));
+        // A hedge or negation before the effect verb ("was not saved", "I
+        // could save it") makes the sentence something other than a claim;
+        // one after it ("I saved it so you can open it") does not.
+        let first_verb = words
+            .iter()
+            .position(|word| STRONG.contains(word) || WEAK.contains(word));
+        let Some(first_verb) = first_verb else {
+            continue;
+        };
+        if words[..first_verb].iter().any(|word| {
+            HEDGES.contains(word) || word.ends_with("n't") || word.ends_with("n\u{2019}t")
+        }) {
+            continue;
+        }
+        if !(has(STRONG) || (has(WEAK) && has(ACTOR))) {
+            continue;
+        }
+        let file_named = has(&["file", "files"])
+            || words.iter().any(|word| {
+                word.rsplit_once('.')
+                    .is_some_and(|(stem, ext)| !stem.is_empty() && (1..=5).contains(&ext.len()))
+            });
+        let claim = if has(&["memory", "memories", "remember"]) {
+            Claim::Memory
+        } else if has(&[
+            "sent",
+            "emailed",
+            "mailed",
+            "texted",
+            "messaged",
+            "posted",
+            "uploaded",
+            "published",
+            "submitted",
+            "forwarded",
+        ]) {
+            Claim::Delivery
+        } else if has(&["downloaded"]) {
+            Claim::Download
+        } else if has(&["scheduled", "reminder", "schedule"]) {
+            Claim::Schedule
+        } else if has(PLACES) {
+            Claim::FileWrite
+        } else if file_named || has(&["document", "report", "note", "notes", "summary", "draft"]) {
+            Claim::Document
+        } else {
+            continue;
+        };
+        if !found.contains(&claim) {
+            found.push(claim);
+        }
+    }
+    found
+}
+
+/// Effects the answer claims that no succeeded action in the task tree
+/// could have produced. Juniper does not call such a task complete.
+fn unperformed_claims(content: &str, actions: &[TaskAction]) -> Vec<Claim> {
+    claims_in(content)
+        .into_iter()
+        .filter(|claim| {
+            !actions
+                .iter()
+                .any(|action| action.status == "succeeded" && claim.backed_by(&action.tool))
+        })
+        .collect()
+}
+
 fn duplicate_call_outcome(action: Option<TaskAction>) -> Outcome {
     match action {
         Some(action) if action.status == "succeeded" => {
@@ -391,6 +590,9 @@ fn on_terminal<R: Runtime>(
         agent.wake.notify_one();
     } else {
         let (kind, title) = match task.status {
+            TaskStatus::Completed if task.needs_review() => {
+                ("review", format!("Needs review: {}", task.title))
+            }
             TaskStatus::Completed => ("result", format!("Finished: {}", task.title)),
             TaskStatus::Failed => ("failure", format!("Failed: {}", task.title)),
             _ => ("cancelled", format!("Cancelled: {}", task.title)),
@@ -948,8 +1150,24 @@ impl<R: Runtime> Run<'_, R> {
                 unverified.join(", ")
             ));
         }
+        let mut actions = Vec::new();
+        for id in &tree {
+            actions.extend(store::actions(&lock(&self.connection), id)?);
+        }
+        let unperformed = unperformed_claims(&content, &actions);
+        let mut unverified = unverified;
+        if !unperformed.is_empty() {
+            let described: Vec<&str> = unperformed.iter().map(|claim| claim.describe()).collect();
+            notes.push(format!(
+                "The answer says it {}, but no tool in this task did that. Check the result before relying on it.",
+                described.join(" and ")
+            ));
+            unverified.extend(described.iter().map(|text| format!("claim: {text}")));
+        }
         self.task.result = Some(TaskResult {
-            outcome: if artifacts.is_empty() {
+            outcome: if !unperformed.is_empty() {
+                "needs-review".into()
+            } else if artifacts.is_empty() {
                 "answer".into()
             } else {
                 "deliverable".into()
@@ -1715,7 +1933,7 @@ impl<R: Runtime> Run<'_, R> {
             reports.push(json!({
                 "taskId": child.id,
                 "role": child.role,
-                "status": child.status.as_str(),
+                "status": if child.needs_review() { "needs-review" } else { child.status.as_str() },
                 "report": result.summary,
                 "artifactIds": result.artifact_ids,
                 "sourceIds": result.source_ids.iter().filter_map(|id| id.rsplit_once(':').map(|(_, label)| label.to_owned())).collect::<Vec<_>>(),
@@ -1783,6 +2001,51 @@ mod persistence_recovery_tests {
         assert_eq!(
             action_checkpoint_status("mcp.send", &replay),
             Some("succeeded")
+        );
+    }
+
+    #[test]
+    fn effect_claims_are_found_only_when_asserted_and_unbacked() {
+        let claims = |text: &str| claims_in(text);
+        assert_eq!(
+            claims("The summary has already been saved as `summary.md` in the project folder…"),
+            vec![Claim::FileWrite]
+        );
+        assert_eq!(
+            claims("I saved it so you can open it later in your notes."),
+            vec![Claim::Document]
+        );
+        assert_eq!(claims("I've updated config.toml."), vec![Claim::Document]);
+        assert_eq!(claims("I uploaded the slides."), vec![Claim::Delivery]);
+        assert_eq!(claims("Downloaded the dataset."), vec![Claim::Download]);
+        assert_eq!(claims("I saved that to memory."), vec![Claim::Memory]);
+        for not_a_claim in [
+            "The file was not saved.",
+            "I could save this as notes.md.",
+            "Shall I save it to the project folder?",
+            "It hasn't been written to disk.",
+            "The README was last updated in 2024.",
+            "Once saved, the document opens in your editor.",
+            "The answer is 42 [S1].",
+        ] {
+            assert!(claims(not_a_claim).is_empty(), "{not_a_claim}");
+        }
+        let mut write = action("succeeded");
+        write.tool = "workspace.write".into();
+        let mut artifact = action("succeeded");
+        artifact.tool = "artifact.create".into();
+        let text = "I saved the summary to out/summary.md in the project folder.";
+        assert!(unperformed_claims(text, std::slice::from_ref(&write)).is_empty());
+        assert_eq!(
+            unperformed_claims(text, std::slice::from_ref(&artifact)),
+            vec![Claim::FileWrite],
+            "a Juniper document is not a file in the project folder"
+        );
+        let mut failed = write.clone();
+        failed.status = "failed".into();
+        assert_eq!(unperformed_claims(text, &[failed]), vec![Claim::FileWrite]);
+        assert!(
+            unperformed_claims("I created a document with the summary.", &[artifact]).is_empty()
         );
     }
 }

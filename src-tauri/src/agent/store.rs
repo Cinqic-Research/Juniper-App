@@ -198,13 +198,18 @@ pub fn transition(
     }
     save_task(connection, task)?;
     if previous != next {
+        let label = if task.needs_review() {
+            "Needs review"
+        } else {
+            status_label(next)
+        };
         add_event(
             connection,
             &task.id,
             "status",
             &match &reason {
-                Some(reason) => format!("{} — {reason}", status_label(next)),
-                None => status_label(next).to_owned(),
+                Some(reason) => format!("{label} — {reason}"),
+                None => label.to_owned(),
             },
             Some(json!({ "from": previous.as_str(), "to": next.as_str() })),
         )?;
