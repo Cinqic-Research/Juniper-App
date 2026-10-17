@@ -2,7 +2,7 @@
 
 Juniper is a local-first AI desktop and Android app for people who want a thoughtful assistant, visible model controls, and a clear boundary around private data. It works with compatible text-generation models through supported runtimes; no model family is required and no model is bundled.
 
-**Source version `0.4.0-alpha.1` ("Juniper 0.4.0-Alpha") — alpha, not yet published.** The latest published prerelease is `0.3.0-rc.33`. The guarded release workflow builds and packages the Juniper-owned local runtime for desktop targets only after the validation and immutable-tag gates pass. See [Download](#download).
+**Source version `0.4.0-alpha.1` ("Juniper 0.4.0-Alpha") — alpha, not yet published.** The latest published prerelease is `0.3.0-rc.33`. What changes in 0.4.0-Alpha is in [CHANGELOG.md](CHANGELOG.md); its release gates and evidence are in [docs/release/juniper-0.4.0-alpha-readiness-review.md](docs/release/juniper-0.4.0-alpha-readiness-review.md). The guarded release workflow builds and packages the Juniper-owned local runtime for desktop targets only after the validation and immutable-tag gates pass. See [Download](#download).
 
 ## Download
 
@@ -38,7 +38,7 @@ Features marked **(source)** are in this source tree (`0.4.0-alpha.1`, not yet p
 - A generic runtime registry with explicit maturity and qualification state for llama.cpp, LiteRT-LM, ExecuTorch, MLC LLM, and ONNX Runtime GenAI. Optional runtimes are not presented as installed without a compatible artifact.
 - Artifact-centric model metadata: each model points to concrete runtime artifacts and file manifests, so a model is never treated as universally compatible.
 - A non-networked Device Link protocol/policy preview. Pairing, discovery, peer connections, remote control, and Juniper Network transport are disabled until a persistent TLS identity and end-to-end transport are implemented and qualified.
-- A curated catalog of downloadable instruction-tuned GGUF models (source: 27 downloadable releases across Qwen, Llama, Gemma, DeepSeek-R1 distills, Mistral, Phi, SmolLM, Granite, MiniCPM, and Nemotron, plus import-only gpt-oss-20b; rc.33: four models below 1B). Each download is pinned to a repository revision, size, and SHA-256, can be resumed, and can be a multi-file bundle; you choose the quantization. "Popular on Hugging Face" labels come from a dated download snapshot with the method in [docs/research/model-catalog-2026-10-15](docs/research/model-catalog-2026-10-15/popularity-snapshot.md); popularity is not a quality rating.
+- A curated catalog of downloadable instruction-tuned GGUF models (source: 22 downloadable releases across Qwen, DeepSeek-R1 distills, Mistral, Phi, SmolLM, Granite, MiniCPM, and Nemotron, plus import-only gpt-oss-20b; rc.33: four models below 1B). The Llama 3.x and Gemma 3 entries are held from 0.4.0-Alpha because their GGUF files come from third-party mirrors ([details](docs/research/model-catalog-2026-10-15/exclusions-and-blockers.md)); a GGUF you obtained yourself can still be imported. Each download is pinned to a repository revision, size, and SHA-256, can be resumed, and can be a multi-file bundle; you choose the quantization. "Popular on Hugging Face" labels come from a dated download snapshot with the method in [docs/research/model-catalog-2026-10-15](docs/research/model-catalog-2026-10-15/popularity-snapshot.md); popularity is not a quality rating.
 - Optional Ollama, OpenAI-compatible, and llama.cpp-compatible provider connections for advanced users and existing setups.
 - A deterministic context builder that keeps the system prompt, curated memories, enabled tool definitions, and recent conversation within a context budget.
 - A host-authored tool boundary with bounded calculator, unit conversion, datetime, attachment, memory, search, and system-info contracts. A tool the request did not enable is denied, never executed.
@@ -116,6 +116,7 @@ Suites whose capability gate the model does not meet are reported NOT-APPLICABLE
 
 ## Known limitations
 
+- Juniper 0.4.0-Alpha platform status: Linux `.deb` and `.AppImage` supported; Windows MSI supported but unsigned (SmartScreen warns) and Agent execution on Windows is not verified; Android APK Beta, with a physical ARM64 inference run still required. Backup restore is not verified on a clean machine, and the Agent's "Needs review" check is a text heuristic that can miss phrasings. See [CHANGELOG.md](CHANGELOG.md).
 - The Windows MSI may be unsigned, so Windows SmartScreen can show an unrecognized-publisher warning.
 - `0.3.0-rc.33` is a prerelease candidate and is not promoted to final `0.3.0`. Its publication record, including a publication step that failed after creating the release and how the three missing assets were completed from the same workflow run, is in [docs/release/rc33-publication.md](docs/release/rc33-publication.md).
 - Android native local inference is Beta: use a supported ARM64 phone for real offline inference; x86_64 emulator evidence is diagnostic when hardware acceleration is unavailable. The owner-reported physical run establishes basic feasibility, while missing build and lifecycle metadata limits maturity.
