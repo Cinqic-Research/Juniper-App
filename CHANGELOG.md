@@ -20,10 +20,12 @@ An alpha prerelease, not a stable release. Gates and evidence:
   sandboxed Python on Linux (bubblewrap), bounded helper subtasks, and
   schedules that run while Juniper is open.
 - It asks before changing anything, shows a plan and every action, and can be
-  paused, steered, cancelled, or stopped entirely. Approvals are once-only for
-  dependency manifests, build files and scripts; shell start-up, SSH,
-  autostart, service, version-control, editor and CI files are refused, and
-  hidden configuration folders in the home folder cannot be granted.
+  paused, steered, cancelled, or stopped entirely. Writes to dependency
+  manifests, lock files, build files and wrappers, .NET project files and
+  scripts ask every time, with a diff and no standing grant; shell start-up,
+  SSH, autostart, service, version-control, editor and CI files are refused;
+  hidden folders, Windows `AppData` and macOS `~/Library` cannot be granted as
+  project folders.
 - A task whose answer claims a saved or changed file that no tool produced ends
   as **Needs review**, never Completed. The check is a text heuristic and can
   miss phrasings; the activity list shows what actually ran.
@@ -59,7 +61,9 @@ An alpha prerelease, not a stable release. Gates and evidence:
   yourself can still be imported. Detail:
   [exclusions-and-blockers.md](docs/research/model-catalog-2026-10-15/exclusions-and-blockers.md).
 - The Juniper 1 local import is a research experiment, not a qualified or
-  production model and not Juniper's default.
+  production model and not Juniper's default. Its public release is
+  [Juniper 1 Base](https://github.com/Cinqic-Research/Juniper-1-Base),
+  research-only.
 
 ### Platforms
 
