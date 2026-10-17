@@ -1422,6 +1422,14 @@ impl<R: Runtime> Run<'_, R> {
                 offered: true,
             },
         );
+        // Build manifests and dot-files: neither the preset nor a standing
+        // permission covers them, and no standing grant is offered.
+        let decision = match decision {
+            Decision::Allow | Decision::Ask { .. } if prepared.approve_each_time => {
+                Decision::Ask { standing: false }
+            }
+            other => other,
+        };
         match decision {
             Decision::Allow => self.execute(call, &prepared, &action_id).await.map(Some),
             Decision::Deny { code, message } => Ok(Some(Outcome::denied(code, &message))),

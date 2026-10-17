@@ -35,6 +35,10 @@ pub struct Prepared {
     /// The exact search provider previewed and approved. It is not re-read
     /// from mutable settings when the action resumes.
     pub search_provider: Option<super::web::Provider>,
+    /// The call must be approved one at a time with its preview, whatever
+    /// the autonomy preset or standing permissions say (for example a write
+    /// to a build manifest or a dot-file).
+    pub approve_each_time: bool,
 }
 
 /// A host-authored result.
@@ -308,6 +312,7 @@ pub fn prepare(
         target: json!({}),
         preview: String::new(),
         search_provider: None,
+        approve_each_time: false,
         spec,
     };
     match call.name.as_str() {
@@ -322,6 +327,7 @@ pub fn prepare(
             )?;
             prepared.scope = json!({ "projectId": root.project_id });
             prepared.target = json!({ "rootId": root.id, "version": version });
+            prepared.approve_each_time = workspace::write_needs_approval(argument(call, "path"));
             prepared.preview = format!(
                 "{} “{}” in {}:\n\n{diff}",
                 if version == workspace::ABSENT {

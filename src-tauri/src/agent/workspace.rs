@@ -20,9 +20,12 @@ const MAX_SEARCH_MATCHES: usize = 50;
 const SKIPPED_FOLDERS: &[&str] = &[".git", "node_modules", "target", ".venv", "__pycache__"];
 pub const ABSENT: &str = "absent";
 const MAX_DIFF_CHARS: usize = 200_000;
-/// Folders and files whose contents other programs execute (version
-/// control hooks and config, editor tasks, environment loaders, CI). An
-/// agent cannot write them, because that would run code outside the sandbox.
+/// Folders and files whose contents other programs execute without the
+/// user starting them: version control hooks and config, editor tasks,
+/// environment loaders, CI, shell start-up files, SSH and GnuPG material,
+/// and login autostart. An agent cannot write them, because that would run
+/// code outside the sandbox. Matched case-insensitively against every path
+/// component.
 const PROTECTED: &[&str] = &[
     ".git",
     ".hg",
@@ -40,13 +43,166 @@ const PROTECTED: &[&str] = &[
     ".gitattributes",
     ".gitlab-ci.yml",
     ".pre-commit-config.yaml",
+    ".ssh",
+    ".gnupg",
+    ".bashrc",
+    ".bash_profile",
+    ".bash_login",
+    ".bash_logout",
+    ".bash_aliases",
+    ".profile",
+    ".zshrc",
+    ".zprofile",
+    ".zshenv",
+    ".zlogin",
+    ".zlogout",
+    ".xprofile",
+    ".xinitrc",
+    ".xsession",
+    ".pam_environment",
 ];
+/// Consecutive components that are protected as a pair (login autostart and
+/// per-user service units).
+const PROTECTED_PAIRS: &[(&str, &str)] = &[(".config", "autostart"), (".config", "systemd")];
+/// Extensions of files a service manager runs.
+const PROTECTED_EXTENSIONS: &[&str] = &["service", "timer", "socket"];
+
+/// Files that run code when the user builds, installs, tests or opens them
+/// (build manifests and scripts, desktop entries). An agent may change them
+/// only through an approval that shows the diff, every time: neither the
+/// "Within projects" preset nor a standing permission covers them. Any
+/// other dot-file or dot-folder, at any depth, is treated the same way.
+const ASK_EVERY_TIME: &[&str] = &[
+    "makefile",
+    "gnumakefile",
+    "justfile",
+    "cmakelists.txt",
+    "package.json",
+    "pyproject.toml",
+    "setup.py",
+    "setup.cfg",
+    "conftest.py",
+    "noxfile.py",
+    "tox.ini",
+    "cargo.toml",
+    "build.rs",
+];
+const ASK_EVERY_TIME_EXTENSIONS: &[&str] = &["mk", "desktop"];
+
+fn lowercase_components(path: &Path) -> Vec<String> {
+    path.components()
+        .map(|component| component.as_os_str().to_string_lossy().to_ascii_lowercase())
+        .collect()
+}
+
+fn extension_in(name: &str, extensions: &[&str]) -> bool {
+    name.rsplit_once('.')
+        .is_some_and(|(stem, extension)| !stem.is_empty() && extensions.contains(&extension))
+}
 
 fn protected(path: &Path) -> bool {
-    path.components().any(|component| {
-        let name = component.as_os_str().to_string_lossy().to_ascii_lowercase();
-        PROTECTED.contains(&name.as_str())
-    })
+    let names = lowercase_components(path);
+    names.iter().any(|name| PROTECTED.contains(&name.as_str()))
+        || names.windows(2).any(|pair| {
+            PROTECTED_PAIRS
+                .iter()
+                .any(|(first, second)| pair[0] == *first && pair[1] == *second)
+        })
+        || names
+            .last()
+            .is_some_and(|name| extension_in(name, PROTECTED_EXTENSIONS))
+}
+
+/// Whether a write to this (already validated, unprotected) path must be
+/// approved one call at a time with its diff, whatever the autonomy preset
+/// or standing permissions say.
+pub fn write_needs_approval(path: &str) -> bool {
+    let Ok(relative) = relative_path(path) else {
+        return true;
+    };
+    let names = lowercase_components(&relative);
+    names.iter().any(|name| name.starts_with('.'))
+        || names.last().is_some_and(|name| {
+            ASK_EVERY_TIME.contains(&name.as_str()) || extension_in(name, ASK_EVERY_TIME_EXTENSIONS)
+        })
+}
+
+/// Why a folder must not be granted to a project, if it must not: the
+/// filesystem root, the home folder itself or anything that contains it,
+/// Juniper's own data folder (or anything containing or inside it), and
+/// system folders. Paths are compared after canonicalization by the caller.
+pub fn refused_root(
+    canonical: &Path,
+    home: Option<&Path>,
+    app_data: &Path,
+    system: &[PathBuf],
+) -> Option<&'static str> {
+    if canonical.parent().is_none() {
+        return Some("the whole file system");
+    }
+    if let Some(home) = home
+        && home.starts_with(canonical)
+    {
+        return Some("your home folder (choose a project folder inside it)");
+    }
+    if app_data.starts_with(canonical) || canonical.starts_with(app_data) {
+        return Some("Juniper's own data folder");
+    }
+    if system.iter().any(|folder| canonical.starts_with(folder)) {
+        return Some("a system folder");
+    }
+    None
+}
+
+/// System folders on this platform that are never granted, nor anything
+/// inside them.
+pub fn system_folders() -> Vec<PathBuf> {
+    #[cfg(windows)]
+    {
+        [
+            "SystemRoot",
+            "ProgramFiles",
+            "ProgramFiles(x86)",
+            "ProgramData",
+        ]
+        .iter()
+        .filter_map(|name| std::env::var_os(name))
+        .map(PathBuf::from)
+        .map(|path| std::fs::canonicalize(&path).unwrap_or(path))
+        .collect()
+    }
+    #[cfg(not(windows))]
+    {
+        [
+            "/etc",
+            "/bin",
+            "/sbin",
+            "/lib",
+            "/lib32",
+            "/lib64",
+            "/libx32",
+            "/usr",
+            "/boot",
+            "/dev",
+            "/proc",
+            "/sys",
+            "/run",
+            "/root",
+            "/snap",
+            "/var/lib",
+            "/var/log",
+            "/var/run",
+            "/System",
+            "/Library",
+            "/Applications",
+            "/private/etc",
+            "/private/var/db",
+        ]
+        .iter()
+        .map(PathBuf::from)
+        .map(|path| std::fs::canonicalize(&path).unwrap_or(path))
+        .collect()
+    }
 }
 
 pub type WorkspaceResult<T> = Result<T, (String, String)>;
@@ -91,7 +247,9 @@ pub fn relative_path(value: &str) -> WorkspaceResult<PathBuf> {
         match component {
             Component::Normal(part) => {
                 let text = part.to_string_lossy();
-                if text.chars().any(char::is_control) || text.ends_with(' ') || text.ends_with('.')
+                if text.chars().any(|c| c.is_control() || bidi_control(c))
+                    || text.ends_with(' ')
+                    || text.ends_with('.')
                 {
                     return Err(error("PATH_REJECTED", "That path is not allowed."));
                 }
@@ -107,6 +265,12 @@ pub fn relative_path(value: &str) -> WorkspaceResult<PathBuf> {
         }
     }
     Ok(clean)
+}
+
+/// Bidirectional formatting characters, which can make a path in an approval
+/// read differently from the file it names (review F-06).
+fn bidi_control(c: char) -> bool {
+    matches!(c, '\u{061C}' | '\u{200E}' | '\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}')
 }
 
 /// Refuses a path if it, or any folder on the way to it, is a link.
@@ -373,7 +537,7 @@ pub fn preview_write(
     if protected(&relative) {
         return Err(error(
             "PROTECTED_PATH",
-            "Agents cannot change version-control, editor, or CI configuration, which other programs run outside the sandbox.",
+            "Agents cannot change version-control, editor, CI, shell start-up, SSH, autostart, or service files, which other programs run outside the sandbox.",
         ));
     }
     if content.len() > MAX_WRITE_BYTES {
@@ -624,5 +788,116 @@ mod tests {
         let leftovers = std::fs::read_dir(path.join("out")).unwrap().count();
         assert_eq!(leftovers, 1, "no staging file remains");
         std::fs::remove_dir_all(path).ok();
+    }
+
+    /// Review F-03: shell start-up files, SSH material, login autostart,
+    /// git hooks and service units are refused outright.
+    #[test]
+    fn shell_ssh_autostart_hook_and_service_files_cannot_be_written() {
+        let (path, dir) = root();
+        for target in [
+            ".bashrc",
+            ".profile",
+            ".zshrc",
+            ".bash_profile",
+            ".zshenv",
+            ".ssh/authorized_keys",
+            ".ssh/config",
+            "home/.SSH/id_ed25519",
+            ".gnupg/gpg.conf",
+            ".config/autostart/juniper.desktop",
+            ".config/systemd/user/x.service",
+            ".git/hooks/pre-commit",
+            "deploy/juniper.service",
+            "deploy/backup.timer",
+        ] {
+            assert_eq!(
+                preview_write(&dir, target, "x", ABSENT).unwrap_err().0,
+                "PROTECTED_PATH",
+                "{target}"
+            );
+            assert!(commit_write(&dir, target, "x", ABSENT).is_err(), "{target}");
+            assert!(!path.join(target).exists(), "{target}");
+        }
+        std::fs::remove_dir_all(path).ok();
+    }
+
+    /// Build manifests and other dot-files may be written, but only through
+    /// a per-call approval with a diff (the runner ignores the preset and
+    /// standing grants for them).
+    #[test]
+    fn build_manifests_and_dot_files_need_an_approval_every_time() {
+        for target in [
+            "Makefile",
+            "sub/GNUmakefile",
+            "rules.mk",
+            "package.json",
+            "web/package.json",
+            "pyproject.toml",
+            "setup.py",
+            "Cargo.toml",
+            "src-tauri/build.rs",
+            "CMakeLists.txt",
+            "share/app.desktop",
+            ".npmrc",
+            "notes/.hidden/plan.md",
+        ] {
+            assert!(write_needs_approval(target), "{target}");
+        }
+        for target in [
+            "docs/notes.md",
+            "out/summary.md",
+            "src/main.rs",
+            "package.json.md",
+        ] {
+            assert!(!write_needs_approval(target), "{target}");
+        }
+        let (path, dir) = root();
+        assert!(preview_write(&dir, "package.json", "{}", ABSENT).is_ok());
+        std::fs::remove_dir_all(path).ok();
+    }
+
+    #[test]
+    fn dangerous_folders_are_refused_as_project_roots() {
+        let home = Path::new("/home/someone");
+        let data = Path::new("/home/someone/.local/share/com.cinqic.juniper");
+        let system: Vec<PathBuf> = ["/etc", "/usr"].iter().map(PathBuf::from).collect();
+        let refused = |path: &str| refused_root(Path::new(path), Some(home), data, &system);
+        assert!(refused("/").is_some());
+        assert!(refused("/home").is_some(), "contains the home folder");
+        assert!(refused("/home/someone").is_some());
+        assert!(
+            refused("/home/someone/.local").is_some(),
+            "contains Juniper's data"
+        );
+        assert!(refused("/home/someone/.local/share/com.cinqic.juniper").is_some());
+        assert!(refused("/home/someone/.local/share/com.cinqic.juniper/models").is_some());
+        assert!(refused("/etc").is_some());
+        assert!(refused("/usr/local/share").is_some());
+        assert!(refused("/home/someone/projects/site").is_none());
+        assert!(refused("/media/someone/disk/work").is_none());
+        assert!(refused("/home/someone/.local/share/other-app").is_none());
+        // The platform list exists and names real system folders here.
+        #[cfg(target_os = "linux")]
+        assert!(system_folders().contains(&PathBuf::from("/etc")));
+    }
+
+    /// Review F-06: bidirectional controls in a path are refused, so an
+    /// approval cannot show a name that reads differently from the file.
+    #[test]
+    fn bidirectional_control_characters_are_refused_in_paths() {
+        for value in [
+            "docs/\u{202e}x",
+            "a\u{2066}b.md",
+            "\u{200f}notes.md",
+            "x\u{061c}y",
+        ] {
+            assert_eq!(
+                relative_path(value).unwrap_err().0,
+                "PATH_REJECTED",
+                "{value:?}"
+            );
+        }
+        assert!(relative_path("docs/naïve-日本.md").is_ok());
     }
 }

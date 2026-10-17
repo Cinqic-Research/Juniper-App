@@ -937,6 +937,29 @@ pub async fn project_add_root<R: Runtime>(
         }
         let canonical =
             std::fs::canonicalize(&path).map_err(|_| "That folder is not available.".to_owned())?;
+        // Review F-03: a grant of the home folder, the filesystem root, a
+        // system folder, or Juniper's own data folder would put shell
+        // start-up files, keys, or the app's database within an agent's reach.
+        {
+            use tauri::Manager;
+            let resolve = |path: std::path::PathBuf| std::fs::canonicalize(&path).unwrap_or(path);
+            let home = app.path().home_dir().ok().map(resolve);
+            let app_data = resolve(
+                app.path()
+                    .app_data_dir()
+                    .map_err(|_| "Juniper's data folder could not be found.".to_owned())?,
+            );
+            if let Some(reason) = super::workspace::refused_root(
+                &canonical,
+                home.as_deref(),
+                &app_data,
+                &super::workspace::system_folders(),
+            ) {
+                return Err(format!(
+                    "ROOT_REFUSED: Juniper does not grant {reason} to a project. Choose a specific project folder."
+                ));
+            }
+        }
         let label = canonical
             .file_name()
             .map(|name| name.to_string_lossy().into_owned())

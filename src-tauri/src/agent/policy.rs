@@ -502,7 +502,7 @@ pub fn decide(risk: Risk, capability: &str, context: &DecisionContext<'_>) -> De
 pub fn preset_description(preset: &str) -> &'static str {
     match preset {
         "project" => {
-            "Reads and changes files in the task’s granted read-write project folders without asking. Project writes are recorded in task activity; Juniper shows a diff when it asks for approval. Asks before a web request, code run, or plugin call unless a matching standing permission exists; schedule changes and memory changes always ask."
+            "Reads and changes files in the task’s granted read-write project folders without asking, except build files (such as Makefile or package.json) and dot-files, which always ask with a diff. Project writes are recorded in task activity; Juniper shows a diff when it asks for approval. Asks before a web request, code run, or plugin call unless a matching standing permission exists; schedule changes and memory changes always ask."
         }
         "custom" => {
             "Uses only the standing permissions you granted. Asks before anything else that writes, runs code, uses the network, or uses a plugin. Schedule changes and memory changes always ask."

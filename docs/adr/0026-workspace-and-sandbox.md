@@ -12,7 +12,27 @@ shell access.
 
 - **Granting a folder.** A folder is granted to a project only through the
   native folder picker, read-only or read-write. The renderer never supplies a
-  path.
+  path. The host refuses (`ROOT_REFUSED`) the filesystem root, the home folder
+  itself or any folder containing it, Juniper's own data folder or anything
+  containing or inside it, and system folders (`/etc`, `/usr`, `/boot`,
+  `/var/lib` and similar; on Windows the system, program and program-data
+  folders), comparing canonical paths (`workspace::refused_root`).
+- **Protected paths.** Agents never write version-control, editor, CI and
+  environment-loader configuration, shell start-up files (`.bashrc`,
+  `.profile`, `.zshrc` and their relatives), `.ssh/` and `.gnupg/`,
+  `.config/autostart/` and `.config/systemd/`, or `*.service`, `*.timer` and
+  `*.socket` units (`PROTECTED_PATH`). Build manifests and scripts that run
+  when the user builds or installs (`Makefile`, `*.mk`, `package.json`,
+  `pyproject.toml`, `setup.py`, `Cargo.toml`, `build.rs`, `CMakeLists.txt`
+  and similar), `*.desktop` entries, and every other dot-file or dot-folder at
+  any depth can be written only through a per-call approval showing the diff:
+  neither the "Within projects" preset nor a standing permission covers them,
+  and no standing grant is offered. Residual risk: a project folder can still
+  hold files that other programs run when the user opens them (for example a
+  script the user later executes by hand); those writes are recorded in task
+  activity and shown as a diff when an approval is asked, but the "Within
+  projects" preset does not ask. Grants made before this check existed are not
+  re-checked; remove and re-add them.
 - **File access** goes through a `cap-std` directory handle on the granted
   folder, so a path cannot resolve outside it.
   - Every path component is also checked, and symbolic links and reparse

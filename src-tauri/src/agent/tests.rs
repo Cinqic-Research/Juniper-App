@@ -965,6 +965,97 @@ fn an_answer_claiming_an_unperformed_save_needs_review_instead_of_completing() {
     assert_eq!(task.result.unwrap().outcome, "answer");
 }
 
+/// F-03 (review of 406a0be): under "Within projects", an ordinary project
+/// file is written without a prompt, but a build manifest asks with its diff
+/// every time (no standing grant offered or honoured), and a shell start-up
+/// file is refused.
+#[test]
+fn the_project_preset_never_writes_build_manifests_or_shell_files_without_approval() {
+    let with_project_preset = |script: Vec<String>| {
+        let fixture = new_fixture(script);
+        let mut profile = AgentProfile::default_for("agent-1");
+        profile.autonomy = "project".into();
+        store::save_agent_profile(&fixture.connection(), &profile, 0).unwrap();
+        // Even a standing write permission for this project does not cover
+        // the ask-every-time class.
+        store::insert_grant(
+            &fixture.connection(),
+            &Grant {
+                id: "grant-write".into(),
+                assistant_id: "agent-1".into(),
+                project_id: Some("project-1".into()),
+                capability: "workspace.write".into(),
+                scope: json!({ "projectId": "project-1" }),
+                created_at: store::now(),
+                expires_at: None,
+                revoked_at: None,
+            },
+        )
+        .unwrap();
+        fixture
+    };
+    let write = |path: &str| {
+        sse_tool_calls(&[(
+            "w1",
+            "workspace.write",
+            json!({ "rootId": "root-1", "path": path, "content": "x\n", "expectedVersion": "absent" }),
+        )])
+    };
+
+    let fixture = with_project_preset(vec![
+        write("out/notes.md"),
+        sse_answer("Wrote out/notes.md."),
+    ]);
+    let task = fixture.run(&fixture.start("Write notes.", true));
+    assert_eq!(
+        task.status,
+        TaskStatus::Completed,
+        "{:?}",
+        task.status_reason
+    );
+    assert!(fixture.folder.join("out/notes.md").exists());
+
+    let fixture = with_project_preset(vec![write("package.json")]);
+    let task = fixture.run(&fixture.start("Add a build script.", true));
+    assert_eq!(
+        task.status,
+        TaskStatus::WaitingApproval,
+        "{:?}",
+        task.status_reason
+    );
+    let approval = store::approvals_for_task(&fixture.connection(), &task.id)
+        .unwrap()
+        .into_iter()
+        .find(|approval| approval.status == "pending")
+        .unwrap();
+    assert!(
+        !approval.standing_allowed,
+        "no standing grant for manifests"
+    );
+    assert!(
+        approval.preview.contains("+x"),
+        "the approval shows the diff"
+    );
+    assert!(!fixture.folder.join("package.json").exists());
+
+    let fixture = with_project_preset(vec![
+        write(".bashrc"),
+        sse_answer("I could not change .bashrc."),
+    ]);
+    let task = fixture.run(&fixture.start("Add an alias.", true));
+    assert!(!fixture.folder.join(".bashrc").exists());
+    let actions = store::actions(&fixture.connection(), &task.id).unwrap();
+    assert_ne!(actions[0].status, "succeeded");
+    assert!(
+        actions[0]
+            .result
+            .as_ref()
+            .is_some_and(|result| result.to_string().contains("PROTECTED_PATH")),
+        "{:?}",
+        actions[0].result
+    );
+}
+
 fn fixture_with_budget(script: Vec<String>, steps: u32) -> Fixture {
     let fixture = new_fixture(script);
     let mut profile = AgentProfile::default_for("agent-1");
