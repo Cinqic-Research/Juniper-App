@@ -206,13 +206,6 @@ fn named_files(sentence: &str) -> (Vec<String>, bool) {
                 && extension.starts_with(|c: char| c.is_ascii_alphabetic())
                 && extension.chars().all(|c| c.is_ascii_alphanumeric())
         });
-        // "Something.js" with a capital is a product, not a file name.
-        if extension.is_some_and(|(_, extension)| extension == "js")
-            && raw.starts_with(|c: char| c.is_ascii_uppercase())
-            && !raw.contains('/')
-        {
-            continue;
-        }
         // A path needs a file name with an extension, a trailing folder
         // slash, or a leading ./ ../ ~/ / followed by a letter: "I/O",
         // "24/7" and "10/17" are not paths.
@@ -386,7 +379,10 @@ fn claims_in(content: &str) -> Vec<(Claim, Vec<String>)> {
         // A verb-initial participle describing something else ("Published in
         // 2019, the study …", "Downloaded 2 million times", "Posted prices
         // are …") is not the answer reporting its own work (F-18).
+        // A sentence that names the user's things (your, a place, a path) is
+        // never a participle describing something else (review F-21).
         let participial = first_verb == 0
+            && !addressed
             && (words.get(1).is_some_and(|word| {
                 matches!(
                     *word,
@@ -2251,6 +2247,24 @@ mod persistence_recovery_tests {
             ("I updated the summary.", Claim::Document),
             ("I edited the notes.", Claim::Document),
             ("Saved the file to out/notes.md [S1].", Claim::FileWrite),
+            // PR #51 review F-21 and F-22: verb-initial claims that name a
+            // location, and a capitalised file name.
+            ("Saved at out/summary.md.", Claim::FileWrite),
+            (
+                "Saved in your project folder as summary.md.",
+                Claim::FileWrite,
+            ),
+            ("Saved on disk as notes.md.", Claim::FileWrite),
+            ("Saved in out/.", Claim::FileWrite),
+            (
+                "Updated: the file is in your project folder.",
+                Claim::FileWrite,
+            ),
+            (
+                "Saved — your summary is in the project folder.",
+                Claim::FileWrite,
+            ),
+            ("I updated App.js.", Claim::FileWrite),
         ] {
             assert_eq!(claims(text), vec![expected], "{text}");
         }
