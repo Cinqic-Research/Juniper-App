@@ -1,12 +1,13 @@
 # Juniper interface guide
 
-This describes the interface as of `0.3.0-rc.33`. The design decision is
+This describes the interface as of `0.4.0-alpha.1` (display name "Juniper
+0.4.0-Alpha", not yet published). The design decision is
 [ADR 0021](../adr/0021-chat-first-interface-and-appearance-tokens.md).
 
 ## Navigation
 
-Source after "Fixing Up A Little" (draft PR #49) has four primary destinations;
-`0.3.0-rc.33` had Chats, Models, and Settings.
+`0.4.0-alpha.1` (source after "Fixing Up A Little", PR #49) has four primary
+destinations; the published `0.3.0-rc.33` had Chats, Models, and Settings.
 
 | Destination      | Desktop                                       | Phone                                   |
 | ---------------- | --------------------------------------------- | --------------------------------------- |

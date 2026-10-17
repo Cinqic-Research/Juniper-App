@@ -414,7 +414,7 @@ export async function deleteProviderCredential(reference: string): Promise<void>
 export async function getDiagnostics(): Promise<Record<string, string>> {
   if (runningInTauri) return invoke<Record<string, string>>('system_info')
   return {
-    application: 'Juniper 0.3.0-rc.33',
+    application: 'Juniper 0.4.0-alpha.1',
     runtime: browserPreviewEnabled
       ? 'Browser preview (development only)'
       : 'Native runtime unavailable',

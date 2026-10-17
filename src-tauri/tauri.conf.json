@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Juniper",
-  "version": "0.3.0-rc.33",
+  "version": "0.4.0-alpha.1",
   "identifier": "com.cinqic.juniper",
   "build": {
     "beforeDevCommand": "pnpm dev",
@@ -41,11 +41,11 @@
     "icon": ["icons/icon.png", "icons/icon.ico", "icons/icon.icns"],
     "android": {
       "minSdkVersion": 24,
-      "versionCode": 3033
+      "versionCode": 4001
     },
     "windows": {
       "wix": {
-        "version": "0.3.0.33",
+        "version": "0.4.0.1",
         "upgradeCode": "c76ebe12-b9ae-59ab-b99e-c4b6dcd55238"
       }
     }

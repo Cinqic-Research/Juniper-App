@@ -1,12 +1,17 @@
 format: juniper-release-contract-v2
-version: 0.3.0-rc.33
-status: release-candidate
+version: 0.4.0-alpha.1
+display_name: Juniper 0.4.0-Alpha
+status: alpha
 release:
-  tag: v0.3.0-rc.33
+  tag: v0.4.0-alpha.1
   commit: resolved-from-tag
   url: derived-at-release
   prerelease: true
   overwrite_existing_release: forbidden
+publication:
+  state: not-yet-published
+  published_artifacts: not-yet-published
+  plan: docs/release/juniper-0.4.0-alpha-release-plan.md
 canonical_repository: https://github.com/Cinqic-Research/Juniper-App
 canonical_branch: main
 project_license: Apache-2.0
@@ -28,8 +33,13 @@ runtime_registry:
   optional_backends: upstream-metadata-only-no-Juniper-adapters-or-artifacts
 model_catalog:
   source: config/models/catalog.json
-  entries: 4
-  maximum_parameter_count: 600000000
+  entries: 28
+  artifacts: 33
+  downloadable_entries: 27
+  import_only_entries: 1
+  maximum_parameter_count: 20914757184
+  maximum_downloadable_parameter_count: 14768307200
+  license_acceptance: enforced-by-native-host
   integrity: sha256-pinned-https-only
 standalone_runtime:
   engine: llama.cpp llama-server
@@ -50,11 +60,11 @@ device_link:
     - resolved-address-private-network-enforcement
     - native-authorization-and-end-to-end-transport-tests
 expected_published_artifacts:
-  - Juniper-0.3.0-rc.33-linux-x86_64.deb
-  - Juniper-0.3.0-rc.33-linux-x86_64.AppImage
-  - Juniper-0.3.0-rc.33-windows-x86_64.msi
-  - Juniper-0.3.0-rc.33-android-universal.apk
-  - Juniper-0.3.0-rc.33-android-native-symbols.zip
+  - Juniper-0.4.0-alpha.1-linux-x86_64.deb
+  - Juniper-0.4.0-alpha.1-linux-x86_64.AppImage
+  - Juniper-0.4.0-alpha.1-windows-x86_64.msi
+  - Juniper-0.4.0-alpha.1-android-universal.apk
+  - Juniper-0.4.0-alpha.1-android-native-symbols.zip
   - SHA256SUMS.txt
   - SIGNING-android.txt
   - SIGNING-windows.txt
@@ -78,7 +88,12 @@ accepted_limitations:
   - optional-runtime-adapters-and-artifacts-are-not-bundled
   - Windows-MSI-may-be-unsigned-and-signing-evidence-is-published
   - no-ios-or-macos-build
-  - no-MCP-client
+  - MCP-client-is-Beta-tools-only-no-resources-prompts-sampling-elicitation-roots-or-OAuth
+  - local-MCP-servers-are-not-sandboxed
+  - Agent-is-Beta-code-sandbox-is-Linux-only-and-there-is-no-background-service
+  - Agent-execution-on-Windows-is-not-verified
+  - gpt-oss-20b-is-import-only
+  - Juniper-1-local-import-is-a-research-experiment-not-a-qualified-or-production-model
   - Device-Link-and-Juniper-Network-transport-are-disabled
   - Linux-launch-is-verified-on-X11-only-native-Wayland-is-not-verified
 release_gates:

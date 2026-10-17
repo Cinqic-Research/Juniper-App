@@ -2,11 +2,11 @@
 
 Juniper is a local-first AI desktop and Android app for people who want a thoughtful assistant, visible model controls, and a clear boundary around private data. It works with compatible text-generation models through supported runtimes; no model family is required and no model is bundled.
 
-**Version `0.3.0-rc.33` — release candidate.** The guarded release workflow builds and packages the Juniper-owned local runtime for desktop targets only after the validation and immutable-tag gates pass. See [Download](#download).
+**Source version `0.4.0-alpha.1` ("Juniper 0.4.0-Alpha") — alpha, not yet published.** The latest published prerelease is `0.3.0-rc.33`. The guarded release workflow builds and packages the Juniper-owned local runtime for desktop targets only after the validation and immutable-tag gates pass. See [Download](#download).
 
 ## Download
 
-The current prerelease is [Juniper 0.3.0-rc.33](https://github.com/Cinqic-Research/Juniper-App/releases/tag/v0.3.0-rc.33). Installers are published on the [GitHub releases page](https://github.com/Cinqic-Research/Juniper-App/releases) only after an authorized release workflow completes. You do not need Git, a build toolchain, or a GitHub account to use a published desktop artifact.
+The current published prerelease is [Juniper 0.3.0-rc.33](https://github.com/Cinqic-Research/Juniper-App/releases/tag/v0.3.0-rc.33); the files below are its files. Juniper 0.4.0-Alpha (`v0.4.0-alpha.1`) is not yet published; its planned files and checks are in [docs/release/juniper-0.4.0-alpha-release-plan.md](docs/release/juniper-0.4.0-alpha-release-plan.md). Installers are published on the [GitHub releases page](https://github.com/Cinqic-Research/Juniper-App/releases) only after an authorized release workflow completes. You do not need Git, a build toolchain, or a GitHub account to use a published desktop artifact.
 
 | Platform          | File                                        | Notes                                                 |
 | ----------------- | ------------------------------------------- | ----------------------------------------------------- |
@@ -27,7 +27,7 @@ Juniper’s desktop bundle owns its loopback `llama-server` process, so ordinary
 
 ## What Juniper does
 
-Features marked **(source)** are in this source tree but not in the published `0.3.0-rc.33` installers.
+Features marked **(source)** are in this source tree (`0.4.0-alpha.1`, not yet published) but not in the published `0.3.0-rc.33` installers.
 
 - **Agent (Beta) (source).** A personal agent beside Chat. Give it a goal and it works through it with the tools and folders you allow: project folders (read, search, diff-previewed writes), web search and page reading with source-linked citations, documents it saves, skills, optional MCP plugins, sandboxed Python on Linux, bounded helper subtasks, and schedules that run while Juniper is open. It asks before changing anything, shows a plan and every action, and can be paused, steered, cancelled, or stopped entirely. See [docs/architecture/agent-runtime.md](docs/architecture/agent-runtime.md).
 - A chat-first interface: Chat, Agent (Beta), Models, and Settings are the primary destinations (rc.33: Chats, Models, Settings). Conversation actions live in an overflow menu, the model is a compact picker that shows where each model runs, and reasoning, tool activity, and usage are one tap away instead of always on screen. See [docs/product/interface.md](docs/product/interface.md).
