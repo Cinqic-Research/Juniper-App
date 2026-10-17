@@ -1,6 +1,7 @@
-//! `juniper-chat-v1`, ported from the reference `j1data.protocol`
-//! (Juniper-1-Data `src/j1data/protocol.py`). Golden fixtures produced by the
-//! reference pin this port (`tests/juniper1/`).
+//! `juniper-chat-v1`, ported from the reference `j1data.protocol` in the
+//! Juniper 1 data tooling (not public; the public research release is
+//! <https://github.com/Cinqic-Research/Juniper-1-Base>). Golden fixtures
+//! produced by the reference pin this port (`tests/juniper1/`).
 //!
 //! ```text
 //! message := <|system|> TEXT <|end|> | <|developer|> TEXT <|end|> | <|user|> TEXT <|end|>
