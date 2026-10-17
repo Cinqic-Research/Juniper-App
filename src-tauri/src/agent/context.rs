@@ -109,6 +109,17 @@ fn route_ip_location(address: IpAddr) -> &'static str {
 const ROUTE_CHANGE_REASON: &str = "The model or provider route changed. Review the task content and destination model before resuming.";
 const PROFILE_CHANGE_REASON: &str = "The agent profile changed. Review its permissions, model destination, and task content before resuming.";
 
+/// Whether a paused task is waiting for the user to review a changed model
+/// route or agent profile. Only an explicit resume releases it; a follow-up
+/// message does not (review F-07).
+pub(crate) fn paused_for_review(task: &Task) -> bool {
+    task.status == TaskStatus::Paused
+        && matches!(
+            task.status_reason.as_deref(),
+            Some(ROUTE_CHANGE_REASON | PROFILE_CHANGE_REASON)
+        )
+}
+
 /// Pauses every nonterminal task whose persisted context could be sent to a
 /// changed route, including tasks waiting for approval or input. The caller
 /// holds the route-configuration gate while this runs and while it saves the

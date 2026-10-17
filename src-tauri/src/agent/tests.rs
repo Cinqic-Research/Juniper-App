@@ -213,6 +213,57 @@ fn changing_a_provider_route_pauses_an_active_task_using_its_saved_run_context()
     assert_eq!(agent.intent(&id), Some(super::Intent::PauseForRouteChange));
 }
 
+/// F-07 (review of 406a0be): a follow-up does not release a task paused
+/// for a changed route; only the explicit resume does.
+#[test]
+fn a_follow_up_does_not_resume_a_task_paused_for_a_route_change() {
+    let fixture = new_fixture(vec![]);
+    let id = fixture.start("Describe the route.", false);
+    let connection = fixture.connection();
+    let old_snapshot = store::app_snapshot(&connection).unwrap();
+    let mut new_snapshot = old_snapshot.clone();
+    new_snapshot["providers"][0]["baseUrl"] = json!("https://example.com/v1");
+    let agent = &fixture.app.state::<AppState>().agent;
+    super::context::pause_tasks_with_route_changes(
+        agent,
+        &connection,
+        Some(&old_snapshot),
+        &new_snapshot,
+    )
+    .unwrap();
+    let paused = store::load_task(&connection, &id).unwrap();
+    assert_eq!(paused.status, TaskStatus::Paused);
+    let refused = super::commands::task_steer(
+        fixture.app.handle().clone(),
+        fixture.app.state::<AppState>(),
+        id.clone(),
+        "Also add a title.".into(),
+    )
+    .unwrap_err();
+    assert!(refused.starts_with("TASK_NEEDS_RESUME"), "{refused}");
+    let still = store::load_task(&connection, &id).unwrap();
+    assert_eq!(still.status, TaskStatus::Paused);
+    assert_eq!(still.transcript.len(), paused.transcript.len());
+
+    super::commands::task_resume(
+        fixture.app.handle().clone(),
+        fixture.app.state::<AppState>(),
+        id.clone(),
+    )
+    .unwrap();
+    super::commands::task_steer(
+        fixture.app.handle().clone(),
+        fixture.app.state::<AppState>(),
+        id.clone(),
+        "Also add a title.".into(),
+    )
+    .unwrap();
+    assert_eq!(
+        store::load_task(&connection, &id).unwrap().status,
+        TaskStatus::Queued
+    );
+}
+
 #[test]
 fn route_change_pauses_a_waiting_approval_with_private_project_context_until_resume() {
     let fixture = new_fixture(vec![

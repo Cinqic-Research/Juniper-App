@@ -618,6 +618,9 @@ pub fn task_steer<R: Runtime>(
         if task.pending.is_some() {
             return Err("TASK_WAITING: Answer or decide the open request first.".into());
         }
+        if super::context::paused_for_review(task) {
+            return Err("TASK_NEEDS_RESUME: The model route or agent profile changed. Review the task and resume it before adding a follow-up.".into());
+        }
         task.transcript.push(TranscriptMessage {
             role: "user".into(),
             content: format!("Follow-up from the user (the earlier goal still applies unless this changes it): {text}"),
