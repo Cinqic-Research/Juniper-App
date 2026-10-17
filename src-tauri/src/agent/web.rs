@@ -272,7 +272,9 @@ pub fn checked_url(value: &str) -> Result<Url, ToolError> {
     let host = url
         .host_str()
         .ok_or_else(|| fail("INVALID_URL", "That address has no host."))?;
-    let lower = host.to_ascii_lowercase();
+    // A fully qualified name's trailing dot ("localhost.") names the same
+    // host; compare without it (review F-06).
+    let lower = host.trim_end_matches('.').to_ascii_lowercase();
     if lower == "localhost"
         || lower.ends_with(".localhost")
         || lower.ends_with(".local")
@@ -1026,6 +1028,13 @@ mod tests {
             "http://intranet/",
             "http://0x7f000001/",
             "http://2130706433/",
+            // Trailing dots name the same hosts (review F-06).
+            "http://localhost./",
+            "http://LocalHost./x",
+            "http://app.localhost./",
+            "http://printer.local./",
+            "http://metadata.google.internal./",
+            "http://intranet./",
         ] {
             assert!(checked_url(url).is_err(), "{url} must be refused");
         }
@@ -1034,7 +1043,8 @@ mod tests {
 
     #[tokio::test]
     async fn a_name_resolving_to_loopback_is_refused_before_connecting() {
-        // `localhost.` style names are caught by name; this one only by resolution.
+        // `localhost.` style names are caught by name (trailing dot trimmed);
+        // this one only by resolution.
         let url = Url::parse("http://127.0.0.1.nip.io/").unwrap();
         // Resolution may be unavailable offline; either way nothing private is reached.
         match vetted_address(&url).await {
