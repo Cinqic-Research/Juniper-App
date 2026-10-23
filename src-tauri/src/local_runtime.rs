@@ -707,7 +707,7 @@ fn spawn(
             Ok(())
         });
     }
-    let mut child = command
+    let mut child = crate::child::without_console(&mut command)
         .args(args)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -717,6 +717,7 @@ fn spawn(
         .map_err(|_| {
             "LOCAL_RUNTIME_UNAVAILABLE: Juniper's local runtime could not be started.".to_owned()
         })?;
+    crate::child::end_with_parent(&child);
     let diagnostics = capture_stderr(&mut child);
     let pid = child.id();
     *starting.lock().map_err(|_| state_error())? = Some(child);
@@ -1028,9 +1029,10 @@ fn build_matches(build: &str, commit: &str) -> bool {
 /// `b<build>-<commit>` from `llama-server --version`, which prints
 /// `version: 0.5.0-dev (build 11270, commit 748d4225b)`.
 async fn runtime_build(executable: &Path) -> Option<String> {
+    let mut command = tokio::process::Command::new(executable);
     let output = timeout(
         PROBE_TIMEOUT,
-        tokio::process::Command::new(executable)
+        crate::child::without_console(&mut command)
             .arg("--version")
             .stdin(Stdio::null())
             .kill_on_drop(true)
@@ -1048,9 +1050,10 @@ async fn runtime_build(executable: &Path) -> Option<String> {
 }
 
 async fn runtime_has_cuda_device(executable: &Path) -> bool {
+    let mut command = tokio::process::Command::new(executable);
     let Ok(output) = timeout(
         PROBE_TIMEOUT,
-        tokio::process::Command::new(executable)
+        crate::child::without_console(&mut command)
             .arg("--list-devices")
             .stdin(Stdio::null())
             .kill_on_drop(true)

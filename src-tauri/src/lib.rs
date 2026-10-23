@@ -4,6 +4,7 @@ mod android_runtime;
 mod backend;
 mod behavior;
 mod catalog;
+mod child;
 mod commands;
 mod device;
 pub mod device_link;

@@ -897,7 +897,8 @@ pub async fn import_gguf(
         let modelfile_text = modelfile
             .to_str()
             .ok_or_else(|| "The temporary Modelfile path is invalid.".to_owned())?;
-        let mut child = tokio::process::Command::new("ollama")
+        let mut command = tokio::process::Command::new("ollama");
+        let mut child = crate::child::without_console(&mut command)
             .args(["create", model_name, "-f", modelfile_text])
             .stdin(Stdio::null())
             .stdout(Stdio::null())

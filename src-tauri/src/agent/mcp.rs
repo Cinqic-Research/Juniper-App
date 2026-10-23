@@ -805,9 +805,10 @@ async fn spawn_stdio(
             .map_err(|message| fail("PLUGIN_SECRET_UNAVAILABLE", message))?;
         process.env(&variable.name, secret);
     }
-    let mut child = process
+    let mut child = crate::child::without_console(&mut process)
         .spawn()
         .map_err(|_| fail("PLUGIN_START_FAILED", "The server program could not start."))?;
+    crate::child::end_with_parent(&child);
     let stdin = child
         .stdin
         .take()
