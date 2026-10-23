@@ -78,8 +78,15 @@ fn write(directory: &Path, records: &BTreeMap<String, Acceptance>) -> Result<(),
     let bytes = serde_json::to_vec_pretty(records)
         .map_err(|error| format!("MODEL_LICENSE_STORE_ERROR: {error}"))?;
     let staging = directory.join(format!("{FILE_NAME}.{}.tmp", uuid::Uuid::new_v4().simple()));
-    fs::write(&staging, bytes)
-        .and_then(|_| fs::File::open(&staging)?.sync_all())
+    // The staging file is flushed through the handle that wrote it: on Windows
+    // a flush through a read-only handle is refused ("Access is denied"), which
+    // made every license acceptance fail there.
+    fs::File::create(&staging)
+        .and_then(|mut file| {
+            use std::io::Write;
+            file.write_all(&bytes)?;
+            file.sync_all()
+        })
         .and_then(|_| fs::rename(&staging, directory.join(FILE_NAME)))
         .map_err(|error| {
             let _ = fs::remove_file(&staging);
