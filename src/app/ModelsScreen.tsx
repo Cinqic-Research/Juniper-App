@@ -40,6 +40,7 @@ import {
   type ModelCatalog,
   type ModelRecommendation,
 } from '../lib/model-catalog'
+import { errorText } from '../lib/agent'
 import { isExternalModel, useExternalModels } from './external-models'
 import { Icon } from './icons'
 import {
@@ -54,6 +55,16 @@ import { EmptyState, LocationBadge, PageHeader, Segmented } from './ui'
 
 type Update = (change: (current: AppData) => AppData) => void
 type View = 'recommended' | 'popular' | 'all' | 'installed'
+
+/**
+ * The sentence shown for a failed native call. Tauri delivers a command's
+ * `Err(String)` as a plain string, not an `Error`, so the host's reason
+ * (`MODEL_STORAGE_FULL: ...`) was previously replaced by the fallback.
+ */
+function failureText(error: unknown, fallback: string): string {
+  const text = typeof error === 'string' ? error : error instanceof Error ? error.message : ''
+  return text ? errorText(text) : fallback
+}
 
 interface TransferProgress {
   completed: number
@@ -79,7 +90,7 @@ function memoryLabel(device: DeviceCapabilities | null): string {
 }
 
 export function nativeRuntimeLabel(device: DeviceCapabilities | null): string {
-  if (!device) return 'Checking…'
+  if (!device) return 'Checkingâ€¦'
   if (device.nativeRuntimeAvailable === false) return 'Unavailable for this ABI'
   if (device.nativeLowMemory) return 'Waiting for more memory'
   switch (device.nativeRuntimeState) {
@@ -170,13 +181,19 @@ export function ModelsScreen({
       setNativeModels(nextNative)
       if (!runningOnAndroid) setRuntimeStatus(await getLocalRuntimeStatus())
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Could not inspect this device.')
+      setMessage(failureText(error, 'Could not inspect this device.'))
     }
   }, [])
 
   useEffect(() => {
     void refresh()
   }, [refresh])
+
+  /** Files were added or removed, so the free-storage figure is stale. */
+  const refreshDevice = () =>
+    void getDeviceCapabilities()
+      .then(setDevice)
+      .catch(() => undefined)
 
   const recommendations = useMemo(
     () => (device ? recommendModels(catalog, device) : []),
@@ -322,7 +339,7 @@ export function ModelsScreen({
     })
     setMessage(
       makeDefault
-        ? `${entry.displayName} is now ${defaultAssistant.name}’s default model.`
+        ? `${entry.displayName} is now ${defaultAssistant.name}â€™s default model.`
         : `${entry.displayName} (${artifact.quantization ?? artifact.id}) is ${isImportOnly(artifact) ? 'imported' : 'downloaded'} and verified. The local engine loads it on first use.`,
     )
   }
@@ -350,7 +367,7 @@ export function ModelsScreen({
     try {
       if (await modelLicenseAccepted(entry.id)) return true
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Could not read the license record.')
+      setMessage(failureText(error, 'Could not read the license record.'))
       return false
     }
     const termsFingerprint = entry.licenseTermsRevision?.includes('-sha256-')
@@ -360,8 +377,8 @@ export function ModelsScreen({
         <>
           <p>
             {entry.displayName} is distributed under the {entry.license}. Review the terms before{' '}
-            {action === 'download' ? 'downloading' : 'importing'}. Juniper’s own Apache-2.0 license
-            does not apply to the model.
+            {action === 'download' ? 'downloading' : 'importing'}. Juniperâ€™s own Apache-2.0
+            license does not apply to the model.
           </p>
           <p>
             <a href={entry.licenseUrl} target="_blank" rel="noreferrer">
@@ -387,7 +404,7 @@ export function ModelsScreen({
       await acceptModelLicense(entry.id)
       return true
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Could not record the license choice.')
+      setMessage(failureText(error, 'Could not record the license choice.'))
       return false
     }
   }
@@ -412,9 +429,7 @@ export function ModelsScreen({
       setMessage(
         next.signal.aborted
           ? 'Download paused. It resumes from where it stopped.'
-          : error instanceof Error
-            ? error.message
-            : 'Download failed.',
+          : failureText(error, 'Download failed.'),
       )
     } finally {
       if (controller.current === next) controller.current = null
@@ -422,6 +437,7 @@ export function ModelsScreen({
       setProgress(null)
       // A paused or failed transfer leaves a resumable partial file.
       setInstalled(await getManagedModels().catch(() => installed))
+      refreshDevice()
     }
   }
 
@@ -436,7 +452,7 @@ export function ModelsScreen({
     try {
       selection = await pickGguf()
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Could not open the file picker.')
+      setMessage(failureText(error, 'Could not open the file picker.'))
       return
     }
     if (!selection) return
@@ -449,15 +465,10 @@ export function ModelsScreen({
     try {
       await importManagedModel(selection.id, entry.id, artifact.id, onProgress, next.signal)
       setInstalled(await getManagedModels())
+      refreshDevice()
       registerManagedModel(entry, artifact, false)
     } catch (error) {
-      setMessage(
-        next.signal.aborted
-          ? 'Import cancelled.'
-          : error instanceof Error
-            ? error.message
-            : 'Import failed.',
-      )
+      setMessage(next.signal.aborted ? 'Import cancelled.' : failureText(error, 'Import failed.'))
     } finally {
       if (controller.current === next) controller.current = null
       setActiveDownload(null)
@@ -470,7 +481,7 @@ export function ModelsScreen({
       await unloadLocalRuntime()
       setRuntimeStatus(await getLocalRuntimeStatus())
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Could not unload the model.')
+      setMessage(failureText(error, 'Could not unload the model.'))
     }
   }
 
@@ -533,9 +544,7 @@ export function ModelsScreen({
       setMessage(
         next.signal.aborted
           ? 'Import cancelled.'
-          : error instanceof Error
-            ? error.message
-            : 'Local research import failed.',
+          : failureText(error, 'Local research import failed.'),
       )
     } finally {
       if (controller.current === next) controller.current = null
@@ -555,13 +564,14 @@ export function ModelsScreen({
     try {
       await deleteManagedModel(entry.id)
       setInstalled((current) => current.filter((model) => model.catalogId !== entry.id))
+      refreshDevice()
       update((current) => ({
         ...current,
         models: current.models.filter((model) => model.catalogId !== entry.id),
       }))
       setMessage(`${entry.displayName} was removed.`)
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Could not remove the model.')
+      setMessage(failureText(error, 'Could not remove the model.'))
     }
   }
 
@@ -631,7 +641,7 @@ export function ModelsScreen({
           >
             <option value="">Any size</option>
             <option value="small">Up to 2 GB</option>
-            <option value="medium">2–5 GB</option>
+            <option value="medium">2â€“5 GB</option>
             <option value="large">Over 5 GB</option>
           </select>
           <select
@@ -738,7 +748,7 @@ export function ModelsScreen({
                     onClick={() => void importNative(entry)}
                   >
                     {activeDownload === entry.id
-                      ? 'Verifying import…'
+                      ? 'Verifying importâ€¦'
                       : 'Import model and tokenizer'}
                   </button>
                   {entry.installed && (
@@ -778,7 +788,7 @@ export function ModelsScreen({
               disabled={external.refreshing}
             >
               <Icon name="retry" size={18} />
-              {external.refreshing ? 'Refreshing…' : 'Refresh'}
+              {external.refreshing ? 'Refreshingâ€¦' : 'Refresh'}
             </button>
             <button className="button ghost" onClick={() => openSettings('connections')}>
               Manage connections
@@ -790,7 +800,7 @@ export function ModelsScreen({
             <span>
               {external.pullStatus}
               {external.pullProgress.total
-                ? ` · ${Math.round(((external.pullProgress.completed ?? 0) / external.pullProgress.total) * 100)}%`
+                ? ` Â· ${Math.round(((external.pullProgress.completed ?? 0) / external.pullProgress.total) * 100)}%`
                 : ''}
             </span>
             {external.pulling && (
@@ -824,9 +834,9 @@ export function ModelsScreen({
                       <LocationBadge location={model.executionLocation} />
                     </div>
                     <p className="muted small">
-                      {provider?.name ?? 'Removed connection'} ·{' '}
+                      {provider?.name ?? 'Removed connection'} Â·{' '}
                       {running ? 'Loaded in runtime' : modelStatusLabel(model)}
-                      {model.fileSizeBytes ? ` · ${formatBytes(model.fileSizeBytes)}` : ''}
+                      {model.fileSizeBytes ? ` Â· ${formatBytes(model.fileSizeBytes)}` : ''}
                     </p>
                     <details className="disclosure">
                       <summary>
@@ -876,10 +886,10 @@ export function ModelsScreen({
                                 model.quantization,
                               ]
                                 .filter(Boolean)
-                                .join(' · ') || 'No additional runtime metadata'}
-                              {model.template ? ` · template: ${model.template}` : ''}
+                                .join(' Â· ') || 'No additional runtime metadata'}
+                              {model.template ? ` Â· template: ${model.template}` : ''}
                               {model.rawCapabilities?.length
-                                ? ` · capabilities: ${model.rawCapabilities.join(', ')}`
+                                ? ` Â· capabilities: ${model.rawCapabilities.join(', ')}`
                                 : ''}
                             </dd>
                           </div>
@@ -932,7 +942,7 @@ export function ModelsScreen({
         <p className="muted small">
           Import a GGUF file or check model fit in{' '}
           <button className="link-button" onClick={() => openSettings('models-runtime')}>
-            Settings › Models &amp; runtime
+            Settings â€º Models &amp; runtime
           </button>
           .
         </p>
@@ -953,7 +963,7 @@ function etaLabel(progress: TransferProgress): string | null {
       : remaining >= 60
         ? `${Math.round(remaining / 60)} min`
         : `${Math.round(remaining)} s`
-  return `${formatBytes(rate)}/s · about ${time} left`
+  return `${formatBytes(rate)}/s Â· about ${time} left`
 }
 
 function CatalogModelCard({
@@ -1008,12 +1018,12 @@ function CatalogModelCard({
       </div>
       <p className="model-card-description">{model.description}</p>
       <p className="model-card-facts">
-        {formatBytes(artifact.sizeBytes)} · Good for {model.useCases.slice(0, 3).join(', ')}
+        {formatBytes(artifact.sizeBytes)} Â· Good for {model.useCases.slice(0, 3).join(', ')}
       </p>
       <p className="muted small">
-        {model.organization} · {parameterLabel(model.parameterCount)} parameters · {model.license}
-        {model.licenseAcceptance === 'required' ? ' (accept before download)' : ''} · needs about{' '}
-        {formatBytes(recommendation.memory.minimum)}–
+        {model.organization} Â· {parameterLabel(model.parameterCount)} parameters Â· {model.license}
+        {model.licenseAcceptance === 'required' ? ' (accept before download)' : ''} Â· needs about{' '}
+        {formatBytes(recommendation.memory.minimum)}â€“
         {formatBytes(recommendation.memory.recommended)} for this file (estimate)
       </p>
       {model.popularity && (
@@ -1033,9 +1043,9 @@ function CatalogModelCard({
           >
             {model.artifacts.map((item) => (
               <option key={item.id} value={item.id}>
-                {item.quantization ?? item.id} · {formatBytes(item.sizeBytes)}
-                {item.files.length > 1 ? ` · ${item.files.length} files` : ''}
-                {readyArtifactIds.has(item.id) ? ' · installed' : ''}
+                {item.quantization ?? item.id} Â· {formatBytes(item.sizeBytes)}
+                {item.files.length > 1 ? ` Â· ${item.files.length} files` : ''}
+                {readyArtifactIds.has(item.id) ? ' Â· installed' : ''}
               </option>
             ))}
           </select>
@@ -1051,7 +1061,7 @@ function CatalogModelCard({
         <p className="warning-line">
           <Icon name="info" size={16} />
           {recommendation.artifactCompatibilityKnown
-            ? 'This artifact is not supported on this device’s platform or architecture.'
+            ? 'This artifact is not supported on this deviceâ€™s platform or architecture.'
             : 'Device architecture could not be determined, so compatibility cannot be confirmed.'}
         </p>
       )}
@@ -1063,8 +1073,8 @@ function CatalogModelCard({
       )}
       {engineUnavailable && (
         <p className="warning-line">
-          <Icon name="info" size={16} /> Juniper’s local engine for this model isn’t available on
-          this device.
+          <Icon name="info" size={16} /> Juniperâ€™s local engine for this model isnâ€™t available
+          on this device.
         </p>
       )}
       {usableEngine && usableEngine.runtime.maturity !== 'stable' && (
@@ -1084,8 +1094,8 @@ function CatalogModelCard({
       {installed && (
         <p className="success-line" role="status">
           <Icon name="check" size={16} /> {importOnly ? 'Imported' : 'Downloaded'} and verified
-          {resident === 'ready' || resident === 'busy' ? ' · loaded in memory' : ''}
-          {resident === 'loading' ? ' · loading' : ''}
+          {resident === 'ready' || resident === 'busy' ? ' Â· loaded in memory' : ''}
+          {resident === 'loading' ? ' Â· loading' : ''}
         </p>
       )}
       {downloading && (
@@ -1097,7 +1107,7 @@ function CatalogModelCard({
                 : progress?.status === 'queued'
                   ? 'Waiting for another download to finish'
                   : progress?.status === 'verifying'
-                    ? 'Checking the file’s SHA-256'
+                    ? 'Checking the fileâ€™s SHA-256'
                     : 'Downloading'}
             </span>
             <strong>{percent}%</strong>
@@ -1144,11 +1154,11 @@ function CatalogModelCard({
                   ? 'Not available on this device'
                   : 'Compatibility unknown'
                 : importOnly
-                  ? 'Import verified file…'
+                  ? 'Import verified fileâ€¦'
                   : recommendation.storageSafe
                     ? managedState === 'partial'
                       ? 'Resume download'
-                      : `Download · ${formatBytes(artifact.sizeBytes)}`
+                      : `Download Â· ${formatBytes(artifact.sizeBytes)}`
                     : 'Not enough storage'}
             </button>
             {managedState && (
@@ -1178,7 +1188,7 @@ function CatalogModelCard({
             <dt>Format</dt>
             <dd>
               {artifact.format}
-              {artifact.quantization ? ` · ${artifact.quantization}` : ''}
+              {artifact.quantization ? ` Â· ${artifact.quantization}` : ''}
             </dd>
           </div>
           <div>
@@ -1189,7 +1199,7 @@ function CatalogModelCard({
                 : runtimeOptions
                     .map(
                       ({ runtime, artifact: runtimeArtifact, selectable }) =>
-                        `${runtime.name} · ${runtime.maturity}${!runtimeArtifact ? ' · no compatible artifact' : selectable ? '' : ' · unavailable'}`,
+                        `${runtime.name} Â· ${runtime.maturity}${!runtimeArtifact ? ' Â· no compatible artifact' : selectable ? '' : ' Â· unavailable'}`,
                     )
                     .join('; ')}
             </dd>
@@ -1213,7 +1223,7 @@ function CatalogModelCard({
             <dd>
               {model.license}
               {model.licenseTermsRevision
-                ? ` · ${model.licenseTermsRevision.includes('-sha256-') ? 'reported terms fingerprint (unverified)' : 'terms'} ${model.licenseTermsRevision}`
+                ? ` Â· ${model.licenseTermsRevision.includes('-sha256-') ? 'reported terms fingerprint (unverified)' : 'terms'} ${model.licenseTermsRevision}`
                 : ''}
             </dd>
           </div>

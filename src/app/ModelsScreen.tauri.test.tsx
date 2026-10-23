@@ -235,4 +235,82 @@ describe('Models screen native integration', () => {
     expect(calls.some((call) => call.command === 'download_managed_model')).toBe(true)
     expect(calls.some((call) => call.command === 'accept_model_license')).toBe(false)
   })
+
+  it('shows the native reason for a failed download and rechecks free storage afterwards', async () => {
+    const entry = MODEL_CATALOG.models.find((model) => model.id === 'qwen2.5-0.5b-instruct-q4')!
+    const data = initialAppData()
+    data.settings.onboardingComplete = true
+    let deviceReads = 0
+    localStorage.clear()
+    Object.defineProperty(window, '__TAURI_EVENT_PLUGIN_INTERNALS__', {
+      configurable: true,
+      value: { unregisterListener: () => undefined },
+    })
+    Object.defineProperty(window, '__TAURI_INTERNALS__', {
+      configurable: true,
+      value: {
+        transformCallback: () => 0,
+        invoke: async (command: string) => {
+          switch (command) {
+            case 'load_app_data':
+              return data
+            case 'model_catalog':
+              return MODEL_CATALOG.models
+            case 'device_capabilities':
+              deviceReads += 1
+              return {
+                ...device,
+                freeStorageBytes: deviceReads === 1 ? 200 * 1024 ** 3 : 50 * 1024 ** 3,
+              }
+            case 'managed_models':
+            case 'juniper1_models':
+              return []
+            case 'local_runtime_status':
+              return { state: 'idle' }
+            case 'system_info':
+              return { memory: '64 GiB' }
+            case 'model_license_accepted':
+              return true
+            case 'download_managed_model':
+              // Tauri delivers a command's Err(String) as a string, not an Error.
+              return Promise.reject(
+                'MODEL_STORAGE_FULL: Not enough free space for this download; 1.2 GB is needed.',
+              )
+            default:
+              return null
+          }
+        },
+      },
+    })
+    const { default: App } = await import('./App')
+    container = document.createElement('div')
+    document.body.append(container)
+    await act(async () => {
+      root = createRoot(container!)
+      root.render(<App />)
+    })
+    const pause = () =>
+      act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 30))
+      })
+    await pause()
+    const modelsButton = Array.from(document.querySelectorAll('.sidebar-nav button')).find(
+      (button) => button.textContent?.includes('Models'),
+    )!
+    await act(async () => (modelsButton as HTMLButtonElement).click())
+    await pause()
+    expect(document.body.textContent).toContain('Free storage: 215 GB')
+    const all = container.querySelector<HTMLInputElement>('.segmented input[value="all"]')!
+    await act(async () => all.click())
+    const card = Array.from(container.querySelectorAll('article')).find(
+      (item) => item.querySelector('h3')?.textContent === entry.displayName,
+    )!
+    await act(async () => card.querySelector<HTMLButtonElement>('button.button.primary')!.click())
+    await pause()
+    expect(document.body.textContent).toContain(
+      'Not enough free space for this download; 1.2 GB is needed.',
+    )
+    expect(document.body.textContent).not.toContain('Download failed.')
+    expect(document.body.textContent).toContain('Free storage: 54 GB')
+  })
 })
