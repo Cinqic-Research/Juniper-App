@@ -377,8 +377,8 @@ export function ModelsScreen({
         <>
           <p>
             {entry.displayName} is distributed under the {entry.license}. Review the terms before{' '}
-            {action === 'download' ? 'downloading' : 'importing'}. Juniper’s own Apache-2.0
-            license does not apply to the model.
+            {action === 'download' ? 'downloading' : 'importing'}. Juniper’s own Apache-2.0 license
+            does not apply to the model.
           </p>
           <p>
             <a href={entry.licenseUrl} target="_blank" rel="noreferrer">
@@ -1073,8 +1073,8 @@ function CatalogModelCard({
       )}
       {engineUnavailable && (
         <p className="warning-line">
-          <Icon name="info" size={16} /> Juniper’s local engine for this model isn’t available
-          on this device.
+          <Icon name="info" size={16} /> Juniper’s local engine for this model isn’t available on
+          this device.
         </p>
       )}
       {usableEngine && usableEngine.runtime.maturity !== 'stable' && (
