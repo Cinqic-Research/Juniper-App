@@ -11,16 +11,15 @@ documented feature for every Windows user; High leaves processes or data
 behind; Medium degrades ordinary use; Low is cosmetic or diagnostic.
 
 "Verified" below means observed on CINQTOP in the candidate binary.
-"Compiled only" means the change passes `cargo check`, `cargo clippy
---release --all-targets -D warnings` and `cargo fmt` but could not be executed
-on this machine (W-13), so it still needs the Linux native tests, the Windows
-CI smoke, and a run on Windows hardware.
+Every fix in the table was run on this machine; the per-item sections say
+which build verified it. The Linux native tests and the Windows CI smoke on
+the pull request cover the shared code paths.
 
 | Id   | Severity | Area             | Summary                                                                                               | Candidate status                  |
 | ---- | -------- | ---------------- | ----------------------------------------------------------------------------------------------------- | --------------------------------- |
 | W-01 | Critical | Model management | Main-thread stack overflow when an installed model is listed; the app exits silently                  | Fixed, verified; regression test  |
 | W-02 | Medium   | Desktop shell    | Main window opens under the taskbar and off-centre on a 1366x768 display                              | Fixed, verified; unit tests       |
-| W-03 | Low      | Agent projects   | Granted folders are shown and stored with the `\\?\` verbatim prefix                                  | Fixed, compiled only; unit test   |
+| W-03 | Low      | Agent projects   | Granted folders are shown and stored with the `\\?\` verbatim prefix                                  | Fixed, verified; unit test        |
 | W-04 | Low      | Models screen    | Native failure reasons replaced by generic "Download failed." style text                              | Fixed; frontend test              |
 | W-05 | Low      | Models screen    | "Free storage" does not change after a download, import or removal                                    | Fixed, verified; frontend test    |
 | W-06 | Medium   | Local runtime    | A terminal window opens in front of Juniper whenever `llama-server.exe` starts                        | Reproduced; fixed, verified       |
@@ -86,8 +85,10 @@ CI smoke, and a run on Windows hardware.
   returns on Windows) is stored and displayed.
 - Fix: `workspace::plain_path` stores and shows the ordinary spelling for
   drive and UNC paths; other verbatim forms are left unchanged. Existing
-  roots keep their stored form; both forms open the same folder. The
-  candidate binary predates this change, so it is compiled only.
+  roots keep their stored form; both forms open the same folder. Verified
+  on the installed candidate: a newly granted folder shows
+  `C:SERS...JUNIPERTESTPROJECTSRC` WHILE THE EARLIER ROOT KEEPS ITS
+  STORED FORM.
 
 ## W-04 and W-05 Models screen messages and free storage
 
@@ -98,8 +99,9 @@ showed the fallback. `failureText` now keeps the host's sentence (without its
 `CODE:` prefix). The device line is refreshed after a download, import or
 removal. Frontend test: "shows the native reason for a failed download and
 rechecks free storage afterwards". W-05 verified in the candidate (46 GB to
-45 GB after a download); W-04 covered by the test only, since no download
-failed during the run.
+45 GB after a download); W-04 verified when the license store failed (W-16):
+the screen showed the host's "Access is denied. (os error 5)" instead of a
+generic message.
 
 ## W-06 Terminal window when the runtime starts
 
@@ -117,7 +119,8 @@ failed during the run.
   prevent the console.
 - Fix: `child::without_console` sets `CREATE_NO_WINDOW` for the runtime
   server, its `--version` and `--list-devices` probes, `ollama create` for a
-  GGUF import, and local MCP servers. Compiled only.
+  GGUF import, and local MCP servers. Verified on the packaged build: no
+  console or pseudo-console window while the runtime runs.
 
 ## W-07 Runtime outlives a killed Juniper
 
@@ -129,7 +132,8 @@ failed during the run.
   A crash of Juniper (W-01 was one) leaves the same orphan.
 - Fix: `child::end_with_parent` assigns the runtime and MCP servers to a job
   object with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`; the kernel closes the
-  job when Juniper's process ends for any reason. Compiled only.
+  job when Juniper's process ends for any reason. Verified on the packaged
+  build: `llama-server.exe` gone within 1.4 s of a forced kill.
 
 ## W-08 Re-hashing on every listing and start
 
@@ -143,7 +147,8 @@ failed during the run.
   thread, each time Models is opened or a chat starts the runtime.
 - Fix: the NTFS change time read through `GetFileInformationByHandleEx`
   backs the record on Windows, and the precision probe runs there too. The
-  trust note on change time is in the code. Compiled only.
+  trust note on change time is in the code. Verified on the packaged build:
+  the second Models listing came from the cache within 1.5 s.
 
 ## W-09 Local MCP servers on Windows
 
@@ -211,8 +216,9 @@ blocked this file" (os error 4551); executables that existed before the
 switch, including the installed MSI and the 02:57 candidate, still run. Two
 consequences:
 
-- For this assignment: no further native build could be executed on
-  CINQTOP; see the candidate report for what that leaves unverified.
+- For this assignment: no native build could be executed on CINQTOP until
+  the owner turned Smart App Control off at about 11:10; the packaged build,
+  the native suite and the final MSI then ran (candidate report).
 - For the product: Smart App Control is on by default on new consumer
   Windows 11 installations once its evaluation passes. An unsigned Juniper
   MSI is then not installable and `juniper.exe` not runnable without the

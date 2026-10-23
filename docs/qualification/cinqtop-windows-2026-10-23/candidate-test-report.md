@@ -17,12 +17,10 @@
   then on Windows refuses to run any newly built unsigned executable (cargo
   build scripts, test binaries, a trivial MSVC `hello.exe`); binaries that
   existed before the switch still run. Turning it off is permanent and is
-  the owner's decision, so no later build was executed on this machine. The
-  later Rust changes are validated by `cargo check`, `cargo clippy
---release --all-targets -D warnings` and `cargo fmt`, and must be run on
-  Linux (native tests) and on the Windows CI runner (MSI build and smoke)
-  before they count as verified. See the defect register for each item's
-  verification state.
+  the owner's decision. The owner turned it off at about 11:10, after which
+  the packaged build, the native suite and the final MSI ran on this
+  machine; the sections from "Packaged build run" onwards record that, and
+  the defect register carries each item's final verification state.
 - The display was locked for part of the night; runs during the lock are
   excluded from timing.
 
@@ -57,16 +55,17 @@ PASS\* means the Windows runtime behaved correctly while the small model's
 answer was wrong; the model is not qualified for tools and the interface said
 so.
 
-## Not verified on CINQTOP
+## Not verified on CINQTOP at this point
 
-- The packaged MSI of the candidate (needs `pnpm tauri build`, blocked by
-  Smart App Control), its installation, uninstall and reinstall.
-- W-06, W-07 and W-08 fixes at run time (the binary with them cannot be
-  executed here); they compile and pass clippy.
-- Native unit tests (`cargo test`): the debug profile's build scripts are
-  blocked; this also prevented diagnosing W-10 at run time.
-- MCP stdio servers (W-09): not reached before the lock-out; the
+At the time of this first run, Smart App Control blocked the packaged MSI,
+the run-time checks of W-06, W-07 and W-08 and the native suite; all of
+these were completed later the same day and are recorded in the sections
+below. What remains unverified after the whole run:
+
+- MCP stdio servers (W-09): not reached; the
   `JuniperTestProject/mcp/echo-server.mjs` fixture is ready for the reviewer.
+- Agent workspace file read and diff-previewed write (no tool-qualified
+  catalog model fits this machine).
 - Backup and restore into a fresh profile; schema upgrade from an older
   database (the profile was created fresh by 0.4.0-alpha.1 at schema v6).
 - Display scaling other than 100%.
@@ -81,15 +80,15 @@ could be executed on CINQTOP after all. `pnpm tauri build --bundles msi --
 MSI installs) was run directly while the native test suite compiled in the
 background, so the timings below carry CPU contention.
 
-| Case                                          | Result  | Notes                                                                                                                                                                                 |
-| --------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Baseline MSI uninstall (UAC consent)          | PASS    | `C:\Program Files\Juniper`, shortcuts and the Apps entry removed; database and both model files kept                                                                                  |
-| Launch, embedded frontend                     | PASS    | window 1.2 s, `frontend ready` 2.7 s, 398 MB working set, window (175,0)-(1191,720), 0 console windows                                                                                |
-| Chat with Qwen2.5 1.5B on the bundled runtime | PASS    | "Ready."                                                                                                                                                                              |
-| W-06: console window while the runtime runs   | PASS    | process tree: `juniper.exe`, six WebView2 processes, `llama-server.exe` (2.1 GB) with a hidden `conhost.exe`; no console or pseudo-console window (`w06-candidate-console-check.txt`) |
-| W-07: runtime ends with a killed Juniper      | PASS    | `llama-server.exe` gone within 1.4 s of `Stop-Process -Force` (`w07-candidate-kill-test.txt`)                                                                                         |
-| W-08: second Models listing uses the cache    | PASS    | first open: device line still "Checking" at 1.5 s, listed by 9.5 s (1.4 GB hashed, machine busy); second open: listed within 1.5 s                                                    |
-| Candidate MSI install                         | NOT YET | two attempts ended with status 1602: the UAC prompt was not approved within its two-minute window                                                                                     |
+| Case                                          | Result | Notes                                                                                                                                                                                 |
+| --------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Baseline MSI uninstall (UAC consent)          | PASS   | `C:\Program Files\Juniper`, shortcuts and the Apps entry removed; database and both model files kept                                                                                  |
+| Launch, embedded frontend                     | PASS   | window 1.2 s, `frontend ready` 2.7 s, 398 MB working set, window (175,0)-(1191,720), 0 console windows                                                                                |
+| Chat with Qwen2.5 1.5B on the bundled runtime | PASS   | "Ready."                                                                                                                                                                              |
+| W-06: console window while the runtime runs   | PASS   | process tree: `juniper.exe`, six WebView2 processes, `llama-server.exe` (2.1 GB) with a hidden `conhost.exe`; no console or pseudo-console window (`w06-candidate-console-check.txt`) |
+| W-07: runtime ends with a killed Juniper      | PASS   | `llama-server.exe` gone within 1.4 s of `Stop-Process -Force` (`w07-candidate-kill-test.txt`)                                                                                         |
+| W-08: second Models listing uses the cache    | PASS   | first open: device line still "Checking" at 1.5 s, listed by 9.5 s (1.4 GB hashed, machine busy); second open: listed within 1.5 s                                                    |
+| Candidate MSI install                         | LATER  | two attempts ended with status 1602 (UAC prompt not approved in time); installed at 12:05, see "Installed candidate MSI"                                                              |
 
 A regression was found in this run and fixed before any review: the
 failure-text change had been written back through a shell that read the file

@@ -88,8 +88,9 @@ Windows 11 Home on CINQTOP had Smart App Control in evaluation mode when the
 run started and switched it on at about 02:58 on 2026-10-23
 (`HKLM\SYSTEM\CurrentControlSet\Control\CI\Policy`: `SAC_PreviousState=2`,
 `VerifiedAndReputablePolicyState=1`). From then on the machine refuses to run
-newly built unsigned executables, which ends local native build-and-run work
-until the owner decides about the setting (turning it off is permanent).
+newly built unsigned executables. The owner turned the setting off at about
+11:10 the same morning (turning it off is permanent), after which builds and
+tests ran again.
 Defender real-time protection and tamper protection are on; neither was
 changed.
 

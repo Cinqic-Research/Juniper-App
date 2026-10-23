@@ -33,10 +33,11 @@ the test profile are already in place (see the handoff).
   tool-qualified catalog model fits the machine's budget; sandboxed code is
   disclosed as unavailable, as designed.
 - Three more Windows defects were reproduced (terminal window on runtime
-  start, orphaned runtime after a kill, re-hashing on every use) and fixed
-  in code; those fixes compile and pass clippy but could not be executed on
-  CINQTOP because Smart App Control turned on mid-run and blocks unsigned new
-  binaries (W-13). They need the Windows CI smoke and a Windows run.
+  start, orphaned runtime after a kill, re-hashing on every use), fixed and
+  verified on the packaged build once the owner turned Smart App Control
+  off (W-13 records the interruption). Running the native suite on Windows
+  for the first time (W-10 fixed) found and fixed a sixth: license
+  acceptance failed on Windows (W-16), verified on the installed final MSI.
 
 ## Reproducing on another Windows machine
 

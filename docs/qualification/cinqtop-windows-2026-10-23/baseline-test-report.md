@@ -47,7 +47,7 @@ consent prompt did, naming an unknown publisher.
 | Data          | Database created (`juniper.db`, 344 KB), `agent-runtime.lock`, `models\`     | PASS    |                                                                                                                                                                            |
 | Data          | Recovery after the crash                                                     | PASS    | relaunch opens cleanly; settings and project intact                                                                                                                        |
 | Lifecycle     | Close from the title bar                                                     | PASS    | exit within 0.6 s; no `juniper.exe`, `llama-server.exe` or Juniper WebView2 processes left                                                                                 |
-| Lifecycle     | Uninstall / reinstall                                                        | NOT RUN | needs a UAC consent while the owner was away; see the candidate report                                                                                                     |
+| Lifecycle     | Uninstall / reinstall                                                        | PASS    | uninstalled at 11:19 after UAC consent: program folder, shortcuts and Apps entry removed, database and models kept; reinstall covered by the candidate MSI installs        |
 
 Passes, failures and blocked cases are what the installed application did on
 this machine. "Blocked" means the case could not be reached because of an
