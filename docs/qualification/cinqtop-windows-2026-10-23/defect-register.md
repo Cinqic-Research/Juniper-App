@@ -23,15 +23,16 @@ CI smoke, and a run on Windows hardware.
 | W-03 | Low      | Agent projects   | Granted folders are shown and stored with the `\\?\` verbatim prefix                    | Fixed, compiled only; unit test  |
 | W-04 | Low      | Models screen    | Native failure reasons replaced by generic "Download failed." style text                | Fixed; frontend test             |
 | W-05 | Low      | Models screen    | "Free storage" does not change after a download, import or removal                      | Fixed, verified; frontend test   |
-| W-06 | Medium   | Local runtime    | A terminal window opens in front of Juniper whenever `llama-server.exe` starts          | Reproduced; fixed, compiled only |
-| W-07 | High     | Local runtime    | `llama-server.exe` (up to gigabytes) outlives a killed or crashed Juniper               | Reproduced; fixed, compiled only |
-| W-08 | Medium   | Local runtime    | Every model listing and every server start re-hashes each model file on the main thread | Reproduced; fixed, compiled only |
+| W-06 | Medium   | Local runtime    | A terminal window opens in front of Juniper whenever `llama-server.exe` starts          | Reproduced; fixed, verified      |
+| W-07 | High     | Local runtime    | `llama-server.exe` (up to gigabytes) outlives a killed or crashed Juniper               | Reproduced; fixed, verified      |
+| W-08 | Medium   | Local runtime    | Every model listing and every server start re-hashes each model file on the main thread | Reproduced; fixed, verified      |
 | W-09 | —        | Agent plugins    | Local MCP server launch on Windows (static finding)                                     | Not reached; fixture prepared    |
 | W-10 | —        | Native tests     | `cargo test` aborts on Windows with `STATUS_ENTRYPOINT_NOT_FOUND` (known since rc.1)    | Not diagnosable here (W-13)      |
 | W-11 | Low      | Documentation    | README, CHANGELOG and interface guide said 0.4.0-alpha.1 was "not yet published"        | Fixed                            |
 | W-12 | Low      | Build            | The runtime build fails on a fresh Windows machine without Git long-path support        | Documented                       |
 | W-13 | —        | Environment      | Smart App Control blocks unsigned, newly built executables on consumer Windows 11       | Documented; owner decision       |
 | W-14 | Low      | Desktop shell    | A second Juniper instance exits silently (`stage agent-runtime-lock failed`)            | Recorded, not changed            |
+| W-15 | Low      | Models screen    | Non-ASCII characters double-encoded by the W-04 edit (showed "Â·")                      | Fixed, verified                  |
 
 ## W-01 Main-thread stack overflow when an installed model is listed
 
@@ -201,3 +202,13 @@ Starting `juniper.exe` while another instance holds `agent-runtime.lock`
 writes `stage agent-runtime-lock failed` to stderr and exits. Nothing is
 shown to the user and the existing window is not raised. Recorded for a
 later decision; not changed here.
+
+## W-15 Double-encoded characters in the Models screen
+
+Introduced on this branch by the W-04 change, not present in
+0.4.0-alpha.1: the file was rewritten through a shell that read it as
+Windows-1252, so "·", "…", "’" and "–" were committed double-encoded and the
+packaged candidate rendered "Â·" between model facts. Found by running the
+packaged build, restored by reversing the encoding, and checked by comparing
+the file's non-ASCII character inventory with the original. The frontend
+tests did not catch it because none asserts those separators.

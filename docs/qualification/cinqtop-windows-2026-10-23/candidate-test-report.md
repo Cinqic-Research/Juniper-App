@@ -70,3 +70,28 @@ so.
 - Backup and restore into a fresh profile; schema upgrade from an older
   database (the profile was created fresh by 0.4.0-alpha.1 at schema v6).
 - Display scaling other than 100%.
+
+## Packaged build run (later on 2026-10-23, after Smart App Control was turned off)
+
+The owner turned Smart App Control off in the morning, so a packaged build
+could be executed on CINQTOP after all. `pnpm tauri build --bundles msi --
+--locked` at `4646ed3` produced `Juniper_0.4.0-alpha.1_x64_en-US.msi`
+(16,257,024 bytes) in 14 minutes. The binary from that build
+(`src-tauri/target/release/juniper.exe`, embedded frontend, same bytes the
+MSI installs) was run directly while the native test suite compiled in the
+background, so the timings below carry CPU contention.
+
+| Case                                          | Result  | Notes                                                                                                                                                                                 |
+| --------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Baseline MSI uninstall (UAC consent)          | PASS    | `C:\Program Files\Juniper`, shortcuts and the Apps entry removed; database and both model files kept                                                                                  |
+| Launch, embedded frontend                     | PASS    | window 1.2 s, `frontend ready` 2.7 s, 398 MB working set, window (175,0)-(1191,720), 0 console windows                                                                                |
+| Chat with Qwen2.5 1.5B on the bundled runtime | PASS    | "Ready."                                                                                                                                                                              |
+| W-06: console window while the runtime runs   | PASS    | process tree: `juniper.exe`, six WebView2 processes, `llama-server.exe` (2.1 GB) with a hidden `conhost.exe`; no console or pseudo-console window (`w06-candidate-console-check.txt`) |
+| W-07: runtime ends with a killed Juniper      | PASS    | `llama-server.exe` gone within 1.4 s of `Stop-Process -Force` (`w07-candidate-kill-test.txt`)                                                                                         |
+| W-08: second Models listing uses the cache    | PASS    | first open: device line still "Checking" at 1.5 s, listed by 9.5 s (1.4 GB hashed, machine busy); second open: listed within 1.5 s                                                    |
+| Candidate MSI install                         | NOT YET | two attempts ended with status 1602: the UAC prompt was not approved within its two-minute window                                                                                     |
+
+A regression was found in this run and fixed before any review: the
+failure-text change had been written back through a shell that read the file
+as Windows-1252, so every "·", "…", "’" and "–" in the Models screen was
+double-encoded and the candidate showed "Â·" between model facts (W-15).
