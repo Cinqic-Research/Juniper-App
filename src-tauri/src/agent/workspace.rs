@@ -364,6 +364,23 @@ pub fn open_root(path: &str) -> WorkspaceResult<Dir> {
     })
 }
 
+/// The spelling of a canonical root that is stored and shown to the user.
+/// On Windows `canonicalize` returns verbatim paths (`\\?\C:\...`,
+/// `\\?\UNC\server\share\...`); the ordinary spelling opens the same folder
+/// and is the one people recognise in the Projects list.
+pub fn plain_path(canonical: &Path) -> String {
+    let text = canonical.to_string_lossy();
+    if let Some(rest) = text.strip_prefix(r"\\?\UNC\") {
+        return format!(r"\\{rest}");
+    }
+    if let Some(rest) = text.strip_prefix(r"\\?\")
+        && rest.as_bytes().get(1) == Some(&b':')
+    {
+        return rest.to_owned();
+    }
+    text.into_owned()
+}
+
 /// Validates a model-supplied relative path: no absolute paths, drive
 /// prefixes, parent references, or empty and control-character names.
 pub fn relative_path(value: &str) -> WorkspaceResult<PathBuf> {
@@ -793,6 +810,26 @@ mod tests {
         std::fs::write(path.join("docs/notes.md"), "alpha\nbeta\n").expect("file");
         let dir = open_root(path.to_str().expect("utf-8")).expect("open");
         (path, dir)
+    }
+
+    #[test]
+    fn plain_path_drops_windows_verbatim_prefixes_only() {
+        assert_eq!(
+            plain_path(Path::new(r"\\?\C:\Users\me\Documents\Project")),
+            r"C:\Users\me\Documents\Project"
+        );
+        assert_eq!(
+            plain_path(Path::new(r"\\?\UNC\server\share\Project")),
+            r"\\server\share\Project"
+        );
+        assert_eq!(
+            plain_path(Path::new(r"\\?\Volume{guid}\x")),
+            r"\\?\Volume{guid}\x"
+        );
+        assert_eq!(
+            plain_path(Path::new("/home/me/project")),
+            "/home/me/project"
+        );
     }
 
     #[test]

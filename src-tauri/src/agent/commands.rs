@@ -963,16 +963,17 @@ pub async fn project_add_root<R: Runtime>(
                 ));
             }
         }
+        let path_text = super::workspace::plain_path(&canonical);
         let label = canonical
             .file_name()
             .map(|name| name.to_string_lossy().into_owned())
-            .unwrap_or_else(|| canonical.to_string_lossy().into_owned());
+            .unwrap_or_else(|| path_text.clone());
         let connection = state.agent.connection()?;
         store::project(&connection, &project_id)?;
         connection
             .execute(
                 "INSERT INTO project_roots(id, project_id, path, label, access, created_at) VALUES(?1, ?2, ?3, ?4, ?5, ?6)",
-                rusqlite::params![store::new_id("root"), project_id, canonical.to_string_lossy(), label, access, store::now()],
+                rusqlite::params![store::new_id("root"), project_id, path_text, label, access, store::now()],
             )
             .map_err(store::db_error)?;
         connection
