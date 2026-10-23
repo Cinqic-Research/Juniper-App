@@ -3,8 +3,9 @@
 Repository `Cinqic-Research/Juniper-App`, branch
 `engineering/cinqtop-windows-qualification`, base `main`
 `fc1f1d7937995ca68d14e8df1682f6869ae90d8b`. The code and record commits end
-at `6bb5d5d301dfb659fd9b640b54414892e4aafcbe`; the branch tip adds this
-handoff. The same text is the draft pull request's description. Not
+at `6bb5d5d301dfb659fd9b640b54414892e4aafcbe`; the branch then adds this
+handoff and a Vite 7.3.7 update for the dependency audit the validation
+job runs first (GHSA-587h-7wmj-h5pm). The same text is the draft pull request's description. Not
 approved, not merged, no tag or release; the implementer never certifies
 its own work.
 
