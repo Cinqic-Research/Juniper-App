@@ -90,7 +90,7 @@ function memoryLabel(device: DeviceCapabilities | null): string {
 }
 
 export function nativeRuntimeLabel(device: DeviceCapabilities | null): string {
-  if (!device) return 'Checkingâ€¦'
+  if (!device) return 'Checking…'
   if (device.nativeRuntimeAvailable === false) return 'Unavailable for this ABI'
   if (device.nativeLowMemory) return 'Waiting for more memory'
   switch (device.nativeRuntimeState) {
@@ -339,7 +339,7 @@ export function ModelsScreen({
     })
     setMessage(
       makeDefault
-        ? `${entry.displayName} is now ${defaultAssistant.name}â€™s default model.`
+        ? `${entry.displayName} is now ${defaultAssistant.name}’s default model.`
         : `${entry.displayName} (${artifact.quantization ?? artifact.id}) is ${isImportOnly(artifact) ? 'imported' : 'downloaded'} and verified. The local engine loads it on first use.`,
     )
   }
@@ -377,7 +377,7 @@ export function ModelsScreen({
         <>
           <p>
             {entry.displayName} is distributed under the {entry.license}. Review the terms before{' '}
-            {action === 'download' ? 'downloading' : 'importing'}. Juniperâ€™s own Apache-2.0
+            {action === 'download' ? 'downloading' : 'importing'}. Juniper’s own Apache-2.0
             license does not apply to the model.
           </p>
           <p>
@@ -641,7 +641,7 @@ export function ModelsScreen({
           >
             <option value="">Any size</option>
             <option value="small">Up to 2 GB</option>
-            <option value="medium">2â€“5 GB</option>
+            <option value="medium">2–5 GB</option>
             <option value="large">Over 5 GB</option>
           </select>
           <select
@@ -748,7 +748,7 @@ export function ModelsScreen({
                     onClick={() => void importNative(entry)}
                   >
                     {activeDownload === entry.id
-                      ? 'Verifying importâ€¦'
+                      ? 'Verifying import…'
                       : 'Import model and tokenizer'}
                   </button>
                   {entry.installed && (
@@ -788,7 +788,7 @@ export function ModelsScreen({
               disabled={external.refreshing}
             >
               <Icon name="retry" size={18} />
-              {external.refreshing ? 'Refreshingâ€¦' : 'Refresh'}
+              {external.refreshing ? 'Refreshing…' : 'Refresh'}
             </button>
             <button className="button ghost" onClick={() => openSettings('connections')}>
               Manage connections
@@ -800,7 +800,7 @@ export function ModelsScreen({
             <span>
               {external.pullStatus}
               {external.pullProgress.total
-                ? ` Â· ${Math.round(((external.pullProgress.completed ?? 0) / external.pullProgress.total) * 100)}%`
+                ? ` · ${Math.round(((external.pullProgress.completed ?? 0) / external.pullProgress.total) * 100)}%`
                 : ''}
             </span>
             {external.pulling && (
@@ -834,9 +834,9 @@ export function ModelsScreen({
                       <LocationBadge location={model.executionLocation} />
                     </div>
                     <p className="muted small">
-                      {provider?.name ?? 'Removed connection'} Â·{' '}
+                      {provider?.name ?? 'Removed connection'} ·{' '}
                       {running ? 'Loaded in runtime' : modelStatusLabel(model)}
-                      {model.fileSizeBytes ? ` Â· ${formatBytes(model.fileSizeBytes)}` : ''}
+                      {model.fileSizeBytes ? ` · ${formatBytes(model.fileSizeBytes)}` : ''}
                     </p>
                     <details className="disclosure">
                       <summary>
@@ -886,10 +886,10 @@ export function ModelsScreen({
                                 model.quantization,
                               ]
                                 .filter(Boolean)
-                                .join(' Â· ') || 'No additional runtime metadata'}
-                              {model.template ? ` Â· template: ${model.template}` : ''}
+                                .join(' · ') || 'No additional runtime metadata'}
+                              {model.template ? ` · template: ${model.template}` : ''}
                               {model.rawCapabilities?.length
-                                ? ` Â· capabilities: ${model.rawCapabilities.join(', ')}`
+                                ? ` · capabilities: ${model.rawCapabilities.join(', ')}`
                                 : ''}
                             </dd>
                           </div>
@@ -942,7 +942,7 @@ export function ModelsScreen({
         <p className="muted small">
           Import a GGUF file or check model fit in{' '}
           <button className="link-button" onClick={() => openSettings('models-runtime')}>
-            Settings â€º Models &amp; runtime
+            Settings › Models &amp; runtime
           </button>
           .
         </p>
@@ -963,7 +963,7 @@ function etaLabel(progress: TransferProgress): string | null {
       : remaining >= 60
         ? `${Math.round(remaining / 60)} min`
         : `${Math.round(remaining)} s`
-  return `${formatBytes(rate)}/s Â· about ${time} left`
+  return `${formatBytes(rate)}/s · about ${time} left`
 }
 
 function CatalogModelCard({
@@ -1018,12 +1018,12 @@ function CatalogModelCard({
       </div>
       <p className="model-card-description">{model.description}</p>
       <p className="model-card-facts">
-        {formatBytes(artifact.sizeBytes)} Â· Good for {model.useCases.slice(0, 3).join(', ')}
+        {formatBytes(artifact.sizeBytes)} · Good for {model.useCases.slice(0, 3).join(', ')}
       </p>
       <p className="muted small">
-        {model.organization} Â· {parameterLabel(model.parameterCount)} parameters Â· {model.license}
-        {model.licenseAcceptance === 'required' ? ' (accept before download)' : ''} Â· needs about{' '}
-        {formatBytes(recommendation.memory.minimum)}â€“
+        {model.organization} · {parameterLabel(model.parameterCount)} parameters · {model.license}
+        {model.licenseAcceptance === 'required' ? ' (accept before download)' : ''} · needs about{' '}
+        {formatBytes(recommendation.memory.minimum)}–
         {formatBytes(recommendation.memory.recommended)} for this file (estimate)
       </p>
       {model.popularity && (
@@ -1043,9 +1043,9 @@ function CatalogModelCard({
           >
             {model.artifacts.map((item) => (
               <option key={item.id} value={item.id}>
-                {item.quantization ?? item.id} Â· {formatBytes(item.sizeBytes)}
-                {item.files.length > 1 ? ` Â· ${item.files.length} files` : ''}
-                {readyArtifactIds.has(item.id) ? ' Â· installed' : ''}
+                {item.quantization ?? item.id} · {formatBytes(item.sizeBytes)}
+                {item.files.length > 1 ? ` · ${item.files.length} files` : ''}
+                {readyArtifactIds.has(item.id) ? ' · installed' : ''}
               </option>
             ))}
           </select>
@@ -1061,7 +1061,7 @@ function CatalogModelCard({
         <p className="warning-line">
           <Icon name="info" size={16} />
           {recommendation.artifactCompatibilityKnown
-            ? 'This artifact is not supported on this deviceâ€™s platform or architecture.'
+            ? 'This artifact is not supported on this device’s platform or architecture.'
             : 'Device architecture could not be determined, so compatibility cannot be confirmed.'}
         </p>
       )}
@@ -1073,7 +1073,7 @@ function CatalogModelCard({
       )}
       {engineUnavailable && (
         <p className="warning-line">
-          <Icon name="info" size={16} /> Juniperâ€™s local engine for this model isnâ€™t available
+          <Icon name="info" size={16} /> Juniper’s local engine for this model isn’t available
           on this device.
         </p>
       )}
@@ -1094,8 +1094,8 @@ function CatalogModelCard({
       {installed && (
         <p className="success-line" role="status">
           <Icon name="check" size={16} /> {importOnly ? 'Imported' : 'Downloaded'} and verified
-          {resident === 'ready' || resident === 'busy' ? ' Â· loaded in memory' : ''}
-          {resident === 'loading' ? ' Â· loading' : ''}
+          {resident === 'ready' || resident === 'busy' ? ' · loaded in memory' : ''}
+          {resident === 'loading' ? ' · loading' : ''}
         </p>
       )}
       {downloading && (
@@ -1107,7 +1107,7 @@ function CatalogModelCard({
                 : progress?.status === 'queued'
                   ? 'Waiting for another download to finish'
                   : progress?.status === 'verifying'
-                    ? 'Checking the fileâ€™s SHA-256'
+                    ? 'Checking the file’s SHA-256'
                     : 'Downloading'}
             </span>
             <strong>{percent}%</strong>
@@ -1154,11 +1154,11 @@ function CatalogModelCard({
                   ? 'Not available on this device'
                   : 'Compatibility unknown'
                 : importOnly
-                  ? 'Import verified fileâ€¦'
+                  ? 'Import verified file…'
                   : recommendation.storageSafe
                     ? managedState === 'partial'
                       ? 'Resume download'
-                      : `Download Â· ${formatBytes(artifact.sizeBytes)}`
+                      : `Download · ${formatBytes(artifact.sizeBytes)}`
                     : 'Not enough storage'}
             </button>
             {managedState && (
@@ -1188,7 +1188,7 @@ function CatalogModelCard({
             <dt>Format</dt>
             <dd>
               {artifact.format}
-              {artifact.quantization ? ` Â· ${artifact.quantization}` : ''}
+              {artifact.quantization ? ` · ${artifact.quantization}` : ''}
             </dd>
           </div>
           <div>
@@ -1199,7 +1199,7 @@ function CatalogModelCard({
                 : runtimeOptions
                     .map(
                       ({ runtime, artifact: runtimeArtifact, selectable }) =>
-                        `${runtime.name} Â· ${runtime.maturity}${!runtimeArtifact ? ' Â· no compatible artifact' : selectable ? '' : ' Â· unavailable'}`,
+                        `${runtime.name} · ${runtime.maturity}${!runtimeArtifact ? ' · no compatible artifact' : selectable ? '' : ' · unavailable'}`,
                     )
                     .join('; ')}
             </dd>
@@ -1223,7 +1223,7 @@ function CatalogModelCard({
             <dd>
               {model.license}
               {model.licenseTermsRevision
-                ? ` Â· ${model.licenseTermsRevision.includes('-sha256-') ? 'reported terms fingerprint (unverified)' : 'terms'} ${model.licenseTermsRevision}`
+                ? ` · ${model.licenseTermsRevision.includes('-sha256-') ? 'reported terms fingerprint (unverified)' : 'terms'} ${model.licenseTermsRevision}`
                 : ''}
             </dd>
           </div>
