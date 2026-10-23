@@ -128,3 +128,15 @@ cores) one wall-clock assertion,
 `juniper1::tests::slow_runtimes_time_out_and_cancellation_stops_the_request`
 (cancellation under 1.2 s), can exceed its budget; it passes alone every
 time and is not Windows-specific.
+
+### Final build timings (binary of the MSI built from `812300c`, on battery, 12:31)
+
+| Launch                       | Window visible | `frontend ready` | Process-tree working set | Console windows | Children left after exit |
+| ---------------------------- | -------------- | ---------------- | ------------------------ | --------------- | ------------------------ |
+| Cold (first after the build) | 1.7 s          | 4.3 s            | 371 MB                   | 0               | 0                        |
+| Warm 1                       | 0.25 s         | 1.7 s            | 367 MB                   | 0               | 0                        |
+| Warm 2                       | 0.21 s         | 1.6 s            | 367 MB                   | 0               | 0                        |
+
+Baseline MSI for comparison (same machine, mains power, first run busy with a
+toolchain install): cold 5.2 s / 6.8 s, warm 0.4-0.6 s / 1.5-2.4 s, 380-401
+MB. The candidate is not slower at launch and uses no more memory.
