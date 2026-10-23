@@ -31,6 +31,8 @@ mod runtime_registry;
 mod startup;
 mod storage;
 mod tools;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+mod window;
 
 use commands::AppState;
 use tauri::Manager;
@@ -71,6 +73,8 @@ pub fn run() {
             );
             #[cfg(not(target_os = "android"))]
             startup::local_runtime(local_runtime::runtime_executable(app.handle()));
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            window::fit_main_window(app.handle());
             startup::stage_ok("native-setup");
             Ok(())
         })
