@@ -219,11 +219,14 @@ full lifecycle sequence were not recorded; these remain a separate llama.cpp
 Beta-promotion follow-up. The validation and release
 workflows do not make that physical run a global desktop release gate.
 
-Native unit tests are excluded from the Windows release job only: the Tauri mock
-runtime fails to load there, aborting the test binary at startup with
-`STATUS_ENTRYPOINT_NOT_FOUND` before any test runs. Every compile-level check,
-including `cargo clippy -D warnings`, still runs on Windows, and the native
-tests run on Linux.
+Native unit tests run on Windows in both workflows. Until the CINQTOP
+qualification they aborted at startup with `STATUS_ENTRYPOINT_NOT_FOUND`: the
+test harness, unlike `juniper.exe`, carried no application manifest, so the
+loader bound it to the System32 `comctl32.dll`, which lacks
+`TaskDialogIndirect`. `src-tauri/build.rs` now has the linker embed the
+Common Controls 6 manifest into every target. The Windows symlink fixture test
+needs `SeCreateSymbolicLinkPrivilege` (an elevated runner has it; a developer
+account without Developer Mode sees the test report that it was not run).
 
 ## Fault injection
 

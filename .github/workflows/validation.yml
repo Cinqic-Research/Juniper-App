@@ -296,10 +296,12 @@ jobs:
       - name: Require the native runtime resource before bundling
         shell: pwsh
         run: if (-not (Test-Path -LiteralPath 'src-tauri/runtime/llama-server.exe' -PathType Leaf)) { throw 'llama-server.exe was not built.' }
-      # Native unit tests are excluded on Windows only; see release.yml.
       - run: pnpm validate:no-native-tests
-      - name: Re-test Windows native unit test loader (diagnostic)
-        continue-on-error: true
+      # The native suite runs on Windows since the test harness gained the
+      # application manifest that Common Controls 6 needs (it used to abort
+      # with STATUS_ENTRYPOINT_NOT_FOUND). The symlink fixture test needs an
+      # elevated account, which this runner is.
+      - name: Run native tests on Windows
         run: cargo test --locked --manifest-path src-tauri/Cargo.toml
       - name: Build MSI from locked source
         run: pnpm tauri build --bundles msi -- --locked
