@@ -16,23 +16,24 @@ behind; Medium degrades ordinary use; Low is cosmetic or diagnostic.
 on this machine (W-13), so it still needs the Linux native tests, the Windows
 CI smoke, and a run on Windows hardware.
 
-| Id   | Severity | Area             | Summary                                                                                 | Candidate status                 |
-| ---- | -------- | ---------------- | --------------------------------------------------------------------------------------- | -------------------------------- |
-| W-01 | Critical | Model management | Main-thread stack overflow when an installed model is listed; the app exits silently    | Fixed, verified; regression test |
-| W-02 | Medium   | Desktop shell    | Main window opens under the taskbar and off-centre on a 1366x768 display                | Fixed, verified; unit tests      |
-| W-03 | Low      | Agent projects   | Granted folders are shown and stored with the `\\?\` verbatim prefix                    | Fixed, compiled only; unit test  |
-| W-04 | Low      | Models screen    | Native failure reasons replaced by generic "Download failed." style text                | Fixed; frontend test             |
-| W-05 | Low      | Models screen    | "Free storage" does not change after a download, import or removal                      | Fixed, verified; frontend test   |
-| W-06 | Medium   | Local runtime    | A terminal window opens in front of Juniper whenever `llama-server.exe` starts          | Reproduced; fixed, verified      |
-| W-07 | High     | Local runtime    | `llama-server.exe` (up to gigabytes) outlives a killed or crashed Juniper               | Reproduced; fixed, verified      |
-| W-08 | Medium   | Local runtime    | Every model listing and every server start re-hashes each model file on the main thread | Reproduced; fixed, verified      |
-| W-09 | —        | Agent plugins    | Local MCP server launch on Windows (static finding)                                     | Not reached; fixture prepared    |
-| W-10 | —        | Native tests     | `cargo test` aborts on Windows with `STATUS_ENTRYPOINT_NOT_FOUND` (known since rc.1)    | Not diagnosable here (W-13)      |
-| W-11 | Low      | Documentation    | README, CHANGELOG and interface guide said 0.4.0-alpha.1 was "not yet published"        | Fixed                            |
-| W-12 | Low      | Build            | The runtime build fails on a fresh Windows machine without Git long-path support        | Documented                       |
-| W-13 | —        | Environment      | Smart App Control blocks unsigned, newly built executables on consumer Windows 11       | Documented; owner decision       |
-| W-14 | Low      | Desktop shell    | A second Juniper instance exits silently (`stage agent-runtime-lock failed`)            | Recorded, not changed            |
-| W-15 | Low      | Models screen    | Non-ASCII characters double-encoded by the W-04 edit (showed "Â·")                      | Fixed, verified                  |
+| Id   | Severity | Area             | Summary                                                                                               | Candidate status                  |
+| ---- | -------- | ---------------- | ----------------------------------------------------------------------------------------------------- | --------------------------------- |
+| W-01 | Critical | Model management | Main-thread stack overflow when an installed model is listed; the app exits silently                  | Fixed, verified; regression test  |
+| W-02 | Medium   | Desktop shell    | Main window opens under the taskbar and off-centre on a 1366x768 display                              | Fixed, verified; unit tests       |
+| W-03 | Low      | Agent projects   | Granted folders are shown and stored with the `\\?\` verbatim prefix                                  | Fixed, compiled only; unit test   |
+| W-04 | Low      | Models screen    | Native failure reasons replaced by generic "Download failed." style text                              | Fixed; frontend test              |
+| W-05 | Low      | Models screen    | "Free storage" does not change after a download, import or removal                                    | Fixed, verified; frontend test    |
+| W-06 | Medium   | Local runtime    | A terminal window opens in front of Juniper whenever `llama-server.exe` starts                        | Reproduced; fixed, verified       |
+| W-07 | High     | Local runtime    | `llama-server.exe` (up to gigabytes) outlives a killed or crashed Juniper                             | Reproduced; fixed, verified       |
+| W-08 | Medium   | Local runtime    | Every model listing and every server start re-hashes each model file on the main thread               | Reproduced; fixed, verified       |
+| W-09 | —        | Agent plugins    | Local MCP server launch on Windows (static finding)                                                   | Not reached; fixture prepared     |
+| W-11 | Low      | Documentation    | README, CHANGELOG and interface guide said 0.4.0-alpha.1 was "not yet published"                      | Fixed                             |
+| W-12 | Low      | Build            | The runtime build fails on a fresh Windows machine without Git long-path support                      | Documented                        |
+| W-13 | —        | Environment      | Smart App Control blocks unsigned, newly built executables on consumer Windows 11                     | Documented; owner decision        |
+| W-14 | Low      | Desktop shell    | A second Juniper instance exits silently (`stage agent-runtime-lock failed`)                          | Recorded, not changed             |
+| W-15 | Low      | Models screen    | Non-ASCII characters double-encoded by the W-04 edit (showed "Â·")                                    | Fixed, verified                   |
+| W-16 | High     | Model licensing  | Accepting a model license fails on Windows ("Access is denied"), so gated models cannot be downloaded | Reproduced; fixed, native tests   |
+| W-10 | Medium   | Native tests     | `cargo test` aborts on Windows with `STATUS_ENTRYPOINT_NOT_FOUND` before any test runs                | Root cause found; fixed, verified |
 
 ## W-01 Main-thread stack overflow when an installed model is listed
 
@@ -157,9 +158,32 @@ use the plugin's Test action.
 
 ## W-10 Native test loader
 
-Not diagnosable on CINQTOP: the debug-profile build scripts are blocked
-(W-13) before any test binary exists. The Windows CI job still runs the test
-binary as a diagnostic.
+Reproduced once Smart App Control was off: the harness binary
+`juniper_lib-<hash>.exe` exits with `0xc0000139` before `running N tests`.
+Every import of the binary was checked against the exports of the DLL it
+resolves to; one is missing: `TaskDialogIndirect` from `comctl32.dll`. That
+function exists only in Common Controls 6, the side-by-side assembly an
+executable gets when its application manifest requests it. tauri-build puts
+such a manifest into the resource it links into binaries
+(`cargo:rustc-link-arg-bins`), so `juniper.exe` loads Common Controls 6, but
+the test harness is a separate executable with no manifest and binds to the
+System32 `comctl32.dll` (version 5), which has no `TaskDialogIndirect`.
+
+Fix: `build.rs` keeps the resource without the manifest and asks the linker
+to embed `windows-app.manifest` (the same content) into every linked target
+with `/MANIFEST:EMBED` and `/MANIFESTINPUT`, on MSVC targets only. Verified
+with `mt.exe`: both the test binary and the packaged `juniper.exe` carry the
+Common Controls 6 dependency (the linker also adds `requestedExecutionLevel
+asInvoker`), and `cargo test` runs the suite (302 tests).
+
+Running the suite on Windows for the first time then found W-16 and three
+test-only Windows assumptions, all fixed on this branch: a fake server
+read from a socket that Winsock had left non-blocking after `accept`; two
+storage tests deleted a SQLite file while its connection was still open;
+and the Windows symlink fixture needs `SeCreateSymbolicLinkPrivilege`, which
+ordinary accounts lack without Developer Mode, so that test now says it was
+not run instead of failing on the fixture (CI runners are elevated and run
+it).
 
 ## W-11 Documentation
 
@@ -212,3 +236,22 @@ packaged candidate rendered "Â·" between model facts. Found by running the
 packaged build, restored by reversing the encoding, and checked by comparing
 the file's non-ASCII character inventory with the original. The frontend
 tests did not catch it because none asserts those separators.
+
+## W-16 Model license acceptance fails on Windows
+
+- Expected: accepting a model's license in the dialog records the acceptance
+  and the download starts (Nemotron 3 Nano 4B is the catalog entry that
+  requires acceptance in 0.4.0-alpha.1).
+- Actual (installed candidate, and by code the published MSI): after "Accept
+  and download" the Models screen shows "Access is denied. (os error 5)" and
+  nothing is downloaded. The native tests
+  `model_licenses::tests::a_required_license_is_refused_until_accepted_and_bound_to_its_revision`
+  and `native_download_and_import_refuse_a_gated_model_without_acceptance`
+  fail the same way on Windows (`MODEL_LICENSE_STORE_ERROR: Access is
+denied`), which W-10 had hidden.
+- Root cause: `model_licenses::write` wrote the staging file, then opened it
+  read-only and called `sync_all`. On Windows `FlushFileBuffers` needs a
+  handle with write access, so the flush fails and the record is never
+  renamed into place. Linux allows the flush on a read-only descriptor.
+- Fix: the staging file is written and flushed through the same writable
+  handle, then renamed. The two existing native tests cover it on Windows.

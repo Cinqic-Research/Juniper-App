@@ -95,3 +95,36 @@ A regression was found in this run and fixed before any review: the
 failure-text change had been written back through a shell that read the file
 as Windows-1252, so every "·", "…", "’" and "–" in the Models screen was
 double-encoded and the candidate showed "Â·" between model facts (W-15).
+
+### Installed candidate MSI (12:05 onwards)
+
+The rebuilt MSI (`Juniper_0.4.0-alpha.1_x64_en-US.msi` from `89b6d6e` plus
+the restored Models screen) installed after UAC consent in 10 s. It carries
+a `juniper_lib.dll` beside `juniper.exe` that the CI-built 0.4.0-alpha.1 MSI
+did not; the local build directory holds the crate's cdylib output and the
+bundler picked it up. Harmless, 2.5 MB, noted for the reviewer.
+
+| Case                                                        | Result | Notes                                                                                                         |
+| ----------------------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------- |
+| First launch after install (machine busy with `cargo test`) | PASS   | window 1.6 s, `frontend ready` 3.0 s, 406 MB working set, 0 console windows, window fitted above the taskbar  |
+| W-03: newly granted root shows the plain path               | PASS   | `C:\Users\…\JuniperTestProject\src` (read only); the root granted by the baseline keeps its stored `\?\` form |
+| Hidden-folder root refusal (`.cache` in the profile)        | PASS   | "Juniper does not grant a hidden configuration folder in your home folder to a project."                      |
+| W-15: separators in the Models screen                       | PASS   | "·" renders correctly                                                                                         |
+| License acceptance for Nemotron 3 Nano 4B                   | FAIL   | "Access is denied. (os error 5)" after Accept and download (W-16, fixed on the branch after this build)       |
+
+### Native test suite on Windows
+
+With the loader fix (W-10) the suite runs: the serialized run reports 287
+passed, 6 failed, 9 ignored in 63 s. One failure is W-16; four are
+test-only Windows assumptions (fixed on the branch); one needs the symlink
+privilege. The parallel run additionally ended abnormally once
+(`0xffffffff`) because the proxy fixture's server thread panicked under
+Winsock's non-blocking inheritance, which the same fix removes.
+
+With the fixes on the branch the suite passes on Windows: 293 passed, 0
+failed, 9 ignored in 16 s on an idle machine (`cargo test --locked`). Under
+heavy load (the application, clippy and the tests at once on four efficiency
+cores) one wall-clock assertion,
+`juniper1::tests::slow_runtimes_time_out_and_cancellation_stops_the_request`
+(cancellation under 1.2 s), can exceed its budget; it passes alone every
+time and is not Windows-specific.

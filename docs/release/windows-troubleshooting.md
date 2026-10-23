@@ -87,6 +87,15 @@ larger, so only Windows was affected. Fixed after `0.4.0-alpha.1`
 (`docs/qualification/cinqtop-windows-2026-10-23/defect-register.md`, W-01).
 There is no workaround in `0.4.0-alpha.1` other than not installing a model.
 
+### 0.4.0-alpha.1 cannot record a model license acceptance
+
+Accepting a license in the Models screen (Nemotron 3 Nano 4B in this
+catalog) ends with "Access is denied. (os error 5)" and the download does
+not start. The acceptance file was flushed through a read-only handle,
+which Windows refuses. Fixed after `0.4.0-alpha.1` (W-16). There is no
+workaround in `0.4.0-alpha.1`; models whose license needs no acceptance
+are unaffected.
+
 ### The window opens under the taskbar on small displays
 
 On a 1366x768 display the configured 1000x700 window plus its frame is taller
@@ -131,6 +140,12 @@ WebView2, Rust via `rustup` with the MSVC host), the repository needs:
 
   Run it from Git Bash with CMake and Node on `PATH`. A short build directory
   keeps the generated object paths under the limit as well.
+
+`cargo test` on Windows: one test creates a file symbolic link, which needs
+`SeCreateSymbolicLinkPrivilege`. Without Developer Mode or an elevated
+prompt that test reports that it was not run; the CI runner is elevated and
+runs it. The suite itself runs on Windows since the test harness gained an
+application manifest (see the CHANGELOG); before that it aborted at load.
 
 On CINQTOP (four efficiency cores) the runtime build took 13 minutes with
 `JUNIPER_LLAMA_BUILD_PARALLEL=2`; the first `cargo build --release` is

@@ -25,6 +25,12 @@ Windows repairs from the CINQTOP qualification
   so a listed or loaded model is not re-hashed on every use.
 - Fixed: Agent project roots are stored and shown as `C:\...` rather than
   `\\?\C:\...`.
+- Fixed: accepting a model license failed on Windows with "Access is
+  denied", so gated catalog models could not be downloaded there.
+- Fixed: `cargo test` aborted on Windows before running any test
+  (`STATUS_ENTRYPOINT_NOT_FOUND`): the test harness had no application
+  manifest and bound to the old `comctl32.dll`. The manifest is now embedded
+  by the linker for every target, and the suite runs on Windows.
 - Fixed: the Models screen shows the host's reason when a download, import,
   unload or removal fails, instead of "Download failed.", and refreshes the
   free-storage figure after a download, import or removal.
