@@ -835,11 +835,18 @@ pub(crate) async fn download_artifact<R: Runtime>(
     Ok(())
 }
 
+/// Read buffer for hashing a model file. It lives on the heap: sync Tauri
+/// commands such as `managed_models` run on the main thread, whose stack is
+/// 1 MiB on Windows, and a 1 MiB stack array there overflowed it (the
+/// 0.4.0-alpha.1 MSI crashed whenever the Models screen listed an installed
+/// model).
+const HASH_BUFFER_BYTES: usize = 1024 * 1024;
+
 fn hash_existing(path: &Path, hasher: &mut Sha256) -> Result<(), String> {
     let mut file = File::open(path).map_err(|error| error.to_string())?;
     file.seek(SeekFrom::Start(0))
         .map_err(|error| error.to_string())?;
-    let mut buffer = [0u8; 1024 * 1024];
+    let mut buffer = vec![0u8; HASH_BUFFER_BYTES];
     loop {
         let bytes = file.read(&mut buffer).map_err(|error| error.to_string())?;
         if bytes == 0 {
@@ -871,14 +878,49 @@ struct VerificationRecord {
 }
 
 #[cfg(unix)]
-fn changed_nanos(metadata: &fs::Metadata) -> Option<i128> {
+fn changed_nanos(file: &File) -> Option<i128> {
+    let metadata = file.metadata().ok()?;
     Some(i128::from(metadata.ctime()) * 1_000_000_000 + i128::from(metadata.ctime_nsec()))
 }
 
-// The portable metadata API exposes a user-settable modification time on
-// Windows. Without a change-time signal, the verification cache is disabled.
-#[cfg(not(unix))]
-fn changed_nanos(_metadata: &fs::Metadata) -> Option<i128> {
+// NTFS keeps a change time (100 ns units since 1601) that moves on every data
+// or attribute write, like Unix ctime, so size, mtime and change time together
+// identify the bytes that were hashed. It can be rewritten through
+// `NtSetInformationFile` by a process that can already write the model file,
+// which is inside the trust boundary the models folder has anyway (that
+// process could replace the file outright). Without it, every listing and
+// every server start re-hashed each model: about a second per 250 MB on a
+// laptop UFS drive, on the main thread. The portable metadata API does not
+// expose the change time on stable Rust, so it is read by handle.
+#[cfg(windows)]
+fn changed_nanos(file: &File) -> Option<i128> {
+    use std::os::windows::io::AsRawHandle;
+    use windows_sys::Win32::Storage::FileSystem::{
+        FILE_BASIC_INFO, FileBasicInfo, GetFileInformationByHandleEx,
+    };
+    let mut info = FILE_BASIC_INFO {
+        CreationTime: 0,
+        LastAccessTime: 0,
+        LastWriteTime: 0,
+        ChangeTime: 0,
+        FileAttributes: 0,
+    };
+    // SAFETY: the handle is open for the lifetime of `file`, and the buffer
+    // is exactly the structure the information class fills.
+    let read = unsafe {
+        GetFileInformationByHandleEx(
+            file.as_raw_handle(),
+            FileBasicInfo,
+            std::ptr::from_mut(&mut info).cast(),
+            std::mem::size_of::<FILE_BASIC_INFO>() as u32,
+        )
+    };
+    (read != 0 && info.ChangeTime > 0).then(|| i128::from(info.ChangeTime) * 100)
+}
+
+// No change-time signal: the verification cache stays disabled.
+#[cfg(not(any(unix, windows)))]
+fn changed_nanos(_file: &File) -> Option<i128> {
     None
 }
 
@@ -886,7 +928,7 @@ fn changed_nanos(_metadata: &fs::Metadata) -> Option<i128> {
 /// rapid same-size edit and mtime restore. Probe the model's own filesystem
 /// before trusting the verification cache; failure or coarse timestamps mean
 /// the model is rehashed on each use.
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn ctime_is_precise_enough(path: &Path) -> bool {
     let Some(parent) = path.parent() else {
         return false;
@@ -897,22 +939,21 @@ fn ctime_is_precise_enough(path: &Path) -> bool {
     ));
     let mut created = false;
     let result = (|| -> Option<bool> {
-        let mut file = OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .mode(0o600)
-            .open(&probe)
-            .ok()?;
+        let mut options = OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        options.mode(0o600);
+        let mut file = options.open(&probe).ok()?;
         created = true;
         file.write_all(&[0]).ok()?;
-        let mut previous = changed_nanos(&file.metadata().ok()?)?;
+        let mut previous = changed_nanos(&file)?;
         let started = std::time::Instant::now();
         for value in 1u8..=16 {
             file.set_len(0).ok()?;
             file.seek(SeekFrom::Start(0)).ok()?;
             file.write_all(&[value]).ok()?;
             file.flush().ok()?;
-            let current = changed_nanos(&file.metadata().ok()?)?;
+            let current = changed_nanos(&file)?;
             if current <= previous {
                 return Some(false);
             }
@@ -927,7 +968,7 @@ fn ctime_is_precise_enough(path: &Path) -> bool {
     result
 }
 
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 fn ctime_is_precise_enough(_path: &Path) -> bool {
     false
 }
@@ -955,7 +996,7 @@ fn current_record(path: &Path, sha256: Option<&str>) -> Option<VerificationRecor
             .duration_since(std::time::UNIX_EPOCH)
             .ok()?
             .as_nanos(),
-        changed_nanos: changed_nanos(&metadata),
+        changed_nanos: File::open(path).ok().and_then(|file| changed_nanos(&file)),
     })
 }
 
@@ -1290,7 +1331,6 @@ fn emit_progress<R: Runtime>(
 mod tests {
     use super::*;
 
-    #[cfg(unix)]
     fn artifact_for_test(size_bytes: u64, sha256: &str) -> CatalogArtifact {
         CatalogArtifact {
             id: "test-model-q4".into(),
@@ -1351,6 +1391,30 @@ mod tests {
         assert!(!verify_expected(&path, 11, &expected).expect("verify"));
         fs::write(&path, b"RIGHT_MODEL").expect("correct model");
         assert!(verify_expected(&path, 11, &expected).expect("verify correct bytes"));
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    /// Verification runs on the main thread of sync commands; on Windows that
+    /// stack is 1 MiB. A thread smaller than the old stack buffer proves the
+    /// hash no longer depends on a large stack (an overflow aborts the test
+    /// process, which is the failure signal on every platform).
+    #[test]
+    fn verification_runs_on_a_small_stack() {
+        let root =
+            std::env::temp_dir().join(format!("juniper-small-stack-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&root).expect("test directory should be created");
+        let path = root.join("model.gguf");
+        let bytes = vec![0x4Bu8; 3 * HASH_BUFFER_BYTES + 17];
+        fs::write(&path, &bytes).expect("model written");
+        let digest = format!("{:x}", Sha256::digest(&bytes));
+        let artifact = artifact_for_test(bytes.len() as u64, &digest);
+        let verified = std::thread::Builder::new()
+            .stack_size(HASH_BUFFER_BYTES / 2)
+            .spawn(move || verify_file(&path, &artifact))
+            .expect("small-stack thread")
+            .join()
+            .expect("verification thread completes");
+        assert_eq!(verified, Ok(true));
         fs::remove_dir_all(root).expect("cleanup");
     }
 
