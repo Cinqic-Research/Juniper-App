@@ -1415,6 +1415,10 @@ mod tests {
             while std::time::Instant::now() < deadline {
                 match listener.accept() {
                     Ok((mut stream, _)) => {
+                        // Winsock streams accepted from a non-blocking
+                        // listener are non-blocking too; the read below
+                        // relies on the timeout instead.
+                        stream.set_nonblocking(false).expect("blocking stream");
                         stream
                             .set_read_timeout(Some(Duration::from_secs(1)))
                             .expect("read timeout");

@@ -1419,6 +1419,8 @@ mod tests {
                 .query_row::<i64, _, _>("SELECT COUNT(*) FROM attachments", [], |row| row.get(0))?,
             1
         );
+        // Windows refuses to delete a file that is still open.
+        drop(connection);
         std::fs::remove_file(path).expect("temporary database should be removable");
         Ok(())
     }
@@ -1584,6 +1586,8 @@ mod tests {
             |row| row.get(0),
         )?;
         assert_eq!(PathBuf::from(stored_path), attachment);
+        // Windows refuses to delete a file that is still open.
+        drop(connection);
         std::fs::remove_file(database)?;
         std::fs::remove_file(attachment)?;
         Ok(())

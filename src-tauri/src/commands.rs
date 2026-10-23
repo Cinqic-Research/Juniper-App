@@ -1496,7 +1496,22 @@ mod tests {
             target.file_stem().unwrap_or_default().to_string_lossy()
         ));
         std::fs::write(&target, "linked content").expect("fixture should write");
-        symlink_file(&target, &link).expect("Windows file symlink should be created");
+        // Creating a symbolic link needs SeCreateSymbolicLinkPrivilege, which an
+        // ordinary account holds only with Developer Mode on. The CI runner is
+        // elevated and exercises the check; a developer machine without the
+        // privilege says so instead of failing on the fixture.
+        let created = symlink_file(&target, &link);
+        if let Err(error) = &created
+            && error.raw_os_error() == Some(1314)
+        {
+            eprintln!(
+                "attachment_grant_rejects_windows_file_symlinks_and_replacements: not run, \
+                 symbolic links need SeCreateSymbolicLinkPrivilege (Developer Mode or an elevated prompt)"
+            );
+            std::fs::remove_file(&target).expect("fixture should be removable");
+            return;
+        }
+        created.expect("Windows file symlink should be created");
         let state = AppState::default();
         assert!(register_attachment_path(&state, link.clone()).is_err());
         let grant = register_attachment_path(&state, target.clone()).expect("target should grant");

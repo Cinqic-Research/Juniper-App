@@ -4598,6 +4598,11 @@ data: [DONE]"#,
                     Err(error) => panic!("listener accept failed: {error}"),
                 }
             };
+            // Winsock sockets accepted from a non-blocking listener are
+            // non-blocking too; reads below rely on the timeout instead.
+            socket
+                .set_nonblocking(false)
+                .expect("socket should become blocking");
             socket
                 .set_read_timeout(Some(Duration::from_secs(1)))
                 .expect("socket should accept a read timeout");
