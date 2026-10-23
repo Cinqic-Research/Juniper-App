@@ -4,7 +4,9 @@ An engineering run on Cinqic's secondary Windows workstation against the
 published Juniper 0.4.0-Alpha MSI, followed by repairs on branch
 `engineering/cinqtop-windows-qualification`. These records are the
 implementer's own evidence (Claude Fable 5.1 in this session), not an
-independent review; the review happens on FLOWBOX afterwards.
+independent review. The owner has designated GPT-6.1 Sol as the independent
+reviewer, working on CINQTOP itself, where the toolchain, the final MSI and
+the test profile are already in place (see the handoff).
 
 | File                                                   | What it is                                                                             |
 | ------------------------------------------------------ | -------------------------------------------------------------------------------------- |

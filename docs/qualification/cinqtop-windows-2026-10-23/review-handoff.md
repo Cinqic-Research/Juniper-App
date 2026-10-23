@@ -117,8 +117,10 @@ Linux and failed only on new dependency advisories, fixed since.
   Agent tasks run, persist and accept steering with the fixture folder
   untouched, and the sandbox is disclosed unavailable.
 - W-16 was reproduced in the installed app ("Access is denied" after
-  accepting the NVIDIA terms). The fix is covered by the two native license
-  tests on Windows; the in-app re-check on the final MSI is listed below.
+  accepting the NVIDIA terms). On the final MSI the acceptance is recorded,
+  the download starts, and a second attempt does not ask again. The final
+  MSI was installed after the previous candidate was uninstalled; both
+  steps kept the user data.
 
 ## Before and after
 
@@ -133,7 +135,7 @@ Linux and failed only on new dependency advisories, fixed since.
 | Console windows while the runtime runs        | 1 (pseudo-console, visible)       | 0                                                 |
 | `llama-server.exe` after Juniper is killed    | still running                     | gone within 1.4 s                                 |
 | Second Models listing with 1.4 GB installed   | re-hashed (about 5 s)             | from cache, under 1.5 s                           |
-| License acceptance                            | fails                             | native tests pass; in-app re-check pending        |
+| License acceptance                            | fails                             | records and starts the download; no second prompt |
 | `cargo test` on Windows                       | aborts at load                    | 293 passed                                        |
 
 ## Security implications
@@ -151,9 +153,6 @@ asInvoker`, which the linker inserts; it matches the previous behaviour
 
 ## Remaining limitations and outstanding validation
 
-- In-app re-check of the license acceptance on the final MSI, and the
-  uninstall and reinstall of that MSI (both need the owner present for
-  UAC).
 - The locally built MSI carries a `juniper_lib.dll` beside `juniper.exe`
   that the CI-built package did not; the bundler picked up the crate's
   cdylib output from the local target directory. Harmless, but the reviewer
@@ -166,7 +165,28 @@ asInvoker`, which the linker inserts; it matches the previous behaviour
 
 ## Independent verification
 
-Steps in [README.md](README.md), "Reproducing on another Windows machine";
-for W-10, run `cargo test --locked` on a Windows machine and confirm with
+The owner has designated GPT-6.1 Sol as the independent reviewer, working on
+CINQTOP itself. What the reviewer finds there:
+
+- The repository at `C:\Users\<owner>\Documents\Juniper App` on the branch,
+  with Git, Node 24, pnpm 11.19, Rust 1.90 MSVC, CMake and the Visual Studio
+  Build Tools installed; `pnpm install --frozen-lockfile` done; the pinned
+  runtime at `src-tauri\runtime\llama-server.exe`; release and debug target
+  directories populated (about 33 GB of disk were free afterwards).
+- The final MSI installed under `C:\Program Files\Juniper` (the MSI copy and
+  its SHA-256 are in the evidence folder), and a profile under
+  `%APPDATA%\com.cinqic.juniper` with SmolLM2 360M and Qwen2.5 1.5B
+  installed, one Agent project with two roots, and the recorded Nemotron
+  acceptance. Move the profile aside to start from an empty one.
+- The baseline MSI (`Juniper-0.4.0-alpha.1-windows-x86_64.msi`, verified
+  SHA-256) and all probe logs, window captures and crash reports in the
+  session evidence folder under
+  `%LOCALAPPDATA%\Temp\claude\...\scratchpad\evidence\`; the launch probe
+  script is in `...\scratchpad\tools\launch-probe.ps1`.
+- Smart App Control is off; Windows Defender is unchanged.
+
+Steps in [README.md](README.md), "Reproducing on another Windows machine",
+apply unchanged. For W-10, run `cargo test --locked` and confirm with
 `mt.exe -inputresource:<test exe>;#1` that the harness carries the Common
-Controls 6 dependency.
+Controls 6 dependency. `cargo test` needs no elevation on CINQTOP except for
+the symlink fixture test, which reports that it was not run.

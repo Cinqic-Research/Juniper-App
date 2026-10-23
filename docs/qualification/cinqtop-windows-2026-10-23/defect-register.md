@@ -32,7 +32,7 @@ CI smoke, and a run on Windows hardware.
 | W-13 | —        | Environment      | Smart App Control blocks unsigned, newly built executables on consumer Windows 11                     | Documented; owner decision        |
 | W-14 | Low      | Desktop shell    | A second Juniper instance exits silently (`stage agent-runtime-lock failed`)                          | Recorded, not changed             |
 | W-15 | Low      | Models screen    | Non-ASCII characters double-encoded by the W-04 edit (showed "Â·")                                    | Fixed, verified                   |
-| W-16 | High     | Model licensing  | Accepting a model license fails on Windows ("Access is denied"), so gated models cannot be downloaded | Reproduced; fixed, native tests   |
+| W-16 | High     | Model licensing  | Accepting a model license fails on Windows ("Access is denied"), so gated models cannot be downloaded | Fixed, verified                   |
 | W-10 | Medium   | Native tests     | `cargo test` aborts on Windows with `STATUS_ENTRYPOINT_NOT_FOUND` before any test runs                | Root cause found; fixed, verified |
 
 ## W-01 Main-thread stack overflow when an installed model is listed
@@ -254,4 +254,6 @@ denied`), which W-10 had hidden.
   handle with write access, so the flush fails and the record is never
   renamed into place. Linux allows the flush on a read-only descriptor.
 - Fix: the staging file is written and flushed through the same writable
-  handle, then renamed. The two existing native tests cover it on Windows.
+  handle, then renamed. The two existing native tests cover it on Windows,
+  and the installed final MSI recorded the Nemotron acceptance and started
+  the download; a second attempt resumed without asking again.

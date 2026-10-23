@@ -140,3 +140,20 @@ time and is not Windows-specific.
 Baseline MSI for comparison (same machine, mains power, first run busy with a
 toolchain install): cold 5.2 s / 6.8 s, warm 0.4-0.6 s / 1.5-2.4 s, 380-401
 MB. The candidate is not slower at launch and uses no more memory.
+
+### Final MSI: uninstall, reinstall and the license re-check (16:28 onwards)
+
+The installed candidate was uninstalled by product code (7 s, UAC consent;
+program folder, shortcuts and Apps entry removed, database and models kept)
+and the MSI built from `812300c` installed in its place (5 s after the UAC
+prompt was approved on the second attempt; the first prompt was dismissed).
+The installed `juniper.exe` equals the build output except for three bytes,
+where the bundler stamps the package type ("MSI" instead of "UNK"), so the
+timings measured on the build output apply to the installed copy; its own
+first launch: window 1.8 s, `frontend ready` 2.7 s, 394 MB, no console.
+
+| Case                                                        | Result | Notes                                                                                                                          |
+| ----------------------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| Accept the NVIDIA Open Model License for Nemotron 3 Nano 4B | PASS   | the download started (W-16); `%APPDATA%\com.cinqic.juniper\model-licenses.json` holds the entry with the pinned terms revision |
+| Pause, then download again                                  | PASS   | resumed from 8% with no license dialog: the saved acceptance is honoured                                                       |
+| Remove the partial download                                 | PASS   | confirmation dialog; `.part` and journal files removed; the other two models untouched                                         |
