@@ -6,10 +6,38 @@ version 0.4.0.1. Earlier prereleases (`0.3.0-rc.N`) are recorded in
 [docs/release/](docs/release/) and on the
 [releases page](https://github.com/Cinqic-Research/Juniper-App/releases).
 
-## Juniper 0.4.0-Alpha (`0.4.0-alpha.1`) — not yet published
+## Unreleased
+
+Windows repairs from the CINQTOP qualification
+([docs/qualification/cinqtop-windows-2026-10-23/](docs/qualification/cinqtop-windows-2026-10-23/README.md)):
+
+- Fixed: on Windows the application exited with a stack overflow whenever an
+  installed model was listed (a model download completing, or opening Models
+  with a model installed). The verification hash used a 1 MiB stack buffer on
+  the 1 MiB main thread. Every Windows user of 0.4.0-alpha.1 was affected.
+- Fixed: `llama-server.exe`, `ollama` and local MCP servers no longer open a
+  console window of their own on Windows.
+- Fixed: on Windows the local runtime and local MCP servers are placed in a
+  job object, so they end with Juniper even when it is killed.
+- Fixed: the main window is fitted to the monitor's work area and centred, so
+  it no longer opens under the taskbar on small displays.
+- Fixed: the model verification cache now works on Windows (NTFS change time),
+  so a listed or loaded model is not re-hashed on every use.
+- Fixed: Agent project roots are stored and shown as `C:\...` rather than
+  `\\?\C:\...`.
+- Fixed: the Models screen shows the host's reason when a download, import,
+  unload or removal fails, instead of "Download failed.", and refreshes the
+  free-storage figure after a download, import or removal.
+- Docs: README, CHANGELOG and the interface guide no longer describe
+  0.4.0-alpha.1 as unpublished; Windows setup and troubleshooting are in
+  `docs/release/windows-troubleshooting.md`.
+
+## Juniper 0.4.0-Alpha (`0.4.0-alpha.1`) — published 2026-10-17
 
 An alpha prerelease, not a stable release. Gates and evidence:
-[docs/release/juniper-0.4.0-alpha-readiness-review.md](docs/release/juniper-0.4.0-alpha-readiness-review.md).
+[docs/release/juniper-0.4.0-alpha-readiness-review.md](docs/release/juniper-0.4.0-alpha-readiness-review.md);
+publication record:
+[docs/release/juniper-0.4.0-alpha-publication-record.md](docs/release/juniper-0.4.0-alpha-publication-record.md).
 
 ### Agent (Beta)
 

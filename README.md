@@ -2,18 +2,18 @@
 
 Juniper is a local-first AI desktop and Android app for people who want a thoughtful assistant, visible model controls, and a clear boundary around private data. It works with compatible text-generation models through supported runtimes; no model family is required and no model is bundled.
 
-**Source version `0.4.0-alpha.1` ("Juniper 0.4.0-Alpha") — alpha, not yet published.** The latest published prerelease is `0.3.0-rc.33`. What changes in 0.4.0-Alpha is in [CHANGELOG.md](CHANGELOG.md); its release gates and evidence are in [docs/release/juniper-0.4.0-alpha-readiness-review.md](docs/release/juniper-0.4.0-alpha-readiness-review.md). The guarded release workflow builds and packages the Juniper-owned local runtime for desktop targets only after the validation and immutable-tag gates pass. See [Download](#download).
+**Current version `0.4.0-alpha.1` ("Juniper 0.4.0-Alpha"), published as a prerelease on 2026-10-17.** What changed in 0.4.0-Alpha is in [CHANGELOG.md](CHANGELOG.md); its release gates and evidence are in [docs/release/juniper-0.4.0-alpha-readiness-review.md](docs/release/juniper-0.4.0-alpha-readiness-review.md) and the publication record in [docs/release/juniper-0.4.0-alpha-publication-record.md](docs/release/juniper-0.4.0-alpha-publication-record.md). The guarded release workflow builds and packages the Juniper-owned local runtime for desktop targets only after the validation and immutable-tag gates pass. See [Download](#download).
 
 ## Download
 
-The current published prerelease is [Juniper 0.3.0-rc.33](https://github.com/Cinqic-Research/Juniper-App/releases/tag/v0.3.0-rc.33); the files below are its files. Juniper 0.4.0-Alpha (`v0.4.0-alpha.1`) is not yet published; its planned files and checks are in [docs/release/juniper-0.4.0-alpha-release-plan.md](docs/release/juniper-0.4.0-alpha-release-plan.md). Installers are published on the [GitHub releases page](https://github.com/Cinqic-Research/Juniper-App/releases) only after an authorized release workflow completes. You do not need Git, a build toolchain, or a GitHub account to use a published desktop artifact.
+The current published prerelease is [Juniper 0.4.0-Alpha](https://github.com/Cinqic-Research/Juniper-App/releases/tag/v0.4.0-alpha.1) (`v0.4.0-alpha.1`); the files below are its files. Installers are published on the [GitHub releases page](https://github.com/Cinqic-Research/Juniper-App/releases) only after an authorized release workflow completes. You do not need Git, a build toolchain, or a GitHub account to use a published desktop artifact.
 
-| Platform          | File                                        | Notes                                                 |
-| ----------------- | ------------------------------------------- | ----------------------------------------------------- |
-| Windows 10/11 x64 | `Juniper-0.3.0-rc.33-windows-x86_64.msi`    | Unsigned; the bundled local runtime is Juniper-owned. |
-| Linux x86_64      | `Juniper-0.3.0-rc.33-linux-x86_64.AppImage` | `chmod +x`, then run. Needs FUSE (`fuse3`).           |
-| Linux x86_64      | `Juniper-0.3.0-rc.33-linux-x86_64.deb`      | `sudo apt install ./Juniper-...deb`.                  |
-| Android 7.0+      | `Juniper-0.3.0-rc.33-android-universal.apk` | Signed; Android llama.cpp remains Beta.               |
+| Platform          | File                                          | Notes                                                                                              |
+| ----------------- | --------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Windows 10/11 x64 | `Juniper-0.4.0-alpha.1-windows-x86_64.msi`    | Unsigned (SmartScreen warns); the bundled local runtime is Juniper-owned. See [Windows](#windows). |
+| Linux x86_64      | `Juniper-0.4.0-alpha.1-linux-x86_64.AppImage` | `chmod +x`, then run. Needs FUSE (`fuse3`).                                                        |
+| Linux x86_64      | `Juniper-0.4.0-alpha.1-linux-x86_64.deb`      | `sudo apt install ./Juniper-...deb`.                                                               |
+| Android 7.0+      | `Juniper-0.4.0-alpha.1-android-universal.apk` | Signed; Android llama.cpp remains Beta.                                                            |
 
 Verify a download against `SHA256SUMS.txt` from the same release:
 
@@ -27,7 +27,7 @@ Juniper’s desktop bundle owns its loopback `llama-server` process, so ordinary
 
 ## What Juniper does
 
-Features marked **(source)** are in this source tree (`0.4.0-alpha.1`, not yet published) but not in the published `0.3.0-rc.33` installers.
+Features marked **(source)** arrived in `0.4.0-alpha.1` and are not in the earlier `0.3.0-rc.33` installers.
 
 - **Agent (Beta) (source).** A personal agent beside Chat. Give it a goal and it works through it with the tools and folders you allow: project folders (read, search, diff-previewed writes), web search and page reading with source-linked citations, documents it saves, skills, optional MCP plugins, sandboxed Python on Linux, bounded helper subtasks, and schedules that run while Juniper is open. It asks before changing anything, shows a plan and every action, and can be paused, steered, cancelled, or stopped entirely. See [docs/architecture/agent-runtime.md](docs/architecture/agent-runtime.md).
 - A chat-first interface: Chat, Agent (Beta), Models, and Settings are the primary destinations (rc.33: Chats, Models, Settings). Conversation actions live in an overflow menu, the model is a compact picker that shows where each model runs, and reasoning, tool activity, and usage are one tap away instead of always on screen. See [docs/product/interface.md](docs/product/interface.md).
@@ -113,6 +113,17 @@ JUNIPER_LIVE_OLLAMA_MODEL=qwen3:0.6b \
 ```
 
 Suites whose capability gate the model does not meet are reported NOT-APPLICABLE, never as passes. That evidence covers the optional Ollama adapter; the standalone runtime is qualified separately by release artifact smoke and a model download/inference run.
+
+## Windows
+
+The MSI installs to `C:\Program Files\Juniper` after a User Account Control
+prompt and keeps its data under `%APPDATA%\com.cinqic.juniper`. It is not
+code-signed, so SmartScreen warns and machines with Smart App Control turned
+on may refuse it. Startup diagnostics, data locations, known Windows
+problems and the extra build steps a Windows machine needs are in
+[docs/release/windows-troubleshooting.md](docs/release/windows-troubleshooting.md);
+the hardware qualification of `0.4.0-alpha.1` on a Windows 11 laptop is in
+[docs/qualification/cinqtop-windows-2026-10-23/](docs/qualification/cinqtop-windows-2026-10-23/README.md).
 
 ## Known limitations
 
