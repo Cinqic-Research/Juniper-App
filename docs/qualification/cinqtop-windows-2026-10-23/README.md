@@ -6,13 +6,14 @@ published Juniper 0.4.0-Alpha MSI, followed by repairs on branch
 implementer's own evidence (Claude Fable 5.1 in this session), not an
 independent review; the review happens on FLOWBOX afterwards.
 
-| File                                                   | What it is                                                            |
-| ------------------------------------------------------ | --------------------------------------------------------------------- |
-| [hardware-qualification.md](hardware-qualification.md) | Verified CINQTOP hardware, software, resource baseline and budget     |
-| [cinqtop-inventory.json](cinqtop-inventory.json)       | The same inventory, machine-readable                                  |
-| [baseline-test-report.md](baseline-test-report.md)     | What the published 0.4.0-alpha.1 MSI did on CINQTOP, case by case     |
-| [defect-register.md](defect-register.md)               | W-01 to W-14: reproduction, root cause, fix and verification state    |
-| [candidate-test-report.md](candidate-test-report.md)   | What the branch build did on CINQTOP, and what could not be run there |
+| File                                                   | What it is                                                                             |
+| ------------------------------------------------------ | -------------------------------------------------------------------------------------- |
+| [hardware-qualification.md](hardware-qualification.md) | Verified CINQTOP hardware, software, resource baseline and budget                      |
+| [cinqtop-inventory.json](cinqtop-inventory.json)       | The same inventory, machine-readable                                                   |
+| [baseline-test-report.md](baseline-test-report.md)     | What the published 0.4.0-alpha.1 MSI did on CINQTOP, case by case                      |
+| [defect-register.md](defect-register.md)               | W-01 to W-14: reproduction, root cause, fix and verification state                     |
+| [candidate-test-report.md](candidate-test-report.md)   | What the branch build did on CINQTOP, and what could not be run there                  |
+| [review-handoff.md](review-handoff.md)                 | Commits, changes, tests, evidence, limitations and verification steps for the reviewer |
 
 ## Summary
 
