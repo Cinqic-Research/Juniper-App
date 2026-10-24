@@ -137,6 +137,12 @@ generic message.
 
 ## W-08 Re-hashing on every listing and start
 
+Independent review correction (2026-10-24): the historical timing below did
+not prove cache reuse. The native rapid-edit regression found repeated NTFS
+change timestamps even after closing writers. The corrected probe retains
+the conservative rehash fallback; W-08's performance goal remains unqualified
+on CINQTOP. See [independent-review.md](independent-review.md).
+
 - Expected: a model verified once in a session is not hashed again while its
   size, modification time and change time are unchanged (the Linux
   behaviour).

@@ -74,9 +74,9 @@ impl Resident {
 #[derive(Clone)]
 struct Route {
     endpoint: String,
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
     port: u16,
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
     owner_pid: Option<u32>,
     api_key: String,
     identity: RuntimeIdentity,
@@ -464,7 +464,7 @@ fn text_policy(route: &Route) -> RequestPolicy {
             Backend::GptOss(Box::new(profile))
         }),
         loopback_key: Some(route.api_key.clone()),
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "windows"))]
         loopback_owner: route.owner_pid.map(|pid| (pid, route.port)),
         lineage: Some(route.lineage.clone()),
     }
@@ -590,17 +590,17 @@ async fn start<R: Runtime>(
         ]),
     }
     let (child_pid, diagnostics) = spawn(command, &args, starting)?;
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
     let owner_pid = child_pid;
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
     let pid = owner_pid;
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(any(target_os = "linux", target_os = "windows")))]
     let _ = child_pid;
     let route = Route {
         endpoint: format!("http://127.0.0.1:{port}"),
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "windows"))]
         port,
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "windows"))]
         owner_pid,
         api_key: key.secret.clone(),
         identity: RuntimeIdentity {
@@ -650,7 +650,7 @@ async fn start<R: Runtime>(
         // llama-server listens before it loads the model, and only after
         // parsing its arguments, so a listener that is provably the child's
         // means the key file has been read.
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "windows"))]
         {
             wait_until(starting, startup_timeout, cancellation, || async {
                 pid.is_some_and(|pid| listener_belongs_to(pid, port))
@@ -659,7 +659,7 @@ async fn start<R: Runtime>(
             drop(key);
         }
         wait_until(starting, startup_timeout, cancellation, || healthy(&route)).await?;
-        #[cfg(not(target_os = "linux"))]
+        #[cfg(not(any(target_os = "linux", target_os = "windows")))]
         drop(key);
         let props = fetch_props(&route).await?;
         check_ownership(&props, &model_path_text)?;
@@ -707,17 +707,15 @@ fn spawn(
             Ok(())
         });
     }
-    let mut child = crate::child::without_console(&mut command)
+    command
         .args(args)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
-        .kill_on_drop(true)
-        .spawn()
-        .map_err(|_| {
-            "LOCAL_RUNTIME_UNAVAILABLE: Juniper's local runtime could not be started.".to_owned()
-        })?;
-    crate::child::end_with_parent(&child);
+        .kill_on_drop(true);
+    let mut child = crate::child::spawn_owned(&mut command).map_err(|_| {
+        "LOCAL_RUNTIME_UNAVAILABLE: Juniper's local runtime could not be started.".to_owned()
+    })?;
     let diagnostics = capture_stderr(&mut child);
     let pid = child.id();
     *starting.lock().map_err(|_| state_error())? = Some(child);
@@ -822,9 +820,9 @@ async fn start_token_ids<R: Runtime>(
     });
     let route = Route {
         endpoint,
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "windows"))]
         port,
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "windows"))]
         owner_pid: child_pid,
         api_key: key.secret.clone(),
         identity,
@@ -837,7 +835,7 @@ async fn start_token_ids<R: Runtime>(
     // separate health polling limits cannot bound a stalled self-test.
     let ready = tokio::select! {
         result = timeout(startup_timeout, async {
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "windows"))]
         {
             wait_until(starting, startup_timeout, cancellation, || async {
                 child_pid.is_some_and(|pid| listener_belongs_to(pid, port))
@@ -846,7 +844,7 @@ async fn start_token_ids<R: Runtime>(
             drop(key);
         }
         wait_until(starting, startup_timeout, cancellation, || healthy(&route)).await?;
-        #[cfg(not(target_os = "linux"))]
+        #[cfg(not(any(target_os = "linux", target_os = "windows")))]
         drop(key);
         let props = fetch_props(&route).await?;
         check_ownership(&props, &model_path_text)?;
@@ -1030,17 +1028,16 @@ fn build_matches(build: &str, commit: &str) -> bool {
 /// `version: 0.5.0-dev (build 11270, commit 748d4225b)`.
 async fn runtime_build(executable: &Path) -> Option<String> {
     let mut command = tokio::process::Command::new(executable);
-    let output = timeout(
-        PROBE_TIMEOUT,
-        crate::child::without_console(&mut command)
-            .arg("--version")
-            .stdin(Stdio::null())
-            .kill_on_drop(true)
-            .output(),
-    )
-    .await
-    .ok()?
-    .ok()?;
+    command
+        .arg("--version")
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let child = crate::child::spawn_owned(&mut command).ok()?;
+    let output = timeout(PROBE_TIMEOUT, child.wait_with_output())
+        .await
+        .ok()?
+        .ok()?;
     let text = format!(
         "{}{}",
         String::from_utf8_lossy(&output.stdout),
@@ -1051,16 +1048,15 @@ async fn runtime_build(executable: &Path) -> Option<String> {
 
 async fn runtime_has_cuda_device(executable: &Path) -> bool {
     let mut command = tokio::process::Command::new(executable);
-    let Ok(output) = timeout(
-        PROBE_TIMEOUT,
-        crate::child::without_console(&mut command)
-            .arg("--list-devices")
-            .stdin(Stdio::null())
-            .kill_on_drop(true)
-            .output(),
-    )
-    .await
-    else {
+    command
+        .arg("--list-devices")
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let Ok(child) = crate::child::spawn_owned(&mut command) else {
+        return false;
+    };
+    let Ok(output) = timeout(PROBE_TIMEOUT, child.wait_with_output()).await else {
         return false;
     };
     let Ok(output) = output else { return false };
@@ -1196,12 +1192,90 @@ pub(crate) fn listener_belongs_to(pid: u32, port: u16) -> bool {
     })
 }
 
+/// Match an exact IPv4 loopback listener to its owning process before
+/// disclosing the runtime's per-launch key or any conversation content.
+#[cfg(target_os = "windows")]
+pub(crate) fn listener_belongs_to(pid: u32, port: u16) -> bool {
+    use windows_sys::Win32::Foundation::ERROR_INSUFFICIENT_BUFFER;
+    use windows_sys::Win32::NetworkManagement::IpHelper::{
+        GetExtendedTcpTable, MIB_TCP_STATE_LISTEN, MIB_TCPROW_OWNER_PID, MIB_TCPTABLE_OWNER_PID,
+        TCP_TABLE_OWNER_PID_LISTENER,
+    };
+    use windows_sys::Win32::Networking::WinSock::AF_INET;
+    let mut bytes = 0u32;
+    // DWORD storage provides the alignment required by the native table.
+    // A changing socket table can require a larger buffer on the second call.
+    let first = unsafe {
+        GetExtendedTcpTable(
+            std::ptr::null_mut(),
+            &mut bytes,
+            0,
+            u32::from(AF_INET),
+            TCP_TABLE_OWNER_PID_LISTENER,
+            0,
+        )
+    };
+    if first != ERROR_INSUFFICIENT_BUFFER {
+        return false;
+    }
+    for _ in 0..3 {
+        if !(4..=16 * 1024 * 1024).contains(&bytes) {
+            return false;
+        }
+        let mut table = vec![0u32; (bytes as usize).div_ceil(4)];
+        let result = unsafe {
+            GetExtendedTcpTable(
+                table.as_mut_ptr().cast(),
+                &mut bytes,
+                0,
+                u32::from(AF_INET),
+                TCP_TABLE_OWNER_PID_LISTENER,
+                0,
+            )
+        };
+        if result == ERROR_INSUFFICIENT_BUFFER {
+            continue;
+        }
+        if result != 0 {
+            return false;
+        }
+        let count = table[0] as usize;
+        let offset = std::mem::offset_of!(MIB_TCPTABLE_OWNER_PID, table);
+        let row_size = std::mem::size_of::<MIB_TCPROW_OWNER_PID>();
+        if offset + count.saturating_mul(row_size) > table.len() * 4 {
+            return false;
+        }
+        for index in 0..count {
+            // Bounds and DWORD alignment are checked above; copy each row so
+            // no native pointer or borrowed view outlives the table storage.
+            let row = unsafe {
+                std::ptr::read_unaligned(
+                    table
+                        .as_ptr()
+                        .cast::<u8>()
+                        .add(offset + index * row_size)
+                        .cast::<MIB_TCPROW_OWNER_PID>(),
+                )
+            };
+            if row.dwState == MIB_TCP_STATE_LISTEN as u32
+                && row.dwLocalAddr == u32::from_ne_bytes(std::net::Ipv4Addr::LOCALHOST.octets())
+                && u16::from_be(row.dwLocalPort as u16) == port
+                && row.dwOwningPid == pid
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+    false
+}
+
 /// `/props` requires the per-launch key, so only the server Juniper started
 /// (or something that already holds the key) can answer it.
 async fn fetch_props(route: &Route) -> Result<Value, String> {
     let unidentified =
         || "RUNTIME_IDENTITY_MISMATCH: The local runtime did not report its identity.".to_owned();
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
     ensure_route_listener_owner(route)?;
     let response = client()?
         .get(format!("{}/props", route.endpoint))
@@ -1217,9 +1291,9 @@ async fn fetch_props(route: &Route) -> Result<Value, String> {
 }
 
 /// The server that answers must be serving the file Juniper asked it to load.
-/// On Linux `listener_belongs_to` has already proven the listener is the
-/// child's; elsewhere this is the only check, and it does not stop a process
-/// that took the port first from receiving the key.
+/// On Linux and Windows `listener_belongs_to` has already proven the listener
+/// belongs to the child before its key is disclosed. Other desktop platforms
+/// do not yet provide this listener-ownership qualification.
 fn check_ownership(props: &Value, model_path: &str) -> Result<(), String> {
     if props["model_path"].as_str() == Some(model_path) {
         Ok(())
@@ -1231,7 +1305,7 @@ fn check_ownership(props: &Value, model_path: &str) -> Result<(), String> {
     }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 fn ensure_route_listener_owner(route: &Route) -> Result<(), String> {
     if !route
         .owner_pid
@@ -1270,7 +1344,7 @@ fn check_props(props: &Value, profile: &BackendProfile) -> Result<(), String> {
 /// One throwaway request so the first real answer does not pay for faulting
 /// CPU-side experts into memory.
 async fn warm_up(route: &Route, cancellation: &Cancellation) -> Result<(), String> {
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
     ensure_route_listener_owner(route)?;
     let call = client()?
         .post(format!("{}/v1/chat/completions", route.endpoint))
@@ -1443,9 +1517,9 @@ mod tests {
         });
         let route = Route {
             endpoint: format!("http://127.0.0.1:{port}"),
-            #[cfg(target_os = "linux")]
+            #[cfg(any(target_os = "linux", target_os = "windows"))]
             port,
-            #[cfg(target_os = "linux")]
+            #[cfg(any(target_os = "linux", target_os = "windows"))]
             owner_pid: Some(std::process::id()),
             api_key: "synthetic-test-key".into(),
             identity: RuntimeIdentity::default(),
@@ -1468,7 +1542,7 @@ mod tests {
         backend::profile("gpt-oss-20b-mxfp4-flowbox.v1").expect("bundled profile")
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
     #[test]
     fn only_the_process_holding_the_listener_owns_the_port() {
         let listener =
@@ -1479,6 +1553,44 @@ mod tests {
         assert!(!listener_belongs_to(1, port));
         drop(listener);
         assert!(!listener_belongs_to(std::process::id(), port));
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
+    #[test]
+    fn a_port_squatter_never_receives_runtime_credentials_or_warm_up() {
+        let listener = std::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        listener.set_nonblocking(true).unwrap();
+        let route = Route {
+            endpoint: format!("http://127.0.0.1:{port}"),
+            port,
+            owner_pid: Some(0),
+            api_key: "must-not-be-sent".into(),
+            identity: RuntimeIdentity::default(),
+            profile: None,
+            token_ids: None,
+            lineage: String::new(),
+        };
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        runtime.block_on(async {
+            assert!(
+                fetch_props(&route)
+                    .await
+                    .unwrap_err()
+                    .starts_with("LOCAL_RUNTIME_UNAVAILABLE")
+            );
+            assert!(
+                warm_up(&route, &Cancellation::default())
+                    .await
+                    .unwrap_err()
+                    .starts_with("LOCAL_RUNTIME_UNAVAILABLE")
+            );
+        });
+        assert_eq!(
+            listener.accept().unwrap_err().kind(),
+            std::io::ErrorKind::WouldBlock,
+            "no authenticated connection may reach a listener owned by another process"
+        );
     }
 
     #[test]
@@ -1651,9 +1763,9 @@ mod tests {
                 child,
                 route: Route {
                     endpoint: "http://127.0.0.1:9".into(),
-                    #[cfg(target_os = "linux")]
+                    #[cfg(any(target_os = "linux", target_os = "windows"))]
                     port: 9,
-                    #[cfg(target_os = "linux")]
+                    #[cfg(any(target_os = "linux", target_os = "windows"))]
                     owner_pid: Some(pid),
                     api_key: "key".into(),
                     identity: RuntimeIdentity::default(),
@@ -1694,9 +1806,9 @@ mod tests {
                 child,
                 route: Route {
                     endpoint: "http://127.0.0.1:9".into(),
-                    #[cfg(target_os = "linux")]
+                    #[cfg(any(target_os = "linux", target_os = "windows"))]
                     port: 9,
-                    #[cfg(target_os = "linux")]
+                    #[cfg(any(target_os = "linux", target_os = "windows"))]
                     owner_pid: None,
                     api_key: "key".into(),
                     identity: RuntimeIdentity::default(),

@@ -1,5 +1,11 @@
 # Independent-review handoff: CINQTOP Windows qualification and repairs
 
+Review follow-up (2026-10-24): this original engineering handoff is preserved
+as historical evidence. Its W-08 cache attribution was not confirmed by native
+rapid-edit testing; the safe rehash fallback remains necessary on CINQTOP.
+See [independent-review.md](independent-review.md) for the independent findings,
+corrections, exact-candidate checks and final decision.
+
 Repository `Cinqic-Research/Juniper-App`, branch
 `engineering/cinqtop-windows-qualification`, base `main`
 `fc1f1d7937995ca68d14e8df1682f6869ae90d8b`, draft pull request #54. The

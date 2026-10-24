@@ -1,6 +1,11 @@
 # ADR 0028: Resumable model transfers and dated catalog research
 
-Status: Proposed for review on the "Fixing Up A Little" branch (draft PR #49).
+Status: Implemented in `main` (PR #49, hardened in PR #51).
+
+Originally proposed for review on the "Fixing Up A Little" branch while PR #49
+was a draft. The dated research and artifact qualification limits below remain
+unchanged.
+
 It extends ADR-0018.
 
 ## Context

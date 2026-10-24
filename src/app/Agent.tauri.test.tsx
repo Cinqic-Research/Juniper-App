@@ -1,8 +1,28 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { afterEach, beforeAll, describe, expect, it } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { initialAppData } from '../lib/defaults'
 import type { AgentOverview, AgentTask, TaskDetail } from '../types/agent'
+
+const { eventListeners } = vi.hoisted(() => ({
+  eventListeners: new Set<(event: { payload: { kind: string } }) => void>(),
+}))
+vi.mock('@tauri-apps/api/event', () => ({
+  listen: async (_topic: string, handler: (event: { payload: { kind: string } }) => void) => {
+    eventListeners.add(handler)
+    return () => eventListeners.delete(handler)
+  },
+}))
+
+function emitAgentEvent() {
+  for (const handler of eventListeners) handler({ payload: { kind: 'task' } })
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((done) => (resolve = done))
+  return { promise, resolve }
+}
 
 // The Agent screen reads everything from the native host. These tests stand
 // in for the host at the IPC boundary and check what the screen shows and
@@ -170,6 +190,72 @@ describe('Agent screen (Beta)', () => {
     act(() => root?.unmount())
     container?.remove()
     invocations = []
+    eventListeners.clear()
+  })
+
+  it('rechecks the overview when an event arrives during an in-flight refresh', async () => {
+    const pending = deferred<AgentOverview>()
+    let reads = 0
+    respond = (command) => {
+      if (command !== 'agent_overview') return null
+      reads += 1
+      if (reads === 2) return pending.promise
+      return reads > 2 ? { ...overview, tasks: [{ ...task, status: 'completed' }] } : overview
+    }
+    await mount()
+    await act(async () => emitAgentEvent())
+    await act(async () => emitAgentEvent())
+    await act(async () => pending.resolve(overview))
+    await settle()
+    expect(reads).toBe(3)
+    expect(container.querySelector('.task-status')?.textContent).toBe('Completed')
+  })
+
+  it('keeps newer task details when an older request finishes last', async () => {
+    const older = deferred<TaskDetail>()
+    const newer = deferred<TaskDetail>()
+    let reads = 0
+    respond = (command) => {
+      if (command === 'agent_overview') return overview
+      if (command === 'task_detail') {
+        reads += 1
+        return reads === 1 ? detail : reads === 2 ? older.promise : newer.promise
+      }
+      return null
+    }
+    await mount()
+    await act(async () => button(task.title).click())
+    await settle()
+    await act(async () => emitAgentEvent())
+    await act(async () => emitAgentEvent())
+    await act(async () => newer.resolve({ ...detail, task: { ...task, status: 'completed' } }))
+    await act(async () => older.resolve(detail))
+    await settle()
+    expect(container.querySelector('.task-status')?.textContent).toBe('Completed')
+  })
+
+  it('does not apply an old task response after opening a subtask', async () => {
+    const pending = deferred<TaskDetail>()
+    const child = { ...task, id: 'child-1', title: 'Child task', parentId: task.id }
+    let reads = 0
+    respond = (command, args) => {
+      if (command === 'agent_overview') return overview
+      if (command === 'task_detail') {
+        if (args?.taskId === child.id) return { ...detail, task: child, children: [] }
+        reads += 1
+        return reads === 1 ? { ...detail, children: [child] } : pending.promise
+      }
+      return null
+    }
+    await mount()
+    await act(async () => button(task.title).click())
+    await settle()
+    await act(async () => emitAgentEvent())
+    await act(async () => button(child.title).click())
+    await settle()
+    await act(async () => pending.resolve(detail))
+    await settle()
+    expect(container.querySelector('h1')?.textContent).toBe(child.title)
   })
 
   it('labels the beta, lists tasks that need the user, and sends only an approval intent', async () => {

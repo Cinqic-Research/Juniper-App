@@ -328,6 +328,7 @@ jobs:
         with:
           name: windows-smoke-evidence
           path: |
+            windows-artifacts/*.msi
             windows-artifacts/*.txt
             windows-artifacts/windows-smoke/**/*.txt
             windows-artifacts/windows-smoke/**/*.png

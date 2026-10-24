@@ -121,6 +121,12 @@ pub fn accept_in(directory: &Path, entry: &CatalogEntry) -> Result<(), String> {
             .insert(one_time_key(directory, entry));
         return Ok(());
     }
+    // Atomic replacement prevents partial JSON, but parallel native callers
+    // must also serialize the read-modify-write to retain each other's choices.
+    static PERSISTENT_WRITES: Mutex<()> = Mutex::new(());
+    let _write = PERSISTENT_WRITES
+        .lock()
+        .map_err(|_| "MODEL_LICENSE_STORE_ERROR: License state unavailable.")?;
     let mut records = read(directory)?;
     records.insert(
         entry.id.clone(),
@@ -321,6 +327,79 @@ mod tests {
         fs::write(directory.join(FILE_NAME), b"{not json").unwrap();
         let error = require_in(&directory, &entry).unwrap_err();
         assert!(error.starts_with("MODEL_LICENSE_STORE_ERROR"), "{error}");
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn replacing_acceptances_preserves_other_models_and_tracks_terms_changes() {
+        let directory = folder();
+        let first = entry_with("first", "rev-1");
+        let second = entry_with("second", "rev-1");
+        accept_in(&directory, &first).unwrap();
+        accept_in(&directory, &second).unwrap();
+        assert!(accepted_in(&directory, &first).unwrap());
+        assert!(accepted_in(&directory, &second).unwrap());
+        let revised = entry_with("first", "rev-2");
+        assert!(!accepted_in(&directory, &revised).unwrap());
+        accept_in(&directory, &revised).unwrap();
+        assert!(!accepted_in(&directory, &first).unwrap());
+        assert!(accepted_in(&directory, &revised).unwrap());
+        assert!(accepted_in(&directory, &second).unwrap());
+        assert_eq!(
+            fs::read_dir(&directory).unwrap().count(),
+            1,
+            "no staging files remain"
+        );
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn a_failed_acceptance_does_not_authorize_a_transfer() {
+        let directory = folder();
+        let entry = entry_with("gated", "rev-1");
+        // A directory at the target name reproduces a store replacement failure
+        // without relying on elevated-user or platform-specific file permissions.
+        fs::create_dir(directory.join(FILE_NAME)).unwrap();
+        assert!(
+            accept_in(&directory, &entry)
+                .unwrap_err()
+                .starts_with("MODEL_LICENSE_STORE_ERROR")
+        );
+        assert!(require_in(&directory, &entry).is_err());
+        assert_eq!(fs::read_dir(&directory).unwrap().count(), 1);
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn concurrent_native_acceptances_preserve_every_choice() {
+        let directory = folder();
+        const CALLERS: usize = 16;
+        let start = std::sync::Arc::new(std::sync::Barrier::new(CALLERS));
+        let workers: Vec<_> = (0..CALLERS)
+            .map(|index| {
+                let directory = directory.clone();
+                let start = start.clone();
+                std::thread::spawn(move || {
+                    let entry = entry_with(&format!("parallel-{index}"), "rev-1");
+                    start.wait();
+                    accept_in(&directory, &entry).unwrap();
+                })
+            })
+            .collect();
+        for worker in workers {
+            worker.join().unwrap();
+        }
+        assert_eq!(read(&directory).unwrap().len(), CALLERS);
+        for index in 0..CALLERS {
+            assert!(
+                accepted_in(
+                    &directory,
+                    &entry_with(&format!("parallel-{index}"), "rev-1")
+                )
+                .unwrap()
+            );
+        }
+        assert_eq!(fs::read_dir(&directory).unwrap().count(), 1);
         fs::remove_dir_all(directory).unwrap();
     }
 }

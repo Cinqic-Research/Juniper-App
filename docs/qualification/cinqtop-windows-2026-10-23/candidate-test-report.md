@@ -1,5 +1,11 @@
 # Windows candidate test report: engineering branch on CINQTOP
 
+Independent review note (2026-10-24): this is the historical implementer's
+report. W-08 timing did not establish cache reuse; native rapid-edit testing
+found equal NTFS timestamps and requires conservative rehashing. Current
+findings and exact-candidate qualification are in
+[independent-review.md](independent-review.md).
+
 | Field    | Value                                                                                                                                                                                                                                                                                                                                                                |
 | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Source   | branch `engineering/cinqtop-windows-qualification` from `main` `fc1f1d7937995ca68d14e8df1682f6869ae90d8b`                                                                                                                                                                                                                                                            |

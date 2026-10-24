@@ -55,6 +55,7 @@ export async function streamChat(
   }
   signal.addEventListener('abort', cancel, { once: true })
   try {
+    if (signal.aborted) throw abortError()
     await invoke('chat_stream', { request })
     if (signal.aborted) throw abortError()
   } finally {
@@ -139,6 +140,7 @@ export async function pullProviderModel(
   onProgress: (progress: ModelPullProgress) => void,
   signal: AbortSignal,
 ): Promise<void> {
+  if (signal.aborted) throw abortError()
   if (!runningInTauri) throw new Error('Model downloads require the Tauri desktop runtime.')
   const requestId = `pull-${randomUuid()}`
   const topic = `juniper://model-pull/${requestId}`
@@ -146,6 +148,7 @@ export async function pullProviderModel(
   const cancel = () => void cancelModelPull(requestId)
   signal.addEventListener('abort', cancel, { once: true })
   try {
+    if (signal.aborted) throw abortError()
     await invoke('pull_model', {
       kind: provider.kind,
       baseUrl: provider.baseUrl,
@@ -227,6 +230,7 @@ export async function downloadManagedModel(
   onProgress: (progress: ModelPullProgress) => void,
   signal: AbortSignal,
 ): Promise<void> {
+  if (signal.aborted) throw abortError()
   if (!runningInTauri) throw new Error('Model downloads require the Juniper native runtime.')
   const requestId = `managed-${randomUuid()}`
   const topic = `juniper://model-download/${requestId}`
@@ -234,6 +238,7 @@ export async function downloadManagedModel(
   const cancel = () => void cancelManagedModel(requestId)
   signal.addEventListener('abort', cancel, { once: true })
   try {
+    if (signal.aborted) throw abortError()
     await invoke('download_managed_model', { catalogId, artifactId, requestId })
     if (signal.aborted) throw abortError()
   } finally {
@@ -273,6 +278,7 @@ export async function importManagedModel(
   onProgress: (progress: ModelPullProgress) => void,
   signal: AbortSignal,
 ): Promise<void> {
+  if (signal.aborted) throw abortError()
   if (!runningInTauri) throw new Error('Model import requires the Juniper native runtime.')
   const requestId = `managed-import-${randomUuid()}`
   const topic = `juniper://model-download/${requestId}`
@@ -280,6 +286,7 @@ export async function importManagedModel(
   const cancel = () => void cancelManagedModel(requestId)
   signal.addEventListener('abort', cancel, { once: true })
   try {
+    if (signal.aborted) throw abortError()
     await invoke('import_managed_model', { selectionId, catalogId, artifactId, requestId })
     if (signal.aborted) throw abortError()
   } finally {
@@ -350,6 +357,7 @@ export async function importGguf(
   onProgress: (progress: ModelPullProgress) => void,
   signal: AbortSignal,
 ): Promise<void> {
+  if (signal.aborted) throw abortError()
   if (!runningInTauri) throw new Error('GGUF import requires the Tauri desktop runtime.')
   const requestId = `gguf-${randomUuid()}`
   const topic = `juniper://gguf-import/${requestId}`
@@ -357,6 +365,7 @@ export async function importGguf(
   const cancel = () => void cancelGgufImport(requestId)
   signal.addEventListener('abort', cancel, { once: true })
   try {
+    if (signal.aborted) throw abortError()
     await invoke('import_gguf', { selectionId, modelName, requestId })
     if (signal.aborted) throw abortError()
   } finally {

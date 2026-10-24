@@ -21,6 +21,7 @@ use std::io::{self, BufReader, Read, Seek, SeekFrom};
 const MAGIC: &[u8; 4] = b"GGUF";
 const MAX_KEY_BYTES: u64 = 1 << 16;
 const MAX_KV_COUNT: u64 = 1 << 20;
+const MAX_ARRAY_DEPTH: usize = 16;
 const MAX_INSPECTED_STRING: u64 = 1 << 12;
 
 #[derive(Debug, PartialEq, Eq)]
@@ -82,6 +83,13 @@ fn scalar_size(kind: u32) -> Option<u64> {
 }
 
 fn skip_value<R: Read + Seek>(r: &mut R, kind: u32) -> io::Result<()> {
+    skip_value_at_depth(r, kind, 0)
+}
+
+fn skip_value_at_depth<R: Read + Seek>(r: &mut R, kind: u32, depth: usize) -> io::Result<()> {
+    if depth > MAX_ARRAY_DEPTH {
+        return Err(invalid("GGUF arrays are nested too deeply"));
+    }
     if let Some(size) = scalar_size(kind) {
         return skip(r, size);
     }
@@ -101,7 +109,7 @@ fn skip_value<R: Read + Seek>(r: &mut R, kind: u32) -> io::Result<()> {
                 return Err(invalid("unsupported GGUF array element type"));
             }
             for _ in 0..count {
-                skip_value(r, elem)?; // strings, or nested arrays
+                skip_value_at_depth(r, elem, depth + 1)?; // strings, or nested arrays
             }
             Ok(())
         }
@@ -355,6 +363,39 @@ mod tests {
         s(&mut out, "a");
         s(&mut out, "b");
         assert_eq!(identify(&mut Cursor::new(out)).unwrap(), Identity::Other);
+    }
+
+    #[test]
+    fn deeply_nested_metadata_is_refused_on_a_small_stack() {
+        std::thread::Builder::new()
+            .stack_size(128 * 1024)
+            .spawn(|| {
+                for key in ["x.nested", "general.nested"] {
+                    let mut bytes = Vec::new();
+                    bytes.extend(MAGIC);
+                    bytes.extend(3u32.to_le_bytes());
+                    bytes.extend(0u64.to_le_bytes());
+                    bytes.extend(1u64.to_le_bytes());
+                    s(&mut bytes, key);
+                    bytes.extend(9u32.to_le_bytes());
+                    for _ in 0..4096 {
+                        bytes.extend(9u32.to_le_bytes());
+                        bytes.extend(1u64.to_le_bytes());
+                    }
+                    bytes.extend(8u32.to_le_bytes());
+                    bytes.extend(0u64.to_le_bytes());
+                    let mut cursor = Cursor::new(bytes);
+                    let error = read_header(&mut cursor).unwrap_err();
+                    assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+                    assert!(error.to_string().contains("nested too deeply"));
+                    cursor.set_position(0);
+                    assert!(refuse_juniper_on_text_path(&mut cursor).is_err());
+                    assert_eq!(cursor.position(), 0);
+                }
+            })
+            .unwrap()
+            .join()
+            .unwrap();
     }
 
     #[test]

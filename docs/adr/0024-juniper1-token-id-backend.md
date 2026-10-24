@@ -1,7 +1,11 @@
 # ADR 0024: Juniper 1 token-ID backend
 
-Status: Proposed for review (branch `a02/native-token-id-adapter`). Requires
-independent review before merge.
+Status: Implemented in `main` (PR #46); research-only, with the qualification
+restrictions below.
+
+Originally proposed on `a02/native-token-id-adapter` with independent review
+required before merge. The historical correction below records what occurred;
+implementation status does not replace that missing review.
 
 Correction (2026-10-15): this was merged to `main` on 2026-10-14 as
 `77f5da7` (PR #46) under the owner's standing delegation. GitHub records no

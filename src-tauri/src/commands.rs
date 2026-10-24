@@ -345,8 +345,12 @@ pub async fn runtime_registry(
 }
 
 #[tauri::command]
-pub fn managed_models(app: AppHandle) -> Result<Vec<managed_models::ManagedModel>, String> {
-    managed_models::list(&app)
+pub async fn managed_models(app: AppHandle) -> Result<Vec<managed_models::ManagedModel>, String> {
+    // Filesystems without a trustworthy change signal must rehash installed
+    // models. Keep that potentially multi-gigabyte I/O off the UI thread.
+    tauri::async_runtime::spawn_blocking(move || managed_models::list(&app))
+        .await
+        .map_err(|_| "MODEL_STORAGE_ERROR: Model verification could not finish.".to_owned())?
 }
 
 #[tauri::command]
@@ -898,12 +902,12 @@ pub async fn import_gguf(
             .to_str()
             .ok_or_else(|| "The temporary Modelfile path is invalid.".to_owned())?;
         let mut command = tokio::process::Command::new("ollama");
-        let mut child = crate::child::without_console(&mut command)
+        command
             .args(["create", model_name, "-f", modelfile_text])
             .stdin(Stdio::null())
             .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
+            .stderr(Stdio::null());
+        let mut child = crate::child::spawn_owned(&mut command)
             .map_err(|_| "Ollama could not be started for GGUF import.".to_owned())?;
         let status = tokio::select! {
             status = child.wait() => status.map_err(|error| format!("Ollama import failed: {error}")),

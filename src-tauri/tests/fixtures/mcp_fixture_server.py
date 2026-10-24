@@ -221,9 +221,12 @@ if __name__ == "__main__":
     parser.add_argument("--era", choices=["modern", "legacy"], default="modern")
     parser.add_argument("--http", type=int)
     parser.add_argument("--require-token", action="store_true")
+    parser.add_argument("--idle", action="store_true", help="Do not read stdin (backpressure fixture).")
     args = parser.parse_args()
     REQUIRE_TOKEN = args.require_token
-    if args.http:
+    if args.idle:
+        time.sleep(120)
+    elif args.http:
         serve_http(args.era, args.http)
     else:
         serve_stdio(args.era)
