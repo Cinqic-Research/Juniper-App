@@ -13,9 +13,10 @@ the test profile are already in place (see the handoff).
 | [hardware-qualification.md](hardware-qualification.md) | Verified CINQTOP hardware, software, resource baseline and budget                      |
 | [cinqtop-inventory.json](cinqtop-inventory.json)       | The same inventory, machine-readable                                                   |
 | [baseline-test-report.md](baseline-test-report.md)     | What the published 0.4.0-alpha.1 MSI did on CINQTOP, case by case                      |
-| [defect-register.md](defect-register.md)               | W-01 to W-14: reproduction, root cause, fix and verification state                     |
+| [defect-register.md](defect-register.md)               | W-01 to W-16: reproduction, root cause, fix and verification state                     |
 | [candidate-test-report.md](candidate-test-report.md)   | What the branch build did on CINQTOP, and what could not be run there                  |
 | [review-handoff.md](review-handoff.md)                 | Commits, changes, tests, evidence, limitations and verification steps for the reviewer |
+| [independent-review.md](independent-review.md)         | The PR #54 review ledger as prepared, before exact-head CI and installed qualification |
 
 ## Summary
 
@@ -38,6 +39,23 @@ the test profile are already in place (see the handoff).
   off (W-13 records the interruption). Running the native suite on Windows
   for the first time (W-10 fixed) found and fixed a sixth: license
   acceptance failed on Windows (W-16), verified on the installed final MSI.
+
+## Final disposition
+
+The records above, including the review ledger, keep the state at the time
+they were written. The final decision is the formal PR #54 review: approved at
+`c793c5649ad165acd586b701d2399b42a1118ea0` and merged as
+`6bbe0adf3dc50c3d697fd47e996b2f01d42ae75f` on 2026-10-24
+([approval](https://github.com/Cinqic-Research/Juniper-App/pull/54#pullrequestreview-5638083041),
+[post-merge verification](https://github.com/Cinqic-Research/Juniper-App/pull/54#pullrequestreview-5638154344)). The installed
+CINQTOP qualification used the disclosed `0b57f735` Windows build; exact-head
+CI ran on the later `c793c564` head, so these are separate build identities.
+The supplemental Windows attachment symlink test ran after the merge and
+closed the local privilege skip disclosed at approval. Physical Android
+inference, optional and private fixtures, a genuine older owner-profile
+upgrade and the other limits listed in the PR description remain unverified
+and are not counted as passes. The repairs are on `main` but not in a
+published release; the published `0.4.0-alpha.1` files are unchanged.
 
 ## Reproducing on another Windows machine
 

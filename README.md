@@ -2,7 +2,7 @@
 
 Juniper is a local-first AI desktop and Android app for people who want a thoughtful assistant, visible model controls, and a clear boundary around private data. It works with compatible text-generation models through supported runtimes; no model family is required and no model is bundled.
 
-**Current version `0.4.0-alpha.1` ("Juniper 0.4.0-Alpha"), published as a prerelease on 2026-10-17.** What changed in 0.4.0-Alpha is in [CHANGELOG.md](CHANGELOG.md); its release gates and evidence are in [docs/release/juniper-0.4.0-alpha-readiness-review.md](docs/release/juniper-0.4.0-alpha-readiness-review.md) and the publication record in [docs/release/juniper-0.4.0-alpha-publication-record.md](docs/release/juniper-0.4.0-alpha-publication-record.md). The guarded release workflow builds and packages the Juniper-owned local runtime for desktop targets only after the validation and immutable-tag gates pass. See [Download](#download).
+**Current version `0.4.0-alpha.1` ("Juniper 0.4.0-Alpha"), published as a prerelease on 2026-10-17.** `main` keeps that version number and also carries later fixes, listed under Unreleased in [CHANGELOG.md](CHANGELOG.md), that are not in the published files. What changed in 0.4.0-Alpha is in [CHANGELOG.md](CHANGELOG.md); its release gates and evidence are in [docs/release/juniper-0.4.0-alpha-readiness-review.md](docs/release/juniper-0.4.0-alpha-readiness-review.md) and the publication record in [docs/release/juniper-0.4.0-alpha-publication-record.md](docs/release/juniper-0.4.0-alpha-publication-record.md). The guarded release workflow builds and packages the Juniper-owned local runtime for desktop targets only after the validation and immutable-tag gates pass. See [Download](#download).
 
 ## Download
 
@@ -122,13 +122,16 @@ code-signed, so SmartScreen warns and machines with Smart App Control turned
 on may refuse it. Startup diagnostics, data locations, known Windows
 problems and the extra build steps a Windows machine needs are in
 [docs/release/windows-troubleshooting.md](docs/release/windows-troubleshooting.md);
-the hardware qualification of `0.4.0-alpha.1` on a Windows 11 laptop is in
-[docs/qualification/cinqtop-windows-2026-10-23/](docs/qualification/cinqtop-windows-2026-10-23/README.md).
+the Windows 11 laptop qualification of the published `0.4.0-alpha.1` MSI and of
+the repairs later merged in [PR #54](https://github.com/Cinqic-Research/Juniper-App/pull/54) is in
+[docs/qualification/cinqtop-windows-2026-10-23/](docs/qualification/cinqtop-windows-2026-10-23/README.md),
+which links the final review decision. Those repairs are not in a published
+release.
 
 ## Known limitations
 
 - Juniper 0.4.0-Alpha platform status: Linux `.deb` and `.AppImage` supported; Windows MSI supported but unsigned (SmartScreen warns) and Agent execution on Windows is not verified; Android APK Beta, with a physical ARM64 inference run still required. Backup restore is not verified on a clean machine, and the Agent's "Needs review" check is a text heuristic that can miss phrasings. See [CHANGELOG.md](CHANGELOG.md).
-- The Windows MSI may be unsigned, so Windows SmartScreen can show an unrecognized-publisher warning.
+- The published Windows MSI closes as soon as it lists an installed model (W-01) and cannot record a model license acceptance (W-16). Both are fixed on `main` but not in a published release; see [Known Windows problems](docs/release/windows-troubleshooting.md#known-windows-problems).
 - `0.3.0-rc.33` is a prerelease candidate and is not promoted to final `0.3.0`. Its publication record, including a publication step that failed after creating the release and how the three missing assets were completed from the same workflow run, is in [docs/release/rc33-publication.md](docs/release/rc33-publication.md).
 - Android native local inference is Beta: use a supported ARM64 phone for real offline inference; x86_64 emulator evidence is diagnostic when hardware acceleration is unavailable. The owner-reported physical run establishes basic feasibility, while missing build and lifecycle metadata limits maturity.
 - Linux launch is tested on Ubuntu 22.04 and 24.04 under X11 (Xvfb) for the normal AppImage, the extract-and-run fallback, and the installed DEB. Native Wayland sessions are not verified; the AppImage forces GTK's X11 backend. If Juniper does not start, run it from a terminal and see [docs/release/linux-troubleshooting.md](docs/release/linux-troubleshooting.md).
