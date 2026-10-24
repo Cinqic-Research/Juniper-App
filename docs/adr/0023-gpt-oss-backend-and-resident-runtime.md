@@ -1,6 +1,10 @@
 # ADR 0023: GPT-OSS backend and resident desktop runtime
 
-Status: Proposed for review (branch `feature/juniper-wrapper-gpt-oss`).
+Status: Implemented in `main`.
+
+Originally proposed for review on `feature/juniper-wrapper-gpt-oss`.
+The configuration-specific qualification requirements below remain in force.
+
 Supersedes the per-request desktop server in ADR-0016; ADR-0011 is unchanged.
 
 ## Context

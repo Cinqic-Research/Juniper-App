@@ -1,6 +1,9 @@
 # ADR 0026: Project folders and sandboxed execution
 
-Status: Proposed for review on the "Fixing Up A Little" branch (draft PR #49).
+Status: Implemented in `main` (PR #49, hardened in PR #51).
+
+Originally proposed for review on the "Fixing Up A Little" branch while PR #49
+was a draft. Platform-specific sandbox restrictions below remain in force.
 
 ## Context
 

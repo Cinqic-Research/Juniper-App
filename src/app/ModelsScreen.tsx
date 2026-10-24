@@ -40,6 +40,7 @@ import {
   type ModelCatalog,
   type ModelRecommendation,
 } from '../lib/model-catalog'
+import { errorText } from '../lib/agent'
 import { isExternalModel, useExternalModels } from './external-models'
 import { Icon } from './icons'
 import {
@@ -54,6 +55,16 @@ import { EmptyState, LocationBadge, PageHeader, Segmented } from './ui'
 
 type Update = (change: (current: AppData) => AppData) => void
 type View = 'recommended' | 'popular' | 'all' | 'installed'
+
+/**
+ * The sentence shown for a failed native call. Tauri delivers a command's
+ * `Err(String)` as a plain string, not an `Error`, so the host's reason
+ * (`MODEL_STORAGE_FULL: ...`) was previously replaced by the fallback.
+ */
+function failureText(error: unknown, fallback: string): string {
+  const text = typeof error === 'string' ? error : error instanceof Error ? error.message : ''
+  return text ? errorText(text) : fallback
+}
 
 interface TransferProgress {
   completed: number
@@ -170,13 +181,19 @@ export function ModelsScreen({
       setNativeModels(nextNative)
       if (!runningOnAndroid) setRuntimeStatus(await getLocalRuntimeStatus())
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Could not inspect this device.')
+      setMessage(failureText(error, 'Could not inspect this device.'))
     }
   }, [])
 
   useEffect(() => {
     void refresh()
   }, [refresh])
+
+  /** Files were added or removed, so the free-storage figure is stale. */
+  const refreshDevice = () =>
+    void getDeviceCapabilities()
+      .then(setDevice)
+      .catch(() => undefined)
 
   const recommendations = useMemo(
     () => (device ? recommendModels(catalog, device) : []),
@@ -350,7 +367,7 @@ export function ModelsScreen({
     try {
       if (await modelLicenseAccepted(entry.id)) return true
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Could not read the license record.')
+      setMessage(failureText(error, 'Could not read the license record.'))
       return false
     }
     const termsFingerprint = entry.licenseTermsRevision?.includes('-sha256-')
@@ -387,7 +404,7 @@ export function ModelsScreen({
       await acceptModelLicense(entry.id)
       return true
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Could not record the license choice.')
+      setMessage(failureText(error, 'Could not record the license choice.'))
       return false
     }
   }
@@ -412,9 +429,7 @@ export function ModelsScreen({
       setMessage(
         next.signal.aborted
           ? 'Download paused. It resumes from where it stopped.'
-          : error instanceof Error
-            ? error.message
-            : 'Download failed.',
+          : failureText(error, 'Download failed.'),
       )
     } finally {
       if (controller.current === next) controller.current = null
@@ -422,6 +437,7 @@ export function ModelsScreen({
       setProgress(null)
       // A paused or failed transfer leaves a resumable partial file.
       setInstalled(await getManagedModels().catch(() => installed))
+      refreshDevice()
     }
   }
 
@@ -436,7 +452,7 @@ export function ModelsScreen({
     try {
       selection = await pickGguf()
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Could not open the file picker.')
+      setMessage(failureText(error, 'Could not open the file picker.'))
       return
     }
     if (!selection) return
@@ -449,15 +465,10 @@ export function ModelsScreen({
     try {
       await importManagedModel(selection.id, entry.id, artifact.id, onProgress, next.signal)
       setInstalled(await getManagedModels())
+      refreshDevice()
       registerManagedModel(entry, artifact, false)
     } catch (error) {
-      setMessage(
-        next.signal.aborted
-          ? 'Import cancelled.'
-          : error instanceof Error
-            ? error.message
-            : 'Import failed.',
-      )
+      setMessage(next.signal.aborted ? 'Import cancelled.' : failureText(error, 'Import failed.'))
     } finally {
       if (controller.current === next) controller.current = null
       setActiveDownload(null)
@@ -470,7 +481,7 @@ export function ModelsScreen({
       await unloadLocalRuntime()
       setRuntimeStatus(await getLocalRuntimeStatus())
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Could not unload the model.')
+      setMessage(failureText(error, 'Could not unload the model.'))
     }
   }
 
@@ -533,9 +544,7 @@ export function ModelsScreen({
       setMessage(
         next.signal.aborted
           ? 'Import cancelled.'
-          : error instanceof Error
-            ? error.message
-            : 'Local research import failed.',
+          : failureText(error, 'Local research import failed.'),
       )
     } finally {
       if (controller.current === next) controller.current = null
@@ -555,13 +564,14 @@ export function ModelsScreen({
     try {
       await deleteManagedModel(entry.id)
       setInstalled((current) => current.filter((model) => model.catalogId !== entry.id))
+      refreshDevice()
       update((current) => ({
         ...current,
         models: current.models.filter((model) => model.catalogId !== entry.id),
       }))
       setMessage(`${entry.displayName} was removed.`)
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Could not remove the model.')
+      setMessage(failureText(error, 'Could not remove the model.'))
     }
   }
 

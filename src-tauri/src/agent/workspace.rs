@@ -364,6 +364,55 @@ pub fn open_root(path: &str) -> WorkspaceResult<Dir> {
     })
 }
 
+/// The spelling of a canonical root that is stored and shown to the user.
+/// Ordinary drive/UNC roots can omit the verbatim prefix, but Win32 special
+/// names must retain it: `project.` and `project` can be different folders.
+pub fn plain_path(canonical: &Path) -> String {
+    fn special_components(path: &str) -> bool {
+        path.split(['\\', '/']).any(|component| {
+            if component.ends_with(['.', ' '])
+                || component
+                    .chars()
+                    .any(|c| c.is_control() || "<>:\"|?*".contains(c))
+            {
+                return true;
+            }
+            let stem = component
+                .split('.')
+                .next()
+                .unwrap_or_default()
+                .trim_end_matches(' ')
+                .to_ascii_uppercase();
+            matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL")
+                || ["COM", "LPT"].iter().any(|prefix| {
+                    stem.strip_prefix(prefix).is_some_and(|suffix| {
+                        let mut chars = suffix.chars();
+                        matches!(
+                            chars.next(),
+                            Some('1'..='9' | '\u{00b9}' | '\u{00b2}' | '\u{00b3}')
+                        ) && chars.next().is_none()
+                    })
+                })
+        })
+    }
+    let text = canonical.to_string_lossy();
+    if let Some(rest) = text.strip_prefix(r"\\?\UNC\") {
+        return if special_components(rest) {
+            text.into_owned()
+        } else {
+            format!(r"\\{rest}")
+        };
+    }
+    if let Some(rest) = text.strip_prefix(r"\\?\")
+        && rest.as_bytes().get(1) == Some(&b':')
+        && rest.as_bytes().first().is_some_and(u8::is_ascii_alphabetic)
+        && !special_components(&rest[2..])
+    {
+        return rest.to_owned();
+    }
+    text.into_owned()
+}
+
 /// Validates a model-supplied relative path: no absolute paths, drive
 /// prefixes, parent references, or empty and control-character names.
 pub fn relative_path(value: &str) -> WorkspaceResult<PathBuf> {
@@ -793,6 +842,82 @@ mod tests {
         std::fs::write(path.join("docs/notes.md"), "alpha\nbeta\n").expect("file");
         let dir = open_root(path.to_str().expect("utf-8")).expect("open");
         (path, dir)
+    }
+
+    #[test]
+    fn plain_path_drops_windows_verbatim_prefixes_only() {
+        assert_eq!(
+            plain_path(Path::new(r"\\?\C:\Users\me\Documents\Project")),
+            r"C:\Users\me\Documents\Project"
+        );
+        assert_eq!(
+            plain_path(Path::new(r"\\?\UNC\server\share\Project")),
+            r"\\server\share\Project"
+        );
+        assert_eq!(
+            plain_path(Path::new(r"\\?\Volume{guid}\x")),
+            r"\\?\Volume{guid}\x"
+        );
+        assert_eq!(
+            plain_path(Path::new("/home/me/project")),
+            "/home/me/project"
+        );
+    }
+
+    #[test]
+    fn plain_path_preserves_verbatim_names_that_win32_would_reinterpret() {
+        for name in [
+            "project.",
+            "project ",
+            "NUL",
+            "con.txt",
+            "COM1",
+            "lpt9.log",
+            "COM\u{00b9}",
+            "part:stream",
+            "odd?name",
+        ] {
+            for prefix in [r"\\?\C:\projects\", r"\\?\UNC\server\share\"] {
+                let path = format!("{prefix}{name}");
+                assert_eq!(plain_path(Path::new(&path)), path);
+            }
+        }
+        assert_eq!(
+            plain_path(Path::new(r"\\?\C:\projects\company")),
+            r"C:\projects\company"
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn verbatim_project_roots_keep_the_selected_folder_identity() {
+        let temp = std::fs::canonicalize(std::env::temp_dir()).unwrap();
+        let root = temp.join(format!("juniper-root-identity-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir(&root).unwrap();
+        let ordinary = root.join("project");
+        let dotted = root.join("project.");
+        std::fs::create_dir(&ordinary).unwrap();
+        std::fs::create_dir(&dotted).unwrap();
+        std::fs::write(ordinary.join("identity.txt"), "ordinary").unwrap();
+        std::fs::write(dotted.join("identity.txt"), "selected verbatim folder").unwrap();
+        let canonical = std::fs::canonicalize(&dotted).unwrap();
+        let stored = plain_path(&canonical);
+        assert_eq!(Path::new(&stored), canonical);
+        let dir = open_root(&stored).unwrap();
+        assert_eq!(
+            read(&dir, "identity.txt", 0, 100).unwrap()["content"],
+            "selected verbatim folder"
+        );
+        // Previously stored canonical roots still open without migration.
+        let old = open_root(canonical.to_str().unwrap()).unwrap();
+        assert_eq!(
+            read(&old, "identity.txt", 0, 100).unwrap()["content"],
+            "selected verbatim folder"
+        );
+        drop(old);
+        drop(dir);
+        assert_eq!(root.parent(), Some(temp.as_path()));
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

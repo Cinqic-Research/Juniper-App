@@ -1,8 +1,10 @@
 # ADR 0025: Host-owned agent runtime
 
-Status: Proposed; qualification is blocked pending the independent evidence
-gates recorded in `docs/qualification/pr49-independent-review-2026-10-15.md`
-(draft PR #49).
+Status: Implemented in `main` (PR #49, hardened in PR #51); Agent remains Beta.
+
+Originally proposed while PR #49 was a draft. The historical qualification
+gates and findings in `docs/qualification/pr49-independent-review-2026-10-15.md`
+remain evidence of that review, not a claim of complete platform qualification.
 
 ## Context
 

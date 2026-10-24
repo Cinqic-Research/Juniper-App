@@ -1025,7 +1025,7 @@ fn authorize<R: Runtime>(
     policy: &RequestPolicy,
 ) -> Result<reqwest::RequestBuilder, ProviderError> {
     if let Some(key) = &policy.loopback_key {
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "windows"))]
         if !policy
             .loopback_owner
             .is_some_and(|(pid, port)| crate::local_runtime::listener_belongs_to(pid, port))
@@ -4515,7 +4515,7 @@ data: [DONE]"#,
             )),
             idle_timeout: STREAM_IDLE_TIMEOUT,
             loopback_key: None,
-            #[cfg(target_os = "linux")]
+            #[cfg(any(target_os = "linux", target_os = "windows"))]
             loopback_owner: None,
             context_window: None,
             lineage: None,
@@ -4598,6 +4598,11 @@ data: [DONE]"#,
                     Err(error) => panic!("listener accept failed: {error}"),
                 }
             };
+            // Winsock sockets accepted from a non-blocking listener are
+            // non-blocking too; reads below rely on the timeout instead.
+            socket
+                .set_nonblocking(false)
+                .expect("socket should become blocking");
             socket
                 .set_read_timeout(Some(Duration::from_secs(1)))
                 .expect("socket should accept a read timeout");
@@ -4694,7 +4699,7 @@ data: [DONE]"#,
         }
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
     #[test]
     fn loopback_credentials_are_not_authorized_for_a_rebound_listener() {
         let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("listener should bind");

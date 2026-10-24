@@ -1,6 +1,10 @@
 # ADR 0022: Host-composed constitution and model distrust
 
-Status: Proposed for review (branch `feature/juniper-wrapper-gpt-oss`)
+Status: Implemented in `main`.
+
+Originally proposed for review on `feature/juniper-wrapper-gpt-oss`.
+Implementation status does not establish independent qualification of a model
+or its behavior; the limits and evidence below still apply.
 
 ## Context
 

@@ -6,10 +6,67 @@ version 0.4.0.1. Earlier prereleases (`0.3.0-rc.N`) are recorded in
 [docs/release/](docs/release/) and on the
 [releases page](https://github.com/Cinqic-Research/Juniper-App/releases).
 
-## Juniper 0.4.0-Alpha (`0.4.0-alpha.1`) — not yet published
+## Unreleased
+
+Independent PR #54 review corrections (not part of the published alpha):
+
+- Fixed: Windows process ownership fails closed and cleans up descendant
+  processes on cancellation and parent exit; local-runtime requests check
+  the Windows listener process before disclosing the runtime key.
+- Fixed: MCP initialization cleanup, bounded stdio framing and deadlines
+  covering blocked writes and cancellation.
+- Fixed: stale UI snapshots cannot erase approved Agent memory; native license
+  acceptance updates preserve concurrent choices.
+- Fixed: cancelled model operations do not start while listener registration
+  is pending, and late Agent responses do not replace newer task state.
+- Fixed: scaled window minimums fit the monitor work area, and special Windows
+  project names keep their canonical path identity.
+- Fixed: malformed deeply nested GGUF headers are rejected within a bounded
+  stack, and Windows verification regressions run on Windows.
+- Docs: current ADR statuses distinguish implemented decisions from historical
+  proposals and remaining qualification limitations.
+- Security: patch Vitest to 4.1.12 and fast-uri to 3.1.9; remove the exception
+  for the withdrawn braces advisory.
+
+Windows repairs from the CINQTOP qualification
+([docs/qualification/cinqtop-windows-2026-10-23/](docs/qualification/cinqtop-windows-2026-10-23/README.md)):
+
+- Fixed: on Windows the application exited with a stack overflow whenever an
+  installed model was listed (a model download completing, or opening Models
+  with a model installed). The verification hash used a 1 MiB stack buffer on
+  the 1 MiB main thread. Every Windows user of 0.4.0-alpha.1 was affected.
+- Fixed: `llama-server.exe`, `ollama` and local MCP servers no longer open a
+  console window of their own on Windows.
+- Fixed: on Windows the local runtime and local MCP servers are placed in a
+  job object, so they end with Juniper even when it is killed.
+- Fixed: the main window is fitted to the monitor's work area and centred, so
+  it no longer opens under the taskbar on small displays.
+- Windows verification reads change time for mutation checks but always
+  rehashes model bytes: native tests found repeated timestamps despite closed
+  writers, including while another reader remained open. Model listing runs
+  on a blocking worker to keep the UI responsive. Windows hash-cache reuse
+  remains disabled; faster listings alone do not prove a safe cache.
+- Fixed: Agent project roots are stored and shown as `C:\...` rather than
+  `\\?\C:\...`.
+- Fixed: accepting a model license failed on Windows with "Access is
+  denied", so gated catalog models could not be downloaded there.
+- Fixed: `cargo test` aborted on Windows before running any test
+  (`STATUS_ENTRYPOINT_NOT_FOUND`): the test harness had no application
+  manifest and bound to the old `comctl32.dll`. The manifest is now embedded
+  by the linker for every target, and the suite runs on Windows.
+- Fixed: the Models screen shows the host's reason when a download, import,
+  unload or removal fails, instead of "Download failed.", and refreshes the
+  free-storage figure after a download, import or removal.
+- Docs: README, CHANGELOG and the interface guide no longer describe
+  0.4.0-alpha.1 as unpublished; Windows setup and troubleshooting are in
+  `docs/release/windows-troubleshooting.md`.
+
+## Juniper 0.4.0-Alpha (`0.4.0-alpha.1`) — published 2026-10-17
 
 An alpha prerelease, not a stable release. Gates and evidence:
-[docs/release/juniper-0.4.0-alpha-readiness-review.md](docs/release/juniper-0.4.0-alpha-readiness-review.md).
+[docs/release/juniper-0.4.0-alpha-readiness-review.md](docs/release/juniper-0.4.0-alpha-readiness-review.md);
+publication record:
+[docs/release/juniper-0.4.0-alpha-publication-record.md](docs/release/juniper-0.4.0-alpha-publication-record.md).
 
 ### Agent (Beta)
 

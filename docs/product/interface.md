@@ -1,7 +1,7 @@
 # Juniper interface guide
 
 This describes the interface as of `0.4.0-alpha.1` (display name "Juniper
-0.4.0-Alpha", not yet published). The design decision is
+0.4.0-Alpha", published 2026-10-17). The design decision is
 [ADR 0021](../adr/0021-chat-first-interface-and-appearance-tokens.md).
 
 ## Navigation

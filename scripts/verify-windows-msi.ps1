@@ -51,6 +51,19 @@ $signature = Get-AuthenticodeSignature -LiteralPath $MsiPath
   "Architecture=x86_64"
 ) | Set-Content -LiteralPath $PackageEvidencePath -Encoding utf8
 
+# Preserve the clean package inventory for independent comparison with local
+# build output (including accidental stale native DLLs).
+$fileView = $database.GetType().InvokeMember(
+  'OpenView', 'InvokeMethod', $null, $database,
+  @('SELECT `FileName`, `FileSize` FROM `File`')
+)
+$fileView.GetType().InvokeMember('Execute', 'InvokeMethod', $null, $fileView, $null) | Out-Null
+while ($null -ne ($fileRecord = $fileView.GetType().InvokeMember('Fetch', 'InvokeMethod', $null, $fileView, $null))) {
+  $fileName = $fileRecord.GetType().InvokeMember('StringData', 'GetProperty', $null, $fileRecord, 1)
+  $fileSize = $fileRecord.GetType().InvokeMember('IntegerData', 'GetProperty', $null, $fileRecord, 2)
+  Add-Content -LiteralPath $PackageEvidencePath -Value "PackageFile=$fileName;Bytes=$fileSize"
+}
+
 # 0 is success; 3010 is ERROR_SUCCESS_REBOOT_REQUIRED, which is also a
 # successful install and must not fail the smoke test.
 $install = Start-Process msiexec.exe -ArgumentList @('/i', $MsiPath, '/qn', '/norestart') -Wait -PassThru

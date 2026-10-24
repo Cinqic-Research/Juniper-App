@@ -21,7 +21,7 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::oneshot;
 
 pub const MODERN_VERSION: &str = "2026-07-28";
@@ -805,9 +805,12 @@ async fn spawn_stdio(
             .map_err(|message| fail("PLUGIN_SECRET_UNAVAILABLE", message))?;
         process.env(&variable.name, secret);
     }
-    let mut child = process
-        .spawn()
-        .map_err(|_| fail("PLUGIN_START_FAILED", "The server program could not start."))?;
+    let mut child = crate::child::spawn_owned(&mut process).map_err(|_| {
+        fail(
+            "PLUGIN_START_FAILED",
+            "The server program could not start with process cleanup protection.",
+        )
+    })?;
     let stdin = child
         .stdin
         .take()
@@ -823,14 +826,14 @@ async fn spawn_stdio(
         legacy: Mutex::new(None),
         next: AtomicU64::new(1),
     });
-    let reader = session.clone();
+    let reader = Arc::downgrade(&session);
     tauri::async_runtime::spawn(async move {
-        let mut lines = BufReader::new(stdout).lines();
-        while let Ok(Some(line)) = lines.next_line().await {
-            if line.len() > MAX_MESSAGE_BYTES {
-                continue;
-            }
-            let Ok(message) = serde_json::from_str::<Value>(&line) else {
+        let mut stdout = BufReader::new(stdout);
+        while let Ok(Some(line)) = read_stdio_frame(&mut stdout).await {
+            let Some(reader) = reader.upgrade() else {
+                break;
+            };
+            let Ok(message) = serde_json::from_slice::<Value>(&line) else {
                 continue;
             };
             // Only responses are routed. Server-sent requests (sampling,
@@ -846,25 +849,65 @@ async fn spawn_stdio(
                 let _ = sender.send(message);
             }
         }
-        if let Ok(mut pending) = reader.pending.lock() {
-            pending.clear();
+        if let Some(reader) = reader.upgrade() {
+            disconnect_session(&reader).await;
         }
     });
     Ok(session)
 }
 
+/// Read one newline-delimited frame with bounded allocation, including incomplete lines.
+async fn read_stdio_frame<R: AsyncBufRead + Unpin>(
+    reader: &mut R,
+) -> std::io::Result<Option<Vec<u8>>> {
+    let mut frame = Vec::new();
+    loop {
+        let available = reader.fill_buf().await?;
+        if available.is_empty() {
+            return if frame.is_empty() {
+                Ok(None)
+            } else {
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::UnexpectedEof,
+                    "Incomplete MCP frame",
+                ))
+            };
+        }
+        let newline = available.iter().position(|byte| *byte == b'\n');
+        let count = newline.map_or(available.len(), |index| index + 1);
+        if frame.len() + count > MAX_MESSAGE_BYTES {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "MCP frame exceeds the limit",
+            ));
+        }
+        frame.extend_from_slice(&available[..count]);
+        reader.consume(count);
+        if newline.is_some() {
+            return Ok(Some(frame));
+        }
+    }
+}
+
 impl StdioSession {
-    async fn notify(&self, method: &str, params: Value) -> Result<(), ToolError> {
+    async fn notify(
+        &self,
+        method: &str,
+        params: Value,
+        cancellation: &crate::commands::Cancellation,
+    ) -> Result<(), ToolError> {
         let message = json!({ "jsonrpc": "2.0", "method": method, "params": params });
-        let mut writer = self.writer.lock().await;
-        writer
-            .write_all(format!("{message}\n").as_bytes())
-            .await
-            .map_err(|_| fail("PLUGIN_DISCONNECTED", "The server stopped."))?;
-        writer
-            .flush()
-            .await
-            .map_err(|_| fail("PLUGIN_DISCONNECTED", "The server stopped."))
+        tokio::select! {
+            biased;
+            _ = cancellation.wait() => Err(fail("REQUEST_CANCELLED", "Cancelled.")),
+            result = tokio::time::timeout(PROBE_TIMEOUT, async {
+                let mut writer = self.writer.lock().await;
+                writer.write_all(format!("{message}\n").as_bytes()).await?;
+                writer.flush().await
+            }) => result
+                .map_err(|_| fail("PLUGIN_TIMEOUT", "The server stopped reading messages."))?
+                .map_err(|_| fail("PLUGIN_DISCONNECTED", "The server stopped.")),
+        }
     }
 
     async fn request(
@@ -886,33 +929,20 @@ impl StdioSession {
             .map_err(|_| fail("PLUGIN_ERROR", "State unavailable."))?
             .insert(id, sender);
         let message = json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params });
-        let write_result = {
-            let mut writer = self.writer.lock().await;
-            if cancellation.is_cancelled() {
-                Err(fail("REQUEST_CANCELLED", "Cancelled."))
-            } else {
-                tokio::select! {
-                    biased;
-                    _ = cancellation.wait() => Err(fail("REQUEST_CANCELLED", "Cancelled.")),
-                    result = async {
-                        writer.write_all(format!("{message}\n").as_bytes()).await?;
-                        writer.flush().await
-                    } => result.map_err(|_| fail("PLUGIN_DISCONNECTED", "The server stopped.")),
-                }
-            }
-        };
-        if let Err(error) = write_result {
-            if let Ok(mut pending) = self.pending.lock() {
-                pending.remove(&id);
-            }
-            return Err(error);
-        }
+        // The deadline also covers the writer lock, pipe backpressure and flush.
         let outcome = tokio::select! {
             biased;
             _ = cancellation.wait() => Err(fail("REQUEST_CANCELLED", "Cancelled.")),
-            response = tokio::time::timeout(timeout, receiver) => match response {
-                Ok(Ok(response)) => Ok(response),
-                Ok(Err(_)) => Err(fail("PLUGIN_DISCONNECTED", "The server stopped before answering.")),
+            response = tokio::time::timeout(timeout, async {
+                {
+                    let mut writer = self.writer.lock().await;
+                    writer.write_all(format!("{message}\n").as_bytes()).await
+                        .map_err(|_| fail("PLUGIN_DISCONNECTED", "The server stopped."))?;
+                    writer.flush().await.map_err(|_| fail("PLUGIN_DISCONNECTED", "The server stopped."))?;
+                }
+                receiver.await.map_err(|_| fail("PLUGIN_DISCONNECTED", "The server stopped before answering."))
+            }) => match response {
+                Ok(result) => result,
                 Err(_) => Err(fail("PLUGIN_TIMEOUT", "The server did not answer in time.")),
             },
         };
@@ -920,12 +950,9 @@ impl StdioSession {
             if let Ok(mut pending) = self.pending.lock() {
                 pending.remove(&id);
             }
-            let _ = self
-                .notify(
-                    "notifications/cancelled",
-                    json!({ "requestId": id, "reason": "Cancelled or timed out by Juniper" }),
-                )
-                .await;
+            // A cancelled write can leave partial JSON in the pipe. Terminate
+            // rather than await a cancellation notification on a full pipe.
+            disconnect_session(self).await;
         }
         outcome
     }
@@ -1107,8 +1134,13 @@ async fn connect(
     plugin: &Plugin,
     reuse: bool,
     approved_target: Option<&Value>,
+    cancellation: Option<&crate::commands::Cancellation>,
 ) -> Result<Connected, ToolError> {
     let none = crate::commands::Cancellation::default();
+    let cancellation = cancellation.unwrap_or(&none);
+    if cancellation.is_cancelled() {
+        return Err(fail("REQUEST_CANCELLED", "Cancelled."));
+    }
     match plugin.kind.as_str() {
         "mcp-stdio" => {
             stdio_availability().map_err(|message| fail("PLUGIN_UNAVAILABLE", message))?;
@@ -1134,15 +1166,22 @@ async fn connect(
                 });
             }
             disconnect(&plugin.id);
+            if cancellation.is_cancelled() {
+                return Err(fail("REQUEST_CANCELLED", "Cancelled."));
+            }
             let session = spawn_stdio(plugin, approved_target).await?;
             let probe = session
                 .request(
                     "server/discover",
                     json!({ "_meta": modern_meta() }),
                     PROBE_TIMEOUT,
-                    None,
+                    Some(cancellation),
                 )
                 .await;
+            if let Err(error) = &probe {
+                disconnect_session(&session).await;
+                return Err(error.clone());
+            }
             let modern = match &probe {
                 Ok(message) if message.get("result").is_some() => {
                     let supported = message["result"]["supportedVersions"]
@@ -1169,7 +1208,7 @@ async fn connect(
                         "initialize",
                         json!({ "protocolVersion": LEGACY_VERSIONS[0], "capabilities": {}, "clientInfo": client_info() }),
                         PROBE_TIMEOUT,
-                        None,
+                        Some(cancellation),
                     )
                     .await?;
                 let version = response["result"]["protocolVersion"]
@@ -1183,9 +1222,13 @@ async fn connect(
                         "The server speaks an MCP version Juniper does not support.",
                     ));
                 }
-                session
-                    .notify("notifications/initialized", json!({}))
-                    .await?;
+                if let Err(error) = session
+                    .notify("notifications/initialized", json!({}), cancellation)
+                    .await
+                {
+                    disconnect_session(&session).await;
+                    return Err(error);
+                }
                 if let Ok(mut legacy) = session.legacy.lock() {
                     *legacy = Some(version.clone());
                 }
@@ -1216,7 +1259,7 @@ async fn connect(
                     None,
                     true,
                     false,
-                    &none,
+                    cancellation,
                 )
                 .await?;
             if status.is_success() && message.get("result").is_some() {
@@ -1251,7 +1294,7 @@ async fn connect(
                 ));
             }
             let (status, session_id, message) = session
-                .post("initialize", json!({ "protocolVersion": LEGACY_VERSIONS[0], "capabilities": {}, "clientInfo": client_info() }), None, false, false, &none)
+                .post("initialize", json!({ "protocolVersion": LEGACY_VERSIONS[0], "capabilities": {}, "clientInfo": client_info() }), None, false, false, cancellation)
                 .await?;
             if !status.is_success() || message.get("result").is_none() {
                 return Err(fail(
@@ -1280,7 +1323,7 @@ async fn connect(
                     None,
                     false,
                     true,
-                    &none,
+                    cancellation,
                 )
                 .await?;
             let info = message["result"]["serverInfo"]
@@ -1296,9 +1339,15 @@ async fn connect(
     }
 }
 
-async fn disconnect_session(session: &Arc<StdioSession>) {
+async fn disconnect_session(session: &StdioSession) {
+    if let Ok(mut sessions) = sessions().lock() {
+        sessions.retain(|_, registered| !std::ptr::eq(registered.as_ref(), session));
+    }
     let mut child = session.child.lock().await;
     let _ = child.start_kill();
+    if let Ok(mut pending) = session.pending.lock() {
+        pending.clear();
+    }
 }
 
 async fn rpc(
@@ -1487,7 +1536,7 @@ pub async fn test_connection(
     };
     let none = crate::commands::Cancellation::default();
     let outcome: Result<PluginState, ToolError> = async {
-        let connected = connect(&plugin, false, None).await?;
+        let connected = connect(&plugin, false, None, None).await?;
         let mut tools = Vec::new();
         let mut rejected = Vec::new();
         let mut cursor: Option<String> = None;
@@ -1580,7 +1629,13 @@ pub async fn call_tool(
             format!("Invalid arguments: {message}."),
         )
     })?;
-    let connected = connect(&plugin, true, Some(expected_target)).await?;
+    let connected = connect(
+        &plugin,
+        true,
+        Some(expected_target),
+        Some(execution.cancellation),
+    )
+    .await?;
     let result = rpc(
         &connected,
         "tools/call",
@@ -1665,7 +1720,7 @@ pub(crate) async fn call_for_tests(
     tool: &str,
     arguments: Value,
 ) -> Result<Value, ToolError> {
-    let connected = connect(plugin, true, None).await?;
+    let connected = connect(plugin, true, None, None).await?;
     rpc(
         &connected,
         "tools/call",
@@ -1823,7 +1878,6 @@ mod tests {
         b[0].description = "changed".into();
         assert_ne!(digest_tools(&a), digest_tools(&b));
     }
-    #[cfg(unix)]
     fn fixture() -> String {
         format!(
             "{}/tests/fixtures/mcp_fixture_server.py",
@@ -1831,19 +1885,39 @@ mod tests {
         )
     }
 
-    #[cfg(unix)]
     fn database() -> std::path::PathBuf {
         let path = std::env::temp_dir().join(format!("juniper-mcp-{}.db", uuid::Uuid::new_v4()));
         crate::storage::initialize(&path).unwrap();
         path
     }
 
-    #[cfg(unix)]
+    fn python() -> String {
+        if let Ok(path) = std::env::var("JUNIPER_MCP_TEST_PYTHON") {
+            return path;
+        }
+        #[cfg(unix)]
+        {
+            "/usr/bin/python3".into()
+        }
+        #[cfg(windows)]
+        {
+            let output = std::process::Command::new("python")
+                .args(["-c", "import sys; print(sys.executable)"])
+                .output()
+                .expect("Python is required for MCP fixtures (or set JUNIPER_MCP_TEST_PYTHON)");
+            assert!(
+                output.status.success(),
+                "Python is required for MCP fixtures"
+            );
+            String::from_utf8(output.stdout).unwrap().trim().to_owned()
+        }
+    }
+
     fn stdio(era: &str) -> PluginConfig {
         PluginConfig {
             name: format!("Fixture {era}"),
             kind: "mcp-stdio".into(),
-            command: Some("/usr/bin/python3".into()),
+            command: Some(python()),
             args: vec![fixture(), "--era".into(), era.into()],
             env: vec![],
             url: None,
@@ -1851,7 +1925,6 @@ mod tests {
         }
     }
 
-    #[cfg(unix)]
     #[test]
     fn local_plugin_approval_identity_changes_when_the_executable_is_replaced() {
         let root =
@@ -1859,10 +1932,6 @@ mod tests {
         std::fs::create_dir_all(&root).unwrap();
         let executable = root.join("server");
         std::fs::write(&executable, b"original server bytes").unwrap();
-        let mut permissions = std::fs::metadata(&executable).unwrap().permissions();
-        use std::os::unix::fs::PermissionsExt;
-        permissions.set_mode(0o700);
-        std::fs::set_permissions(&executable, permissions).unwrap();
         let plugin = Plugin {
             id: "approval-identity-test".into(),
             kind: "mcp-stdio".into(),
@@ -1907,7 +1976,6 @@ mod tests {
     /// Review F-08: for a launcher or interpreter, files named in the
     /// arguments are part of the identity, and a launcher that fetches its
     /// server says the fetched code is not covered.
-    #[cfg(unix)]
     #[test]
     fn launcher_identity_covers_argument_files_and_discloses_fetched_code() {
         let plugin = |id: &str, args: Vec<String>| Plugin {
@@ -1917,7 +1985,7 @@ mod tests {
             config: PluginConfig {
                 name: "Launcher test".into(),
                 kind: "mcp-stdio".into(),
-                command: Some("/usr/bin/python3".into()),
+                command: Some(python()),
                 args,
                 env: Vec::new(),
                 url: None,
@@ -1954,7 +2022,172 @@ mod tests {
         std::fs::remove_dir_all(folder).ok();
     }
 
-    #[cfg(unix)]
+    #[test]
+    fn stdio_frames_reject_oversized_and_incomplete_lines() {
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        runtime.block_on(async {
+            let bytes = vec![b'x'; MAX_MESSAGE_BYTES + 1];
+            let mut reader = BufReader::new(bytes.as_slice());
+            assert_eq!(
+                read_stdio_frame(&mut reader).await.unwrap_err().kind(),
+                std::io::ErrorKind::InvalidData
+            );
+            let mut reader = BufReader::new(&b"unfinished"[..]);
+            assert_eq!(
+                read_stdio_frame(&mut reader).await.unwrap_err().kind(),
+                std::io::ErrorKind::UnexpectedEof
+            );
+            let mut reader = BufReader::new(&b"one\ntwo\r\n"[..]);
+            assert_eq!(
+                read_stdio_frame(&mut reader).await.unwrap().unwrap(),
+                b"one\n"
+            );
+            assert_eq!(
+                read_stdio_frame(&mut reader).await.unwrap().unwrap(),
+                b"two\r\n"
+            );
+            assert!(read_stdio_frame(&mut reader).await.unwrap().is_none());
+        });
+    }
+
+    #[test]
+    fn stdio_backpressure_and_writer_contention_cannot_block_timeout_or_cancellation() {
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        let path = database();
+        let connection = store::open(&path).unwrap();
+        let mut config = stdio("modern");
+        config.args.push("--idle".into());
+        let plugin = register(&connection, config).unwrap();
+        drop(connection);
+        runtime.block_on(async {
+            // The fixture deliberately does not read stdin. A multi-megabyte
+            // request fills the pipe on both Windows and Unix.
+            let session = spawn_stdio(&plugin, None).await.unwrap();
+            let result = tokio::time::timeout(
+                Duration::from_secs(5),
+                session.request(
+                    "blocked",
+                    json!({"payload": "x".repeat(2 * MAX_MESSAGE_BYTES)}),
+                    Duration::from_millis(100),
+                    None,
+                ),
+            )
+            .await
+            .expect("write must obey the request deadline");
+            assert_eq!(result.unwrap_err().0, "PLUGIN_TIMEOUT");
+            tokio::time::timeout(Duration::from_secs(5), session.child.lock().await.wait())
+                .await
+                .unwrap()
+                .unwrap();
+
+            let session = spawn_stdio(&plugin, None).await.unwrap();
+            let writer = session.writer.lock().await;
+            let cancellation = crate::commands::Cancellation::default();
+            let cancel = cancellation.clone();
+            tokio::spawn(async move {
+                tokio::time::sleep(Duration::from_millis(100)).await;
+                cancel.cancel();
+            });
+            let result = tokio::time::timeout(
+                Duration::from_secs(5),
+                session.request(
+                    "blocked",
+                    json!({}),
+                    Duration::from_secs(60),
+                    Some(&cancellation),
+                ),
+            )
+            .await
+            .expect("writer contention must not block cancellation");
+            assert_eq!(result.unwrap_err().0, "REQUEST_CANCELLED");
+            drop(writer);
+            tokio::time::timeout(Duration::from_secs(5), session.child.lock().await.wait())
+                .await
+                .unwrap()
+                .unwrap();
+
+            let session = spawn_stdio(&plugin, None).await.unwrap();
+            let weak = Arc::downgrade(&session);
+            drop(session);
+            assert!(
+                weak.upgrade().is_none(),
+                "stdout reader must not keep an abandoned handshake alive"
+            );
+        });
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn cancellation_during_initial_stdio_handshake_stops_the_new_server() {
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        let path = database();
+        let marker = path.with_extension("pid");
+        let connection = store::open(&path).unwrap();
+        let mut config = stdio("modern");
+        config.args = vec!["-c".into(),
+            "import os,pathlib,sys,time; pathlib.Path(sys.argv[1]).write_text(str(os.getpid())); time.sleep(120)".into(),
+            marker.to_string_lossy().into_owned()];
+        let plugin = register(&connection, config).unwrap();
+        drop(connection);
+        runtime.block_on(async {
+            let cancellation = crate::commands::Cancellation::default();
+            cancellation.cancel();
+            let error = connect(&plugin, false, None, Some(&cancellation))
+                .await
+                .err()
+                .unwrap();
+            assert_eq!(error.0, "REQUEST_CANCELLED");
+            assert!(
+                !marker.exists(),
+                "a pre-cancelled connection must not spawn a server"
+            );
+
+            let cancellation = crate::commands::Cancellation::default();
+            let cancel = cancellation.clone();
+            let ready_marker = marker.clone();
+            let ready = tokio::spawn(async move {
+                let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+                loop {
+                    if let Ok(value) = std::fs::read_to_string(&ready_marker)
+                        && let Ok(pid) = value.parse::<u32>()
+                    {
+                        cancel.cancel();
+                        return pid;
+                    }
+                    assert!(
+                        tokio::time::Instant::now() < deadline,
+                        "the server must start"
+                    );
+                    tokio::time::sleep(Duration::from_millis(20)).await;
+                }
+            });
+            let result = tokio::time::timeout(
+                Duration::from_secs(5),
+                connect(&plugin, false, None, Some(&cancellation)),
+            )
+            .await
+            .expect("cancellation must interrupt discovery instead of waiting for its timeout");
+            assert_eq!(result.err().unwrap().0, "REQUEST_CANCELLED");
+            let pid = sysinfo::Pid::from_u32(ready.await.unwrap());
+            let mut system = sysinfo::System::new();
+            let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+            loop {
+                system.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[pid]), true);
+                if system.process(pid).is_none() {
+                    break;
+                }
+                assert!(
+                    tokio::time::Instant::now() < deadline,
+                    "cancelled handshake must terminate its server"
+                );
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+            assert!(!sessions().lock().unwrap().contains_key(&plugin.id));
+        });
+        std::fs::remove_file(marker).unwrap();
+        std::fs::remove_file(path).unwrap();
+    }
+
     #[test]
     fn modern_and_legacy_stdio_servers_connect_list_paginated_tools_and_drop_invalid_ones() {
         let runtime = tokio::runtime::Runtime::new().unwrap();
@@ -1992,7 +2225,6 @@ mod tests {
         }
     }
 
-    #[cfg(unix)]
     #[test]
     fn calls_are_cancelled_promptly_and_streamable_http_works_in_both_eras() {
         let runtime = tokio::runtime::Runtime::new().unwrap();
@@ -2007,7 +2239,7 @@ mod tests {
         let cancel = cancellation.clone();
         let started = std::time::Instant::now();
         let outcome = runtime.block_on(async {
-            let connected = connect(&plugin, true, None).await.unwrap();
+            let connected = connect(&plugin, true, None, None).await.unwrap();
             tokio::spawn(async move {
                 tokio::time::sleep(Duration::from_millis(500)).await;
                 cancel.cancel();
@@ -2031,7 +2263,7 @@ mod tests {
                 .local_addr()
                 .unwrap()
                 .port();
-            let mut child = std::process::Command::new("/usr/bin/python3")
+            let mut child = std::process::Command::new(python())
                 .args([
                     fixture(),
                     "--era".into(),
@@ -2063,7 +2295,7 @@ mod tests {
             assert_eq!(tested.state.era.as_deref(), Some(era));
             let plugin = get(&connection, &plugin.id).unwrap();
             let echoed = runtime.block_on(async {
-                let connected = connect(&plugin, true, None).await.unwrap();
+                let connected = connect(&plugin, true, None, None).await.unwrap();
                 rpc(
                     &connected,
                     "tools/call",
@@ -2077,6 +2309,7 @@ mod tests {
             let _ = child.kill();
             let _ = child.wait();
         }
-        std::fs::remove_file(path).ok();
+        drop(connection);
+        std::fs::remove_file(path).unwrap();
     }
 }

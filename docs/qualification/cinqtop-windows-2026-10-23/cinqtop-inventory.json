@@ -1,0 +1,108 @@
+{
+  "format": "juniper-host-inventory-v1",
+  "host": "CINQTOP",
+  "role": "Independent secondary Cinqic Windows workstation",
+  "capturedAt": "2026-10-23T01:24-04:00",
+  "method": "Windows PowerShell 5.1: Win32_ComputerSystem, Win32_Processor, Win32_OperatingSystem, Win32_PhysicalMemory, Win32_VideoController, Get-PhysicalDisk, Get-Volume, Win32_Battery, root\\wmi battery classes, kernel32 IsProcessorFeaturePresent, EdgeUpdate registry, Get-Counter",
+  "machine": {
+    "manufacturer": "HP",
+    "model": "HP Laptop 14-dq6xxx",
+    "sku": "B86L6UA#ABA",
+    "baseboard": "HP 8E05",
+    "firmware": { "vendor": "AMI", "version": "F.12", "date": "2026-03-05" },
+    "chassis": "laptop (PCSystemType 2)"
+  },
+  "cpu": {
+    "name": "Intel N150",
+    "signature": "Intel64 Family 6 Model 190 Stepping 0",
+    "cores": 4,
+    "threads": 4,
+    "reportedBaseMHz": 800,
+    "l2CacheKB": 2048,
+    "l3CacheKB": 6144,
+    "instructionSets": { "present": ["SSE4.2", "AVX", "AVX2", "XSAVE"], "absent": ["AVX-512"] },
+    "virtualizationFirmwareEnabled": false,
+    "hypervisorPresent": true
+  },
+  "memory": {
+    "installedBytes": 16818876416,
+    "usableBytes": 16818876416,
+    "moduleCapacityBytes": 17179869184,
+    "modules": 1,
+    "slotsReportedBySmbios": 1,
+    "type": "DDR4 SODIMM (SMBIOSMemoryType 26, FormFactor 12)",
+    "speedMTs": 3200,
+    "channels": "single (one module)",
+    "smbiosMaxCapacityKB": 8388608,
+    "note": "SMBIOS reports an 8 GiB array maximum while a 16 GiB module is installed and fully usable; treat the SMBIOS maximum as unreliable.",
+    "pageFileMB": 2944
+  },
+  "graphics": {
+    "name": "Intel Graphics (integrated)",
+    "pnpDevice": "PCI\\VEN_8086&DEV_46D4",
+    "driverVersion": "32.0.101.7084",
+    "driverDate": "2026-01-14",
+    "dedicatedMemory": "none; shared system memory (WMI AdapterRAM reports a 2 GiB cap)"
+  },
+  "display": {
+    "resolution": "1366x768",
+    "refreshHz": 59,
+    "dpi": 96,
+    "scaling": "100%",
+    "panelInchesApprox": 14
+  },
+  "storage": {
+    "device": "Samsung KLUDG4UHGC-B0E1",
+    "bus": "UFS",
+    "media": "SSD (UFS flash)",
+    "capacityBytes": 127984992256,
+    "partitionStyle": "GPT",
+    "systemVolume": {
+      "letter": "C",
+      "fileSystem": "NTFS",
+      "sizeBytes": 126755008512,
+      "freeBytesAtCapture": 61282652160
+    },
+    "health": "Healthy"
+  },
+  "os": {
+    "caption": "Microsoft Windows 11 Home",
+    "edition": "Core",
+    "displayVersion": "25H2",
+    "build": "26200.9711",
+    "architecture": "64-bit",
+    "installed": "2026-09-17"
+  },
+  "webview2": {
+    "runtime": "Microsoft Edge WebView2 Runtime",
+    "version": "153.0.4234.32",
+    "source": "EdgeUpdate client registration and Program Files (x86)\\Microsoft\\EdgeWebView\\Application"
+  },
+  "network": {
+    "adapter": "Realtek 8852BE-VT Wi-Fi 6",
+    "linkSpeedAtCapture": "1.2 Gbps",
+    "ethernet": "none"
+  },
+  "power": {
+    "scheme": "Balanced",
+    "batteryDesignVoltage_mV": 11074,
+    "batteryFullChargedCapacity_mWh": 36775,
+    "stateAtCapture": "on battery, 44%"
+  },
+  "preinstalledUserSoftware": [
+    "Brave 156.1.98.60",
+    "Claude desktop",
+    "Microsoft 365 Apps",
+    "Microsoft Edge 153.0.4234.32"
+  ],
+  "developmentToolsBeforeAssignment": {
+    "git": false,
+    "node": false,
+    "pnpm": false,
+    "rust": false,
+    "msvc": false,
+    "cmake": false,
+    "python": "Store alias stub only",
+    "winget": "1.29.380"
+  }
+}

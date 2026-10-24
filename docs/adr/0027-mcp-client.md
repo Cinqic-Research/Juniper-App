@@ -1,6 +1,10 @@
 # ADR 0027: MCP client
 
-Status: Proposed for review on the "Fixing Up A Little" branch (draft PR #49).
+Status: Implemented in `main` (PR #49, hardened in PR #51).
+
+Originally proposed for review on the "Fixing Up A Little" branch while PR #49
+was a draft. Implementation status does not establish Windows stdio qualification.
+
 It implements the boundary ADR-0010 reserved.
 
 ## Context

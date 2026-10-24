@@ -77,17 +77,25 @@ export function AgentScreen({
   const [selectedTask, setSelectedTask] = useState<string | null>(null)
   const [settingsFor, setSettingsFor] = useState<Assistant | null>(null)
   const refreshing = useRef(false)
+  const refreshPending = useRef(false)
 
   const refresh = useCallback(async () => {
-    if (!agentAvailable || refreshing.current) return
+    if (!agentAvailable) return
+    refreshPending.current = true
+    if (refreshing.current) return
     refreshing.current = true
     try {
-      const next = await agentApi.overview()
-      setOverview(next)
-      setLoadError(null)
-      if (!next.settings.timezone) await agentApi.setSettings({ timezone: deviceTimeZone() })
-    } catch (error) {
-      setLoadError(errorText(error))
+      do {
+        refreshPending.current = false
+        try {
+          const next = await agentApi.overview()
+          setOverview(next)
+          setLoadError(null)
+          if (!next.settings.timezone) await agentApi.setSettings({ timezone: deviceTimeZone() })
+        } catch (error) {
+          setLoadError(errorText(error))
+        }
+      } while (refreshPending.current)
     } finally {
       refreshing.current = false
     }
@@ -122,6 +130,7 @@ export function AgentScreen({
     return (
       <div className="page agent-page">
         <TaskView
+          key={selectedTask}
           taskId={selectedTask}
           data={data}
           onBack={() => setSelectedTask(null)}
@@ -457,13 +466,17 @@ function TaskView({
   const [reply, setReply] = useState('')
   const [preview, setPreview] = useState<Artifact | null>(null)
   const [busy, setBusy] = useState(false)
+  const loadSequence = useRef(0)
 
   const load = useCallback(async () => {
+    const sequence = ++loadSequence.current
     try {
-      setDetail(await agentApi.task(taskId))
+      const next = await agentApi.task(taskId)
+      if (sequence !== loadSequence.current) return
+      setDetail(next)
       setError(null)
     } catch (failure) {
-      setError(errorText(failure))
+      if (sequence === loadSequence.current) setError(errorText(failure))
     }
   }, [taskId])
 
@@ -477,6 +490,7 @@ function TaskView({
     })
     return () => {
       disposed = true
+      loadSequence.current += 1
       stop?.()
     }
   }, [load])

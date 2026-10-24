@@ -835,11 +835,18 @@ pub(crate) async fn download_artifact<R: Runtime>(
     Ok(())
 }
 
+/// Read buffer for hashing a model file. It lives on the heap: sync Tauri
+/// commands such as `managed_models` run on the main thread, whose stack is
+/// 1 MiB on Windows, and a 1 MiB stack array there overflowed it (the
+/// 0.4.0-alpha.1 MSI crashed whenever the Models screen listed an installed
+/// model).
+const HASH_BUFFER_BYTES: usize = 1024 * 1024;
+
 fn hash_existing(path: &Path, hasher: &mut Sha256) -> Result<(), String> {
     let mut file = File::open(path).map_err(|error| error.to_string())?;
     file.seek(SeekFrom::Start(0))
         .map_err(|error| error.to_string())?;
-    let mut buffer = [0u8; 1024 * 1024];
+    let mut buffer = vec![0u8; HASH_BUFFER_BYTES];
     loop {
         let bytes = file.read(&mut buffer).map_err(|error| error.to_string())?;
         if bytes == 0 {
@@ -871,14 +878,44 @@ struct VerificationRecord {
 }
 
 #[cfg(unix)]
-fn changed_nanos(metadata: &fs::Metadata) -> Option<i128> {
+fn changed_nanos(file: &File) -> Option<i128> {
+    let metadata = file.metadata().ok()?;
     Some(i128::from(metadata.ctime()) * 1_000_000_000 + i128::from(metadata.ctime_nsec()))
 }
 
-// The portable metadata API exposes a user-settable modification time on
-// Windows. Without a change-time signal, the verification cache is disabled.
-#[cfg(not(unix))]
-fn changed_nanos(_metadata: &fs::Metadata) -> Option<i128> {
+// Windows change time is useful for before/after mutation checkpoints, but
+// cannot authorize cache reuse. It can repeat across edits, including closed
+// writes while a separate reader remains open. A probe of another file cannot
+// establish the model's timestamp behavior. Windows therefore always hashes.
+#[cfg(windows)]
+fn changed_nanos(file: &File) -> Option<i128> {
+    use std::os::windows::io::AsRawHandle;
+    use windows_sys::Win32::Storage::FileSystem::{
+        FILE_BASIC_INFO, FileBasicInfo, GetFileInformationByHandleEx,
+    };
+    let mut info = FILE_BASIC_INFO {
+        CreationTime: 0,
+        LastAccessTime: 0,
+        LastWriteTime: 0,
+        ChangeTime: 0,
+        FileAttributes: 0,
+    };
+    // SAFETY: the handle is open for the lifetime of `file`, and the buffer
+    // is exactly the structure the information class fills.
+    let read = unsafe {
+        GetFileInformationByHandleEx(
+            file.as_raw_handle(),
+            FileBasicInfo,
+            std::ptr::from_mut(&mut info).cast(),
+            std::mem::size_of::<FILE_BASIC_INFO>() as u32,
+        )
+    };
+    (read != 0 && info.ChangeTime > 0).then(|| i128::from(info.ChangeTime) * 100)
+}
+
+// No change-time signal: the verification cache stays disabled.
+#[cfg(not(any(unix, windows)))]
+fn changed_nanos(_file: &File) -> Option<i128> {
     None
 }
 
@@ -897,22 +934,20 @@ fn ctime_is_precise_enough(path: &Path) -> bool {
     ));
     let mut created = false;
     let result = (|| -> Option<bool> {
-        let mut file = OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .mode(0o600)
-            .open(&probe)
-            .ok()?;
+        let mut options = OpenOptions::new();
+        options.write(true).create_new(true);
+        options.mode(0o600);
+        let mut file = options.open(&probe).ok()?;
         created = true;
         file.write_all(&[0]).ok()?;
-        let mut previous = changed_nanos(&file.metadata().ok()?)?;
+        let mut previous = changed_nanos(&file)?;
         let started = std::time::Instant::now();
         for value in 1u8..=16 {
             file.set_len(0).ok()?;
             file.seek(SeekFrom::Start(0)).ok()?;
             file.write_all(&[value]).ok()?;
             file.flush().ok()?;
-            let current = changed_nanos(&file.metadata().ok()?)?;
+            let current = changed_nanos(&file)?;
             if current <= previous {
                 return Some(false);
             }
@@ -927,6 +962,9 @@ fn ctime_is_precise_enough(path: &Path) -> bool {
     result
 }
 
+// Windows timestamps and per-file USNs can coalesce while another reader
+// holds the model open; neither is a safe reuse token. Unsupported platforms
+// likewise retain full SHA-256 verification on every use.
 #[cfg(not(unix))]
 fn ctime_is_precise_enough(_path: &Path) -> bool {
     false
@@ -942,10 +980,21 @@ fn verified_cache() -> &'static Mutex<HashMap<PathBuf, VerificationRecord>> {
 }
 
 fn current_record(path: &Path, sha256: Option<&str>) -> Option<VerificationRecord> {
-    let metadata = fs::symlink_metadata(path).ok()?;
-    if !metadata.file_type().is_file() {
+    if !fs::symlink_metadata(path).ok()?.file_type().is_file() {
         return None;
     }
+    let mut options = OpenOptions::new();
+    options.read(true);
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        use windows_sys::Win32::Storage::FileSystem::FILE_SHARE_READ;
+        // A live writer can have pending NTFS timestamps. Reject that state
+        // rather than report a stable before/after mutation checkpoint.
+        options.share_mode(FILE_SHARE_READ);
+    }
+    let file = options.open(path).ok()?;
+    let metadata = file.metadata().ok()?;
     Some(VerificationRecord {
         sha256: sha256?.to_owned(),
         size_bytes: metadata.len(),
@@ -955,7 +1004,7 @@ fn current_record(path: &Path, sha256: Option<&str>) -> Option<VerificationRecor
             .duration_since(std::time::UNIX_EPOCH)
             .ok()?
             .as_nanos(),
-        changed_nanos: changed_nanos(&metadata),
+        changed_nanos: changed_nanos(&file),
     })
 }
 
@@ -1286,11 +1335,10 @@ fn emit_progress<R: Runtime>(
     );
 }
 
-#[cfg(all(test, unix))]
+#[cfg(test)]
 mod tests {
     use super::*;
 
-    #[cfg(unix)]
     fn artifact_for_test(size_bytes: u64, sha256: &str) -> CatalogArtifact {
         CatalogArtifact {
             id: "test-model-q4".into(),
@@ -1352,6 +1400,119 @@ mod tests {
         fs::write(&path, b"RIGHT_MODEL").expect("correct model");
         assert!(verify_expected(&path, 11, &expected).expect("verify correct bytes"));
         fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    /// Verification runs on the main thread of sync commands; on Windows that
+    /// stack is 1 MiB. A thread smaller than the old stack buffer proves the
+    /// hash no longer depends on a large stack (an overflow aborts the test
+    /// process, which is the failure signal on every platform).
+    #[test]
+    fn verification_runs_on_a_small_stack() {
+        let root =
+            std::env::temp_dir().join(format!("juniper-small-stack-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&root).expect("test directory should be created");
+        let path = root.join("model.gguf");
+        let bytes = vec![0x4Bu8; 3 * HASH_BUFFER_BYTES + 17];
+        fs::write(&path, &bytes).expect("model written");
+        let digest = format!("{:x}", Sha256::digest(&bytes));
+        let artifact = artifact_for_test(bytes.len() as u64, &digest);
+        let verified = std::thread::Builder::new()
+            .stack_size(HASH_BUFFER_BYTES / 2)
+            .spawn(move || verify_file(&path, &artifact))
+            .expect("small-stack thread")
+            .join()
+            .expect("verification thread completes");
+        assert_eq!(verified, Ok(true));
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_verification_detects_edits_replacements_and_live_writers() {
+        let root = std::env::temp_dir().join(format!("juniper-cache-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&root).unwrap();
+        let path = root.join("model.gguf");
+        fs::write(&path, b"RIGHT_MODEL").unwrap();
+        let digest = format!("{:x}", Sha256::digest(b"RIGHT_MODEL"));
+        let artifact = artifact_for_test(11, &digest);
+        assert!(verify_file(&path, &artifact).unwrap());
+        assert!(!ctime_is_precise_enough(&path));
+        assert!(
+            !verified_cache().lock().unwrap().contains_key(&path),
+            "Windows cache reuse must remain disabled"
+        );
+        assert!(verify_file(&path, &artifact).unwrap());
+        let modified = fs::metadata(&path).unwrap().modified().unwrap();
+        let mut writer = OpenOptions::new().write(true).open(&path).unwrap();
+        writer.write_all(b"WRONG_MODEL").unwrap();
+        writer
+            .set_times(fs::FileTimes::new().set_modified(modified))
+            .unwrap();
+        assert!(
+            current_record(&path, Some(&digest)).is_none(),
+            "pending writer timestamps are never cache authority"
+        );
+        assert!(!verify_file(&path, &artifact).unwrap());
+        drop(writer);
+        assert!(
+            !verify_file(&path, &artifact).unwrap(),
+            "same-size edits with restored mtime are detected"
+        );
+
+        // An unrelated reader may keep timestamps and USNs coalesced across
+        // closed writes. Every listing must still rehash and reject wrong bytes.
+        let held_reader = File::open(&path).unwrap();
+        for value in 0..=16 {
+            fs::write(&path, b"RIGHT_MODEL").unwrap();
+            assert!(verify_file(&path, &artifact).unwrap());
+            let modified = fs::metadata(&path).unwrap().modified().unwrap();
+            let mut wrong = *b"WRONG_MODEL";
+            wrong[0] = value;
+            let mut writer = OpenOptions::new().write(true).open(&path).unwrap();
+            writer.write_all(&wrong).unwrap();
+            writer.flush().unwrap();
+            writer
+                .set_times(fs::FileTimes::new().set_modified(modified))
+                .unwrap();
+            drop(writer);
+            assert!(
+                !verify_file(&path, &artifact).unwrap(),
+                "held-reader edit {value} must be rehashed"
+            );
+            assert!(!verified_cache().lock().unwrap().contains_key(&path));
+        }
+        drop(held_reader);
+
+        fs::write(&path, b"RIGHT_MODEL").unwrap();
+        assert!(verify_file(&path, &artifact).unwrap());
+        let alias = root.join("alias.gguf");
+        fs::hard_link(&path, &alias).unwrap();
+        fs::write(&alias, b"WRONG_MODEL").unwrap();
+        assert!(
+            !verify_file(&path, &artifact).unwrap(),
+            "hard-link edits invalidate verification"
+        );
+        fs::remove_file(&alias).unwrap();
+
+        fs::write(&path, b"RIGHT_MODEL").unwrap();
+        assert!(verify_file(&path, &artifact).unwrap());
+        let replacement = root.join("replacement.gguf");
+        fs::write(&replacement, b"WRONG_MODEL").unwrap();
+        fs::File::options()
+            .write(true)
+            .open(&replacement)
+            .unwrap()
+            .set_times(
+                fs::FileTimes::new().set_modified(fs::metadata(&path).unwrap().modified().unwrap()),
+            )
+            .unwrap();
+        fs::rename(&replacement, &path).unwrap();
+        assert!(
+            !verify_file(&path, &artifact).unwrap(),
+            "replacement files are reverified"
+        );
+        verified_cache().lock().unwrap().remove(&path);
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[cfg(unix)]

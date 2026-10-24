@@ -657,6 +657,19 @@ pub fn save_app_data_with_paths(
                 .ok_or_else(|| rusqlite::Error::InvalidQuery)?;
             for (id, assistant_id, operation, payload, created_at) in changes {
                 let memory_id = format!("memory-agent-{id}");
+                // Keep a change visible to the renderer until its snapshot
+                // includes it. An unrelated stale save can race the event
+                // listener; acknowledging here would lose the memory on the
+                // next stale snapshot before the renderer ever observed it.
+                // The new change id proves observation; content may already
+                // contain a subsequent user edit, which remains renderer-owned.
+                let observed = match operation.as_str() {
+                    "save" => memories.iter().any(|memory| memory["id"] == memory_id),
+                    "delete" => payload["id"].as_str().is_some_and(|target| {
+                        !memories.iter().any(|memory| memory["id"] == target)
+                    }),
+                    _ => false,
+                };
                 match operation.as_str() {
                     "save" => {
                         if let Some(content) = payload["content"].as_str().filter(|s| !s.is_empty())
@@ -680,7 +693,9 @@ pub fn save_app_data_with_paths(
                     }
                     _ => return Err(rusqlite::Error::InvalidQuery),
                 }
-                memory_change_ids.push(id);
+                if observed {
+                    memory_change_ids.push(id);
+                }
             }
         }
     }
@@ -1026,8 +1041,9 @@ mod tests {
         drop(connection);
 
         // The renderer has not yet seen the approved change; it saves its
-        // existing snapshot. The native transaction must include the outbox
-        // change in both app_state and the memories projection before acking.
+        // existing snapshot. Merge the change, but retain it for the renderer
+        // until a subsequent snapshot includes the approved memory.
+        save_app_data_with_paths(&path, &snapshot, &HashMap::new())?;
         save_app_data_with_paths(&path, &snapshot, &HashMap::new())?;
         let saved = load_app_data(&path)?.expect("snapshot exists");
         assert_eq!(
@@ -1045,13 +1061,32 @@ mod tests {
         let connection = super::connection(&path)?;
         let outbox_count: i64 =
             connection.query_row("SELECT COUNT(*) FROM memory_outbox", [], |row| row.get(0))?;
-        assert_eq!(outbox_count, 0);
+        assert_eq!(
+            outbox_count, 1,
+            "stale snapshots cannot acknowledge unseen changes"
+        );
         let projected: i64 = connection.query_row(
             "SELECT COUNT(*) FROM memories WHERE id = 'memory-agent-change-1'",
             [],
             |row| row.get(0),
         )?;
         assert_eq!(projected, 1);
+        drop(connection);
+        let mut edited = saved.clone();
+        edited["memories"][0]["content"] = json!("The user's revised project note.");
+        edited["memories"][0]["enabled"] = json!(false);
+        save_app_data_with_paths(&path, &edited, &HashMap::new())?;
+        assert_eq!(
+            load_app_data(&path)?.unwrap()["memories"],
+            edited["memories"]
+        );
+        let connection = super::connection(&path)?;
+        let acknowledged: i64 =
+            connection.query_row("SELECT COUNT(*) FROM memory_outbox", [], |row| row.get(0))?;
+        assert_eq!(
+            acknowledged, 0,
+            "the renderer observed and persisted the memory"
+        );
 
         connection.execute(
             "INSERT INTO memory_outbox(id, assistant_id, operation, payload, created_at) VALUES('change-2', 'assistant-1', 'save', ?1, '2026-10-15T12:01:00Z')",
@@ -1061,7 +1096,20 @@ mod tests {
             "CREATE TRIGGER fail_memory_outbox_ack BEFORE DELETE ON memory_outbox BEGIN SELECT RAISE(ABORT, 'simulated acknowledgement failure'); END;",
         )?;
         drop(connection);
-        assert!(save_app_data_with_paths(&path, &snapshot, &HashMap::new()).is_err());
+        let mut acknowledging = edited.clone();
+        acknowledging["memories"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!({
+                "id": "memory-agent-change-2",
+                "assistantId": "assistant-1",
+                "content": "Second approved memory.",
+                "source": "agent-task",
+                "enabled": true,
+                "createdAt": "2026-10-15T12:01:00Z",
+                "updatedAt": "2026-10-15T12:01:00Z"
+            }));
+        assert!(save_app_data_with_paths(&path, &acknowledging, &HashMap::new()).is_err());
         let loaded_after_failure = load_app_data(&path)?.expect("prior snapshot remains");
         assert_eq!(
             loaded_after_failure["memories"].as_array().unwrap().len(),
@@ -1071,6 +1119,37 @@ mod tests {
         let remaining: i64 =
             connection.query_row("SELECT COUNT(*) FROM memory_outbox", [], |row| row.get(0))?;
         assert_eq!(remaining, 1);
+        drop(connection);
+        std::fs::remove_file(path).ok();
+        Ok(())
+    }
+
+    #[test]
+    fn approved_memory_deletions_wait_for_a_snapshot_that_observed_them() -> Result<()> {
+        let path =
+            std::env::temp_dir().join(format!("juniper-memory-delete-{}.db", uuid::Uuid::new_v4()));
+        let snapshot = json!({"memories": [{"id": "old", "content": "Remove me"}], "settings": {}});
+        save_app_data_with_paths(&path, &snapshot, &HashMap::new())?;
+        let connection = super::connection(&path)?;
+        connection.execute(
+            "INSERT INTO memory_outbox(id, assistant_id, operation, payload, created_at) VALUES('delete-1', 'assistant-1', 'delete', ?1, '2026-10-15T12:00:00Z')",
+            [json!({"id": "old"}).to_string()],
+        )?;
+        drop(connection);
+        save_app_data_with_paths(&path, &snapshot, &HashMap::new())?;
+        save_app_data_with_paths(&path, &snapshot, &HashMap::new())?;
+        let saved = load_app_data(&path)?.unwrap();
+        assert!(saved["memories"].as_array().unwrap().is_empty());
+        let connection = super::connection(&path)?;
+        let pending: i64 =
+            connection.query_row("SELECT COUNT(*) FROM memory_outbox", [], |row| row.get(0))?;
+        assert_eq!(pending, 1);
+        drop(connection);
+        save_app_data_with_paths(&path, &saved, &HashMap::new())?;
+        let connection = super::connection(&path)?;
+        let pending: i64 =
+            connection.query_row("SELECT COUNT(*) FROM memory_outbox", [], |row| row.get(0))?;
+        assert_eq!(pending, 0);
         drop(connection);
         std::fs::remove_file(path).ok();
         Ok(())
@@ -1419,6 +1498,8 @@ mod tests {
                 .query_row::<i64, _, _>("SELECT COUNT(*) FROM attachments", [], |row| row.get(0))?,
             1
         );
+        // Windows refuses to delete a file that is still open.
+        drop(connection);
         std::fs::remove_file(path).expect("temporary database should be removable");
         Ok(())
     }
@@ -1584,6 +1665,8 @@ mod tests {
             |row| row.get(0),
         )?;
         assert_eq!(PathBuf::from(stored_path), attachment);
+        // Windows refuses to delete a file that is still open.
+        drop(connection);
         std::fs::remove_file(database)?;
         std::fs::remove_file(attachment)?;
         Ok(())
