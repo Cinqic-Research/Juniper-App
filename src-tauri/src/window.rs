@@ -112,7 +112,7 @@ pub fn fit_main_window<R: Runtime>(app: &tauri::AppHandle<R>) {
     {
         return;
     }
-    let (size, _) = fitted_placement(
+    let (size, _predicted_position) = fitted_placement(
         (work.position.x, work.position.y),
         (work.size.width, work.size.height),
         (outer.width, outer.height),
@@ -123,16 +123,22 @@ pub fn fit_main_window<R: Runtime>(app: &tauri::AppHandle<R>) {
     {
         return;
     }
-    // The window manager can enforce constraints or adjust decorations. Centre
-    // the actual frame rather than assuming it accepted the requested size.
-    let Ok(actual) = window.outer_size() else {
-        return;
+    // Windows applies the size synchronously. GTK queues geometry updates and
+    // can still report an uninitialized outer size during setup; retain the
+    // fitted placement there until its first configure event has arrived.
+    #[cfg(not(windows))]
+    let position = _predicted_position;
+    #[cfg(windows)]
+    let position = {
+        let Ok(actual) = window.outer_size() else {
+            return;
+        };
+        centered_position(
+            (work.position.x, work.position.y),
+            (work.size.width, work.size.height),
+            (actual.width, actual.height),
+        )
     };
-    let position = centered_position(
-        (work.position.x, work.position.y),
-        (work.size.width, work.size.height),
-        (actual.width, actual.height),
-    );
     let _ = window.set_position(PhysicalPosition::new(position.0, position.1));
 }
 
@@ -168,6 +174,17 @@ mod tests {
         let (size, position) = fitted_placement((0, 0), (300, 200), (10, 10), (1000, 700));
         assert_eq!(size, (300, 200));
         assert_eq!(position, (0, 0));
+    }
+
+    #[test]
+    fn pending_linux_frame_measurement_keeps_the_whole_client_on_screen() {
+        // Before GTK's first configure event, Tao's outer-size cache can be
+        // zero even though the client has its configured size. Centering that
+        // zero frame would place this window at (720, 450), clipping the
+        // onboarding controls and composer on a 1440x900 X11 display.
+        let (size, position) = fitted_placement((0, 0), (1440, 900), (0, 0), (1280, 820));
+        assert_eq!(size, (1280, 820));
+        assert_eq!(position, (80, 40));
     }
 
     #[test]

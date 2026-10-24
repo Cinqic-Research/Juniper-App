@@ -111,3 +111,12 @@ Command API does not expose job-list startup attributes; this implementation
 uses inherited parent ownership plus suspended per-child assignment.
 
 Dependency references: [Vitest mock injection](https://github.com/advisories/GHSA-qxg6-89mg-rqv8), [Windows mock traversal](https://github.com/advisories/GHSA-xp26-3454-mjgp), [fast-uri scheme parsing](https://github.com/advisories/GHSA-w74x-v6f9-j3xg), [withdrawn braces advisory](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm).
+
+## Exact-head CI follow-up
+
+The first correction head `0b57f735cdbaf1e19e65e0b2fd362ea5ddc113c3` passed full local validation, Linux validation/audits/build and Android CI, but exposed two qualification defects in run 40061842295:
+
+- The Windows restrictive-job fixture resolved Python after imposing its one-process limit. Resolve the interpreter first; the launch-refusal and no-user-code assertions remain intact. The corrected fixture passed locally with the override removed, matching CI discovery.
+- GTK initially reported a zero outer frame during setup. Re-centering that frame put the 1280x820 window at (720,450), leaving a 720x450 clipped capture and inaccessible picker controls. Use the predicted fitted position on non-Windows; Windows remeasurement behavior is unchanged. The Linux picker gate remains unchanged and must pass on the corrected head.
+
+Installed CINQTOP qualification began on the `0b57f735` Windows binary (MSI SHA-256 `f27cd98b306fb143b4352379fe67ca22d0508d3471897f14204cd37c2bb3434f`). These follow-up shipping changes affect only non-Windows placement; Windows fixture changes are tests only. Do not describe that installed binary as a different source build.

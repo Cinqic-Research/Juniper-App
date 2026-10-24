@@ -222,8 +222,8 @@ mod tests {
         std::env::temp_dir().join(format!("juniper-child-tree-{}.json", uuid::Uuid::new_v4()))
     }
 
-    fn tree_command(marker: &Path) -> Command {
-        let mut command = Command::new(python());
+    fn tree_command(marker: &Path, executable: &str) -> Command {
+        let mut command = Command::new(executable);
         command.args(["-c", "import json,os,pathlib,subprocess,sys,time; child=subprocess.Popen([sys.executable,'-c','import time; time.sleep(120)']); pathlib.Path(sys.argv[1]).write_text(json.dumps([os.getpid(),child.pid])); time.sleep(120)"])
             .arg(marker)
             .stdin(std::process::Stdio::null())
@@ -254,8 +254,9 @@ mod tests {
         runtime.block_on(async {
             let first_marker = marker();
             let second_marker = marker();
-            let mut first = spawn_owned(&mut tree_command(&first_marker)).unwrap();
-            let mut second = spawn_owned(&mut tree_command(&second_marker)).unwrap();
+            let executable = python();
+            let mut first = spawn_owned(&mut tree_command(&first_marker, &executable)).unwrap();
+            let mut second = spawn_owned(&mut tree_command(&second_marker, &executable)).unwrap();
             let (first_root, first_descendant) = tree_processes(&first_marker);
             let (second_root, second_descendant) = tree_processes(&second_marker);
             first.start_kill().unwrap();
@@ -281,6 +282,9 @@ mod tests {
             return;
         };
         let marker = PathBuf::from(std::env::var_os("JUNIPER_CHILD_HELPER_MARKER").unwrap());
+        // Interpreter discovery itself starts a process. Complete it before
+        // imposing the one-process job used to test owned-launch refusal.
+        let executable = python();
         if mode == "limited" {
             unsafe {
                 let job = CreateJobObjectW(std::ptr::null(), std::ptr::null());
@@ -301,7 +305,7 @@ mod tests {
                 let runtime = tokio::runtime::Runtime::new().unwrap();
                 let _entered = runtime.enter();
                 assert!(
-                    spawn_owned(&mut tree_command(&marker)).is_err(),
+                    spawn_owned(&mut tree_command(&marker, &executable)).is_err(),
                     "restrictive job must fail closed"
                 );
                 CloseHandle(job);
@@ -310,7 +314,7 @@ mod tests {
         } else {
             let runtime = tokio::runtime::Runtime::new().unwrap();
             let _entered = runtime.enter();
-            let _child = spawn_owned(&mut tree_command(&marker)).unwrap();
+            let _child = spawn_owned(&mut tree_command(&marker, &executable)).unwrap();
             std::thread::sleep(Duration::from_secs(120));
         }
     }
